@@ -1,0 +1,384 @@
+// OmniFit — PAGE 4 : Réglages
+import { store } from '../utils/storage.js';
+import { harrisBenedict } from '../utils/math.js';
+import { MUSCLES, EQUIPMENT_TYPES } from '../data/exercises.js';
+import { el, icons, openModal, toast, confirmModal } from '../utils/ui.js';
+
+const VERSION = '1.0';
+
+function toggleRow(label, key, sub = '') {
+  const s = store.userData.settings;
+  const row = el(`<div class="settings-row">
+    <div><div class="row-label">${label}</div>${sub ? `<div class="row-sub">${sub}</div>` : ''}</div>
+    <label class="switch"><input type="checkbox" ${s[key] ? 'checked' : ''}><span class="slider"></span></label>
+  </div>`);
+  row.querySelector('input').addEventListener('change', (e) => {
+    store.saveUserData({ settings: { [key]: e.target.checked } });
+  });
+  return row;
+}
+
+function applyCalorieAuto() {
+  const u = store.userData;
+  if (u.settings.calorieAuto) {
+    store.saveUserData({ settings: { calorieGoal: harrisBenedict(u.profile, u.goal.type) } });
+  }
+}
+
+function openProfileModal(rerender) {
+  const p = store.userData.profile;
+  const form = el(`<div>
+    <label class="field"><span>Nom</span><input id="p-name" type="text" value="${p.name}"></label>
+    <div class="field-row">
+      <label class="field"><span>Âge</span><input id="p-age" type="number" min="10" max="100" value="${p.age}"></label>
+      <label class="field"><span>Sexe</span>
+        <select id="p-sex">${['M', 'F', 'Autre'].map((x) => `<option ${x === p.sex ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
+    </div>
+    <div class="field-row">
+      <label class="field"><span>Poids initial (kg)</span><input id="p-weight" type="number" step="0.1" value="${p.weight}"></label>
+      <label class="field"><span>Taille (cm)</span><input id="p-height" type="number" value="${p.height}"></label>
+    </div>
+  </div>`);
+  openModal({
+    title: 'Modifier le profil',
+    content: form,
+    actions: [
+      { label: 'Annuler' },
+      {
+        label: 'Enregistrer', variant: 'btn-primary',
+        onClick: (body) => {
+          store.saveUserData({
+            profile: {
+              name: body.querySelector('#p-name').value.trim(),
+              age: parseInt(body.querySelector('#p-age').value, 10) || p.age,
+              sex: body.querySelector('#p-sex').value,
+              weight: parseFloat(body.querySelector('#p-weight').value) || p.weight,
+              height: parseInt(body.querySelector('#p-height').value, 10) || p.height,
+            },
+          });
+          applyCalorieAuto();
+          toast('Profil mis à jour', 'success');
+          rerender();
+        },
+      },
+    ],
+  });
+}
+
+function openVolumeGoalsModal(rerender) {
+  const goals = store.userData.settings.volumeGoals;
+  const form = el(`<div>${MUSCLES.map((m) => `
+    <div class="settings-row" style="padding:7px 0">
+      <span class="row-label">${m.label}</span>
+      <input type="number" data-m="${m.id}" min="0" max="40" value="${goals[m.id] || 0}" style="width:80px;min-height:40px"> 
+    </div>`).join('')}
+    <div class="muted" style="margin-top:8px">Sets par semaine, par muscle.</div>
+  </div>`);
+  openModal({
+    title: 'Objectifs de volume',
+    content: form,
+    actions: [
+      { label: 'Annuler' },
+      {
+        label: 'Enregistrer', variant: 'btn-primary',
+        onClick: (body) => {
+          const vg = {};
+          body.querySelectorAll('input[data-m]').forEach((inp) => { vg[inp.dataset.m] = parseInt(inp.value, 10) || 0; });
+          store.saveUserData({ settings: { volumeGoals: vg } });
+          toast('Objectifs enregistrés', 'success');
+          rerender();
+        },
+      },
+    ],
+  });
+}
+
+function macroPreset(name, rerender) {
+  const presets = {
+    'Perte': { carbsPct: 35, fatPct: 25 },
+    'Muscu': { carbsPct: 45, fatPct: 25 },
+    'Équilibré': { carbsPct: 40, fatPct: 30 },
+  };
+  store.saveUserData({ settings: presets[name] });
+  toast(`Preset « ${name} » appliqué`, 'success');
+  rerender();
+}
+
+export function render(container) {
+  const rerender = () => render(container);
+  const u = store.userData;
+  const s = u.settings;
+  const sizeKB = (store.getStorageSize() / 1024).toFixed(1);
+
+  container.innerHTML = '';
+  const root = el(`<div>
+    <div class="page-title"><h1>Réglages</h1></div>
+
+    <!-- 1. PROFIL -->
+    <div class="card settings-section">
+      <div class="card-row" style="margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div class="avatar">${icons.user}</div>
+          <div>
+            <h3>${u.profile.name || 'Profil'}</h3>
+            <div class="muted">${u.profile.age} ans · ${u.profile.sex} · ${u.profile.weight} kg · ${u.profile.height} cm</div>
+          </div>
+        </div>
+        <button class="btn btn-secondary btn-sm" id="btn-edit-profile">${icons.edit} Modifier</button>
+      </div>
+    </div>
+
+    <!-- 2. OBJECTIFS -->
+    <div class="card settings-section">
+      <h3>Objectifs généraux</h3>
+      <div class="settings-row">
+        <div><div class="row-label">Objectif global</div><div class="row-sub">${u.goal.type}</div></div>
+        <select id="set-goal-type" style="max-width:170px">
+          ${['Perte de poids', 'Prise de muscle', 'Recomposition'].map((t) => `<option ${t === u.goal.type ? 'selected' : ''}>${t}</option>`).join('')}
+        </select>
+      </div>
+      <div class="settings-row">
+        <div><div class="row-label">Calories auto (Harris-Benedict)</div><div class="row-sub">Calculées depuis le profil</div></div>
+        <label class="switch"><input type="checkbox" id="cal-auto" ${s.calorieAuto ? 'checked' : ''}><span class="slider"></span></label>
+      </div>
+      <div class="settings-row">
+        <span class="row-label">Objectif calories</span>
+        <input id="set-cal" type="number" step="10" value="${s.calorieGoal}" ${s.calorieAuto ? 'disabled' : ''} style="width:110px;min-height:40px">
+      </div>
+      <div class="settings-row">
+        <div><div class="row-label">Objectif protéines (g)</div><div class="row-sub">Défaut : poids × 1.6</div></div>
+        <input id="set-prot" type="number" value="${s.proteinGoal}" style="width:110px;min-height:40px">
+      </div>
+    </div>
+
+    <!-- 3. ENTRAÎNEMENT -->
+    <div class="card settings-section">
+      <h3>Entraînement</h3>
+      <div class="settings-row" style="flex-direction:column;align-items:stretch">
+        <div class="card-row"><span class="row-label">Temps de repos par défaut</span><span class="mono" id="rest-val" style="color:var(--accent)">${s.restTimerDefault}s</span></div>
+        <input id="set-rest" type="range" min="60" max="300" step="15" value="${s.restTimerDefault}">
+      </div>
+      <div class="settings-row">
+        <div><div class="row-label">Objectifs de volume par muscle</div><div class="row-sub">Sets / semaine</div></div>
+        <button class="btn btn-secondary btn-sm" id="btn-vol-goals">${icons.edit} Éditer</button>
+      </div>
+      <div id="row-vol-tracking"></div>
+      <div id="row-db-full"></div>
+      <div class="settings-row" style="flex-direction:column;align-items:stretch">
+        <div class="row-label" style="margin-bottom:6px">Filtre équipement <span class="row-sub" style="display:inline">(aucun = tout)</span></div>
+        <div id="equip-filter" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+      </div>
+      <div id="row-cexo"></div>
+      <div class="settings-row" style="flex-direction:column;align-items:stretch">
+        <div class="card-row"><span class="row-label">Ratio principaux/secondaires</span><span class="mono" id="ratio-val" style="color:var(--accent)">${s.secondaryRatio.toFixed(1)}</span></div>
+        <input id="set-ratio" type="range" min="0.5" max="2.0" step="0.1" value="${s.secondaryRatio}">
+      </div>
+    </div>
+
+    <!-- 4. NUTRITION -->
+    <div class="card settings-section">
+      <h3>Nutrition</h3>
+      <div class="settings-row" style="flex-direction:column;align-items:stretch">
+        <div class="card-row"><span class="row-label">Glucides</span><span class="mono" id="carbs-val" style="color:var(--accent)">${s.carbsPct}%</span></div>
+        <input id="set-carbs" type="range" min="10" max="65" value="${s.carbsPct}">
+      </div>
+      <div class="settings-row" style="flex-direction:column;align-items:stretch">
+        <div class="card-row"><span class="row-label">Lipides</span><span class="mono" id="fat-val" style="color:var(--accent)">${s.fatPct}%</span></div>
+        <input id="set-fat" type="range" min="10" max="55" value="${s.fatPct}">
+      </div>
+      <div class="settings-row" style="flex-direction:column;align-items:stretch">
+        <div class="card-row"><span class="row-label">Objectif eau</span><span class="mono" id="water-val" style="color:var(--accent)">${s.waterGoal}L</span></div>
+        <input id="set-water" type="range" min="2" max="5" step="0.25" value="${s.waterGoal}">
+      </div>
+      <div class="settings-row">
+        <span class="row-label">Presets macros</span>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-secondary btn-sm" data-preset="Perte">Perte</button>
+          <button class="btn btn-secondary btn-sm" data-preset="Muscu">Muscu</button>
+          <button class="btn btn-secondary btn-sm" data-preset="Équilibré">Équilibré</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. INTERFACE -->
+    <div class="card settings-section">
+      <h3>Interface</h3>
+      <div class="settings-row">
+        <span class="row-label">Thème</span>
+        <div class="segment" style="max-width:200px" id="seg-theme">
+          <button data-v="dark" class="${s.theme === 'dark' ? 'active' : ''}">Sombre</button>
+          <button data-v="amoled" class="${s.theme === 'amoled' ? 'active' : ''}">AMOLED</button>
+        </div>
+      </div>
+      <div class="settings-row">
+        <span class="row-label">Densité UI</span>
+        <div class="segment" style="max-width:230px" id="seg-density">
+          <button data-v="compact" class="${s.density === 'compact' ? 'active' : ''}">Compact</button>
+          <button data-v="normal" class="${s.density === 'normal' ? 'active' : ''}">Normal</button>
+          <button data-v="spacious" class="${s.density === 'spacious' ? 'active' : ''}">Spacieux</button>
+        </div>
+      </div>
+      <div id="rows-interface"></div>
+    </div>
+
+    <!-- 6. DONNÉES -->
+    <div class="card settings-section">
+      <h3>Données & export</h3>
+      <div class="settings-row"><span class="row-label">Taille des données</span><span class="mono" style="color:var(--accent)">${sizeKB} Ko</span></div>
+      <div class="settings-row">
+        <span class="row-label">Export JSON</span>
+        <button class="btn btn-secondary btn-sm" id="btn-export">${icons.download} Télécharger</button>
+      </div>
+      <div class="settings-row">
+        <span class="row-label">Import JSON</span>
+        <button class="btn btn-secondary btn-sm" id="btn-import">${icons.upload} Importer</button>
+        <input type="file" id="import-file" accept="application/json" style="display:none">
+      </div>
+      <div class="settings-row">
+        <div><div class="row-label">Effacer l'historique</div><div class="row-sub">Poids, nutrition, pas, séances (garde les réglages)</div></div>
+        <button class="btn btn-secondary btn-sm" id="btn-clear-history">Effacer</button>
+      </div>
+      <div class="settings-row">
+        <div><div class="row-label" style="color:var(--danger)">Reset complet</div><div class="row-sub">Supprime tout définitivement</div></div>
+        <button class="btn btn-danger btn-sm" id="btn-reset">Reset</button>
+      </div>
+    </div>
+
+    <!-- 7. INFOS -->
+    <div class="card settings-section">
+      <h3>À propos</h3>
+      <div class="settings-row"><span class="row-label">Version</span><span class="mono">${VERSION}</span></div>
+      <div class="settings-row"><span class="row-label">Crédits</span><span class="muted">OmniFit — construit avec Claude</span></div>
+      <div class="settings-row"><span class="row-label">Confidentialité</span><span class="muted" style="text-align:right;max-width:200px">100% local. Aucune donnée ne quitte l'appareil.</span></div>
+    </div>
+  </div>`);
+  container.appendChild(root);
+
+  // Toggles dynamiques
+  root.querySelector('#row-vol-tracking').replaceWith(toggleRow('Volume tracking', 'volumeTrackingEnabled', 'Dashboard hebdo sur la page Entraînement'));
+  root.querySelector('#row-db-full').replaceWith(toggleRow('Base d\'exercices complète', 'exerciseDbFull', 'Décoché : exercices débutant uniquement'));
+  root.querySelector('#row-cexo').replaceWith(toggleRow('Afficher C_exo / C_muscle', 'showCExo', 'Badges avancés en séance'));
+  const rowsInt = root.querySelector('#rows-interface');
+  rowsInt.appendChild(toggleRow('Son', 'soundEnabled'));
+  rowsInt.appendChild(toggleRow('Haptique', 'hapticEnabled'));
+  rowsInt.appendChild(toggleRow('Notifications', 'notificationsEnabled'));
+  rowsInt.appendChild(toggleRow('— Rappel log poids quotidien', 'notifWeight'));
+  rowsInt.appendChild(toggleRow('— Rappel entraînement', 'notifWorkout'));
+  rowsInt.appendChild(toggleRow('— Macro atteint', 'notifMacro'));
+
+  // Filtre équipement
+  const eqHost = root.querySelector('#equip-filter');
+  for (const eq of EQUIPMENT_TYPES) {
+    const active = s.equipmentFilter.includes(eq);
+    const chip = el(`<button class="badge ${active ? '' : 'violet'}" style="cursor:pointer;min-height:32px;${active ? 'background:rgba(0,217,255,0.2)' : 'opacity:0.6'}">${eq}</button>`);
+    chip.addEventListener('click', () => {
+      const cur = new Set(store.userData.settings.equipmentFilter);
+      if (cur.has(eq)) cur.delete(eq); else cur.add(eq);
+      store.userData.settings.equipmentFilter = [...cur];
+      store.persist();
+      rerender();
+    });
+    eqHost.appendChild(chip);
+  }
+
+  // Listeners
+  root.querySelector('#btn-edit-profile').addEventListener('click', () => openProfileModal(rerender));
+  root.querySelector('#btn-vol-goals').addEventListener('click', () => openVolumeGoalsModal(rerender));
+
+  root.querySelector('#set-goal-type').addEventListener('change', (e) => {
+    store.saveUserData({ goal: { type: e.target.value } });
+    applyCalorieAuto();
+    rerender();
+  });
+  root.querySelector('#cal-auto').addEventListener('change', (e) => {
+    store.saveUserData({ settings: { calorieAuto: e.target.checked } });
+    applyCalorieAuto();
+    rerender();
+  });
+  root.querySelector('#set-cal').addEventListener('change', (e) => {
+    store.saveUserData({ settings: { calorieGoal: parseInt(e.target.value, 10) || s.calorieGoal } });
+  });
+  root.querySelector('#set-prot').addEventListener('change', (e) => {
+    store.saveUserData({ settings: { proteinGoal: parseInt(e.target.value, 10) || s.proteinGoal } });
+  });
+
+  const bindRange = (id, valId, key, fmt = (v) => v, parse = parseFloat) => {
+    const inp = root.querySelector(id);
+    inp.addEventListener('input', () => { root.querySelector(valId).textContent = fmt(inp.value); });
+    inp.addEventListener('change', () => { store.saveUserData({ settings: { [key]: parse(inp.value) } }); });
+  };
+  bindRange('#set-rest', '#rest-val', 'restTimerDefault', (v) => `${v}s`, (v) => parseInt(v, 10));
+  bindRange('#set-ratio', '#ratio-val', 'secondaryRatio', (v) => parseFloat(v).toFixed(1));
+  bindRange('#set-carbs', '#carbs-val', 'carbsPct', (v) => `${v}%`, (v) => parseInt(v, 10));
+  bindRange('#set-fat', '#fat-val', 'fatPct', (v) => `${v}%`, (v) => parseInt(v, 10));
+  bindRange('#set-water', '#water-val', 'waterGoal', (v) => `${v}L`);
+
+  root.querySelectorAll('[data-preset]').forEach((b) => b.addEventListener('click', () => macroPreset(b.dataset.preset, rerender)));
+
+  root.querySelector('#seg-theme').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    store.saveUserData({ settings: { theme: b.dataset.v } });
+    applyTheme();
+    rerender();
+  });
+  root.querySelector('#seg-density').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    store.saveUserData({ settings: { density: b.dataset.v } });
+    applyTheme();
+    rerender();
+  });
+
+  root.querySelector('#btn-export').addEventListener('click', () => { store.exportJSON(); toast('Export téléchargé', 'success'); });
+
+  const fileInput = root.querySelector('#import-file');
+  root.querySelector('#btn-import').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    const f = fileInput.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        openModal({
+          title: 'Importer les données',
+          content: '<p class="confirm-text">Fusionner avec les données existantes, ou tout écraser ?</p>',
+          actions: [
+            { label: 'Fusionner', variant: 'btn-secondary', onClick: () => { store.importJSON(data, 'merge'); toast('Données fusionnées', 'success'); rerender(); } },
+            { label: 'Écraser', variant: 'btn-danger', onClick: () => { store.importJSON(data, 'overwrite'); toast('Données remplacées', 'success'); applyTheme(); rerender(); } },
+          ],
+        });
+      } catch (e) {
+        toast('Fichier JSON invalide', 'error');
+      }
+      fileInput.value = '';
+    };
+    reader.readAsText(f);
+  });
+
+  root.querySelector('#btn-clear-history').addEventListener('click', () => {
+    confirmModal('Effacer l\'historique', 'Poids, nutrition, pas et séances seront supprimés. Les réglages sont conservés.', () => {
+      store.clearHistory();
+      toast('Historique effacé', 'success');
+      rerender();
+    }, true);
+  });
+
+  root.querySelector('#btn-reset').addEventListener('click', () => {
+    confirmModal('Reset complet', 'Êtes-vous sûr ? Toutes les données seront perdues.', () => {
+      confirmModal('Dernière confirmation', 'Vraiment tout supprimer ? Cette action est irréversible.', () => {
+        store.resetAll();
+        applyTheme();
+        toast('Application réinitialisée', 'success');
+        rerender();
+      }, true);
+    }, true);
+  });
+}
+
+export function applyTheme() {
+  const s = store.userData.settings;
+  document.body.classList.toggle('theme-amoled', s.theme === 'amoled');
+  document.body.classList.remove('density-compact', 'density-spacious');
+  if (s.density === 'compact') document.body.classList.add('density-compact');
+  if (s.density === 'spacious') document.body.classList.add('density-spacious');
+}

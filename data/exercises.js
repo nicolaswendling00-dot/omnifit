@@ -1,0 +1,214 @@
+// OmniFit — Base d'exercices (156 exercices)
+// Structure : { id, name, category, primaryMuscles:[{m,p}], secondaryMuscles:[{m,p}], difficulty, equipment }
+
+export const MUSCLES = [
+  { id: 'chest', label: 'Pectoraux' },
+  { id: 'back', label: 'Dos' },
+  { id: 'shoulders', label: 'Épaules' },
+  { id: 'biceps', label: 'Biceps' },
+  { id: 'triceps', label: 'Triceps' },
+  { id: 'forearms', label: 'Avant-bras' },
+  { id: 'quads', label: 'Quadriceps' },
+  { id: 'hamstrings', label: 'Ischios' },
+  { id: 'glutes', label: 'Fessiers' },
+  { id: 'calves', label: 'Mollets' },
+  { id: 'core', label: 'Abdos / Core' },
+  { id: 'lowerback', label: 'Lombaires' },
+];
+
+export const muscleLabel = (id) => (MUSCLES.find((m) => m.id === id) || { label: id }).label;
+
+function ex(id, name, category, primary, secondary, equipment, difficulty = 'Intermediate') {
+  return {
+    id,
+    name,
+    category,
+    primaryMuscles: primary.map(([m, p]) => ({ m, p })),
+    secondaryMuscles: secondary.map(([m, p]) => ({ m, p })),
+    equipment,
+    difficulty,
+  };
+}
+
+export const EXERCISES = [
+  // ============ CHEST (14) ============
+  ex('benchPress', 'Développé couché', 'Chest', [['chest', 70], ['shoulders', 15]], [['triceps', 15]], 'Barbell'),
+  ex('inclineBench', 'Développé incliné', 'Chest', [['chest', 60], ['shoulders', 25]], [['triceps', 15]], 'Barbell'),
+  ex('declineBench', 'Développé décliné', 'Chest', [['chest', 75]], [['triceps', 15], ['shoulders', 10]], 'Barbell'),
+  ex('dbBenchPress', 'Développé couché haltères', 'Chest', [['chest', 70], ['shoulders', 15]], [['triceps', 15]], 'Dumbbells'),
+  ex('dbInclinePress', 'Développé incliné haltères', 'Chest', [['chest', 60], ['shoulders', 25]], [['triceps', 15]], 'Dumbbells'),
+  ex('dbFly', 'Écartés haltères', 'Chest', [['chest', 85]], [['shoulders', 15]], 'Dumbbells'),
+  ex('cableFly', 'Écartés poulie', 'Chest', [['chest', 85]], [['shoulders', 15]], 'Cable'),
+  ex('pecDeck', 'Pec deck', 'Chest', [['chest', 90]], [['shoulders', 10]], 'Machine', 'Beginner'),
+  ex('pushUp', 'Pompes', 'Chest', [['chest', 60], ['shoulders', 15]], [['triceps', 15], ['core', 10]], 'Bodyweight', 'Beginner'),
+  ex('dips', 'Dips (buste penché)', 'Chest', [['chest', 55], ['triceps', 30]], [['shoulders', 15]], 'Bodyweight'),
+  ex('machinePress', 'Développé machine convergente', 'Chest', [['chest', 70], ['shoulders', 15]], [['triceps', 15]], 'Machine', 'Beginner'),
+  ex('pullover', 'Pull-over haltère', 'Chest', [['chest', 55], ['back', 30]], [['triceps', 15]], 'Dumbbells'),
+  ex('svendPress', 'Svend press', 'Chest', [['chest', 80]], [['shoulders', 10], ['triceps', 10]], 'Plate', 'Beginner'),
+  ex('landminePress', 'Landmine press', 'Chest', [['chest', 50], ['shoulders', 35]], [['triceps', 15]], 'Barbell'),
+
+  // ============ BACK (15) ============
+  ex('pullUp', 'Tractions pronation', 'Back', [['back', 70], ['biceps', 20]], [['forearms', 10]], 'Bodyweight'),
+  ex('chinUp', 'Tractions supination', 'Back', [['back', 60], ['biceps', 30]], [['forearms', 10]], 'Bodyweight'),
+  ex('latPulldown', 'Tirage vertical', 'Back', [['back', 70], ['biceps', 20]], [['forearms', 10]], 'Cable', 'Beginner'),
+  ex('barbellRow', 'Rowing barre', 'Back', [['back', 65]], [['biceps', 15], ['lowerback', 10], ['forearms', 10]], 'Barbell'),
+  ex('pendlayRow', 'Pendlay row', 'Back', [['back', 70]], [['biceps', 15], ['lowerback', 15]], 'Barbell', 'Advanced'),
+  ex('dbRow', 'Rowing haltère unilatéral', 'Back', [['back', 70]], [['biceps', 20], ['forearms', 10]], 'Dumbbells', 'Beginner'),
+  ex('seatedCableRow', 'Tirage horizontal poulie', 'Back', [['back', 70]], [['biceps', 20], ['forearms', 10]], 'Cable', 'Beginner'),
+  ex('tBarRow', 'T-bar row', 'Back', [['back', 70]], [['biceps', 15], ['lowerback', 15]], 'Barbell'),
+  ex('deadlift', 'Soulevé de terre', 'Back', [['back', 30], ['glutes', 25], ['hamstrings', 25]], [['lowerback', 10], ['forearms', 10]], 'Barbell', 'Advanced'),
+  ex('rackPull', 'Rack pull', 'Back', [['back', 45], ['glutes', 20]], [['hamstrings', 15], ['lowerback', 10], ['forearms', 10]], 'Barbell'),
+  ex('facePull', 'Face pull', 'Back', [['shoulders', 50], ['back', 40]], [['biceps', 10]], 'Cable', 'Beginner'),
+  ex('straightArmPulldown', 'Pull-over poulie haute', 'Back', [['back', 85]], [['triceps', 15]], 'Cable', 'Beginner'),
+  ex('shrugs', 'Shrugs (trapèzes)', 'Back', [['back', 90]], [['forearms', 10]], 'Dumbbells', 'Beginner'),
+  ex('machineRow', 'Rowing machine', 'Back', [['back', 75]], [['biceps', 15], ['forearms', 10]], 'Machine', 'Beginner'),
+  ex('invertedRow', 'Rowing inversé', 'Back', [['back', 65], ['biceps', 20]], [['core', 15]], 'Bodyweight', 'Beginner'),
+
+  // ============ SHOULDERS (13) ============
+  ex('overheadPress', 'Développé militaire', 'Shoulders', [['shoulders', 70]], [['triceps', 20], ['core', 10]], 'Barbell'),
+  ex('dbShoulderPress', 'Développé épaules haltères', 'Shoulders', [['shoulders', 70]], [['triceps', 20], ['core', 10]], 'Dumbbells'),
+  ex('arnoldPress', 'Arnold press', 'Shoulders', [['shoulders', 75]], [['triceps', 25]], 'Dumbbells'),
+  ex('lateralRaise', 'Élévations latérales', 'Shoulders', [['shoulders', 90]], [['forearms', 10]], 'Dumbbells', 'Beginner'),
+  ex('cableLateralRaise', 'Élévations latérales poulie', 'Shoulders', [['shoulders', 90]], [['forearms', 10]], 'Cable', 'Beginner'),
+  ex('frontRaise', 'Élévations frontales', 'Shoulders', [['shoulders', 90]], [['core', 10]], 'Dumbbells', 'Beginner'),
+  ex('rearDeltFly', 'Oiseau (rear delt)', 'Shoulders', [['shoulders', 80], ['back', 20]], [], 'Dumbbells', 'Beginner'),
+  ex('reversePecDeck', 'Reverse pec deck', 'Shoulders', [['shoulders', 80], ['back', 20]], [], 'Machine', 'Beginner'),
+  ex('uprightRow', 'Rowing menton', 'Shoulders', [['shoulders', 60], ['back', 25]], [['biceps', 15]], 'Barbell'),
+  ex('machineShoulderPress', 'Développé épaules machine', 'Shoulders', [['shoulders', 75]], [['triceps', 25]], 'Machine', 'Beginner'),
+  ex('pushPress', 'Push press', 'Shoulders', [['shoulders', 60]], [['triceps', 20], ['quads', 10], ['core', 10]], 'Barbell', 'Advanced'),
+  ex('cubanRotation', 'Rotation cubaine', 'Shoulders', [['shoulders', 90]], [['forearms', 10]], 'Dumbbells', 'Beginner'),
+  ex('plateFrontRaise', 'Élévation frontale disque', 'Shoulders', [['shoulders', 85]], [['core', 15]], 'Plate', 'Beginner'),
+
+  // ============ BICEPS (12) ============
+  ex('barbellCurl', 'Curl barre', 'Biceps', [['biceps', 80]], [['forearms', 20]], 'Barbell', 'Beginner'),
+  ex('ezBarCurl', 'Curl barre EZ', 'Biceps', [['biceps', 80]], [['forearms', 20]], 'Barbell', 'Beginner'),
+  ex('dbCurl', 'Curl haltères', 'Biceps', [['biceps', 80]], [['forearms', 20]], 'Dumbbells', 'Beginner'),
+  ex('hammerCurl', 'Curl marteau', 'Biceps', [['biceps', 60], ['forearms', 40]], [], 'Dumbbells', 'Beginner'),
+  ex('inclineCurl', 'Curl incliné', 'Biceps', [['biceps', 90]], [['forearms', 10]], 'Dumbbells'),
+  ex('preacherCurl', 'Curl pupitre (Larry Scott)', 'Biceps', [['biceps', 90]], [['forearms', 10]], 'Barbell'),
+  ex('concentrationCurl', 'Curl concentration', 'Biceps', [['biceps', 95]], [['forearms', 5]], 'Dumbbells', 'Beginner'),
+  ex('cableCurl', 'Curl poulie basse', 'Biceps', [['biceps', 85]], [['forearms', 15]], 'Cable', 'Beginner'),
+  ex('spiderCurl', 'Spider curl', 'Biceps', [['biceps', 90]], [['forearms', 10]], 'Dumbbells'),
+  ex('bayesianCurl', 'Curl bayésien poulie', 'Biceps', [['biceps', 90]], [['forearms', 10]], 'Cable'),
+  ex('dragCurl', 'Drag curl', 'Biceps', [['biceps', 85]], [['forearms', 15]], 'Barbell'),
+  ex('zottmanCurl', 'Curl Zottman', 'Biceps', [['biceps', 60], ['forearms', 40]], [], 'Dumbbells'),
+
+  // ============ TRICEPS (12) ============
+  ex('closeGripBench', 'Développé couché prise serrée', 'Triceps', [['triceps', 60], ['chest', 30]], [['shoulders', 10]], 'Barbell'),
+  ex('tricepsDips', 'Dips triceps (banc)', 'Triceps', [['triceps', 70]], [['chest', 20], ['shoulders', 10]], 'Bodyweight', 'Beginner'),
+  ex('skullCrusher', 'Barre au front', 'Triceps', [['triceps', 90]], [['forearms', 10]], 'Barbell'),
+  ex('overheadExtension', 'Extension nuque haltère', 'Triceps', [['triceps', 90]], [['core', 10]], 'Dumbbells', 'Beginner'),
+  ex('cablePushdown', 'Extension poulie haute (barre)', 'Triceps', [['triceps', 95]], [['forearms', 5]], 'Cable', 'Beginner'),
+  ex('ropePushdown', 'Extension poulie corde', 'Triceps', [['triceps', 95]], [['forearms', 5]], 'Cable', 'Beginner'),
+  ex('kickback', 'Kickback haltère', 'Triceps', [['triceps', 95]], [['shoulders', 5]], 'Dumbbells', 'Beginner'),
+  ex('overheadCableExt', 'Extension poulie nuque', 'Triceps', [['triceps', 90]], [['core', 10]], 'Cable'),
+  ex('diamondPushUp', 'Pompes diamant', 'Triceps', [['triceps', 60], ['chest', 25]], [['shoulders', 15]], 'Bodyweight'),
+  ex('jmPress', 'JM press', 'Triceps', [['triceps', 75], ['chest', 15]], [['shoulders', 10]], 'Barbell', 'Advanced'),
+  ex('machineDips', 'Dips machine', 'Triceps', [['triceps', 70], ['chest', 20]], [['shoulders', 10]], 'Machine', 'Beginner'),
+  ex('tatePress', 'Tate press', 'Triceps', [['triceps', 90]], [['chest', 10]], 'Dumbbells', 'Advanced'),
+
+  // ============ FOREARMS (8) ============
+  ex('wristCurl', 'Curl poignets', 'Forearms', [['forearms', 100]], [], 'Barbell', 'Beginner'),
+  ex('reverseWristCurl', 'Curl poignets inversé', 'Forearms', [['forearms', 100]], [], 'Barbell', 'Beginner'),
+  ex('reverseCurl', 'Curl inversé', 'Forearms', [['forearms', 60], ['biceps', 40]], [], 'Barbell', 'Beginner'),
+  ex('farmersWalk', 'Farmer walk', 'Forearms', [['forearms', 50]], [['core', 25], ['back', 25]], 'Dumbbells'),
+  ex('platePinch', 'Pince disques', 'Forearms', [['forearms', 100]], [], 'Plate', 'Beginner'),
+  ex('deadHang', 'Suspension barre (dead hang)', 'Forearms', [['forearms', 70]], [['back', 20], ['core', 10]], 'Bodyweight', 'Beginner'),
+  ex('wristRoller', 'Wrist roller', 'Forearms', [['forearms', 90]], [['shoulders', 10]], 'Other'),
+  ex('gripper', 'Hand gripper', 'Forearms', [['forearms', 100]], [], 'Other', 'Beginner'),
+
+  // ============ QUADS (14) ============
+  ex('squat', 'Squat barre', 'Quads', [['quads', 50], ['glutes', 30]], [['hamstrings', 10], ['core', 10]], 'Barbell'),
+  ex('frontSquat', 'Front squat', 'Quads', [['quads', 60], ['glutes', 20]], [['core', 20]], 'Barbell', 'Advanced'),
+  ex('gobletSquat', 'Goblet squat', 'Quads', [['quads', 55], ['glutes', 30]], [['core', 15]], 'Dumbbells', 'Beginner'),
+  ex('legPress', 'Presse à cuisses', 'Quads', [['quads', 60], ['glutes', 30]], [['hamstrings', 10]], 'Machine', 'Beginner'),
+  ex('hackSquat', 'Hack squat', 'Quads', [['quads', 70], ['glutes', 20]], [['hamstrings', 10]], 'Machine'),
+  ex('legExtension', 'Leg extension', 'Quads', [['quads', 100]], [], 'Machine', 'Beginner'),
+  ex('bulgarianSplitSquat', 'Fentes bulgares', 'Quads', [['quads', 45], ['glutes', 40]], [['hamstrings', 15]], 'Dumbbells'),
+  ex('walkingLunge', 'Fentes marchées', 'Quads', [['quads', 45], ['glutes', 40]], [['hamstrings', 15]], 'Dumbbells', 'Beginner'),
+  ex('stepUp', 'Step-up', 'Quads', [['quads', 50], ['glutes', 40]], [['hamstrings', 10]], 'Dumbbells', 'Beginner'),
+  ex('sissySquat', 'Sissy squat', 'Quads', [['quads', 95]], [['core', 5]], 'Bodyweight', 'Advanced'),
+  ex('pistolSquat', 'Pistol squat', 'Quads', [['quads', 55], ['glutes', 30]], [['core', 15]], 'Bodyweight', 'Advanced'),
+  ex('smithSquat', 'Squat Smith machine', 'Quads', [['quads', 55], ['glutes', 30]], [['hamstrings', 15]], 'Machine', 'Beginner'),
+  ex('pauseSquat', 'Squat pause', 'Quads', [['quads', 55], ['glutes', 30]], [['core', 15]], 'Barbell', 'Advanced'),
+  ex('wallSit', 'Chaise (wall sit)', 'Quads', [['quads', 80]], [['glutes', 15], ['core', 5]], 'Bodyweight', 'Beginner'),
+
+  // ============ HAMSTRINGS (10) ============
+  ex('romanianDeadlift', 'Soulevé de terre roumain', 'Hamstrings', [['hamstrings', 55], ['glutes', 30]], [['lowerback', 15]], 'Barbell'),
+  ex('stiffLegDeadlift', 'SDT jambes tendues', 'Hamstrings', [['hamstrings', 60], ['glutes', 25]], [['lowerback', 15]], 'Barbell'),
+  ex('lyingLegCurl', 'Leg curl allongé', 'Hamstrings', [['hamstrings', 95]], [['calves', 5]], 'Machine', 'Beginner'),
+  ex('seatedLegCurl', 'Leg curl assis', 'Hamstrings', [['hamstrings', 95]], [['calves', 5]], 'Machine', 'Beginner'),
+  ex('nordicCurl', 'Nordic curl', 'Hamstrings', [['hamstrings', 90]], [['glutes', 5], ['core', 5]], 'Bodyweight', 'Advanced'),
+  ex('goodMorning', 'Good morning', 'Hamstrings', [['hamstrings', 50], ['lowerback', 25]], [['glutes', 25]], 'Barbell', 'Advanced'),
+  ex('dbRDL', 'RDL haltères', 'Hamstrings', [['hamstrings', 55], ['glutes', 30]], [['lowerback', 15]], 'Dumbbells', 'Beginner'),
+  ex('singleLegRDL', 'RDL unilatéral', 'Hamstrings', [['hamstrings', 50], ['glutes', 30]], [['core', 20]], 'Dumbbells'),
+  ex('gluteHamRaise', 'Glute ham raise', 'Hamstrings', [['hamstrings', 70], ['glutes', 20]], [['lowerback', 10]], 'Machine', 'Advanced'),
+  ex('swissBallCurl', 'Leg curl swiss ball', 'Hamstrings', [['hamstrings', 75], ['glutes', 15]], [['core', 10]], 'Other', 'Beginner'),
+
+  // ============ GLUTES (10) ============
+  ex('hipThrust', 'Hip thrust', 'Glutes', [['glutes', 70]], [['hamstrings', 20], ['quads', 10]], 'Barbell'),
+  ex('gluteBridge', 'Pont fessier', 'Glutes', [['glutes', 75]], [['hamstrings', 20], ['core', 5]], 'Bodyweight', 'Beginner'),
+  ex('cableKickback', 'Kickback poulie', 'Glutes', [['glutes', 90]], [['hamstrings', 10]], 'Cable', 'Beginner'),
+  ex('sumoDeadlift', 'Soulevé de terre sumo', 'Glutes', [['glutes', 40], ['quads', 25], ['hamstrings', 20]], [['back', 10], ['forearms', 5]], 'Barbell', 'Advanced'),
+  ex('abduction', 'Abduction machine', 'Glutes', [['glutes', 100]], [], 'Machine', 'Beginner'),
+  ex('frogPump', 'Frog pump', 'Glutes', [['glutes', 90]], [['hamstrings', 10]], 'Bodyweight', 'Beginner'),
+  ex('curtsyLunge', 'Fente curtsy', 'Glutes', [['glutes', 55], ['quads', 35]], [['hamstrings', 10]], 'Dumbbells'),
+  ex('reverseHyper', 'Reverse hyperextension', 'Glutes', [['glutes', 60], ['hamstrings', 20]], [['lowerback', 20]], 'Machine'),
+  ex('bandWalk', 'Marche latérale élastique', 'Glutes', [['glutes', 85]], [['quads', 15]], 'Band', 'Beginner'),
+  ex('smithHipThrust', 'Hip thrust Smith', 'Glutes', [['glutes', 70]], [['hamstrings', 20], ['quads', 10]], 'Machine', 'Beginner'),
+
+  // ============ CALVES (7) ============
+  ex('standingCalfRaise', 'Mollets debout', 'Calves', [['calves', 100]], [], 'Machine', 'Beginner'),
+  ex('seatedCalfRaise', 'Mollets assis', 'Calves', [['calves', 100]], [], 'Machine', 'Beginner'),
+  ex('legPressCalfRaise', 'Mollets à la presse', 'Calves', [['calves', 100]], [], 'Machine', 'Beginner'),
+  ex('donkeyCalfRaise', 'Donkey calf raise', 'Calves', [['calves', 100]], [], 'Machine'),
+  ex('singleLegCalfRaise', 'Mollets unilatéral', 'Calves', [['calves', 95]], [['core', 5]], 'Bodyweight', 'Beginner'),
+  ex('dbCalfRaise', 'Mollets haltères', 'Calves', [['calves', 95]], [['forearms', 5]], 'Dumbbells', 'Beginner'),
+  ex('tibialisRaise', 'Tibialis raise', 'Calves', [['calves', 100]], [], 'Bodyweight', 'Beginner'),
+
+  // ============ CORE (14) ============
+  ex('plank', 'Planche', 'Core', [['core', 90]], [['shoulders', 10]], 'Bodyweight', 'Beginner'),
+  ex('sidePlank', 'Planche latérale', 'Core', [['core', 90]], [['shoulders', 10]], 'Bodyweight', 'Beginner'),
+  ex('crunch', 'Crunch', 'Core', [['core', 100]], [], 'Bodyweight', 'Beginner'),
+  ex('cableCrunch', 'Crunch poulie', 'Core', [['core', 100]], [], 'Cable', 'Beginner'),
+  ex('hangingLegRaise', 'Relevés de jambes suspendu', 'Core', [['core', 85]], [['forearms', 15]], 'Bodyweight', 'Advanced'),
+  ex('lyingLegRaise', 'Relevés de jambes au sol', 'Core', [['core', 95]], [['quads', 5]], 'Bodyweight', 'Beginner'),
+  ex('russianTwist', 'Russian twist', 'Core', [['core', 100]], [], 'Plate', 'Beginner'),
+  ex('abWheel', 'Roue abdominale', 'Core', [['core', 75]], [['shoulders', 15], ['back', 10]], 'Other', 'Advanced'),
+  ex('deadBug', 'Dead bug', 'Core', [['core', 100]], [], 'Bodyweight', 'Beginner'),
+  ex('birdDog', 'Bird dog', 'Core', [['core', 70], ['lowerback', 20]], [['glutes', 10]], 'Bodyweight', 'Beginner'),
+  ex('palofPress', 'Pallof press', 'Core', [['core', 95]], [['shoulders', 5]], 'Cable', 'Beginner'),
+  ex('mountainClimber', 'Mountain climbers', 'Core', [['core', 70]], [['shoulders', 15], ['quads', 15]], 'Bodyweight', 'Beginner'),
+  ex('vUp', 'V-up', 'Core', [['core', 95]], [['quads', 5]], 'Bodyweight'),
+  ex('dragonFlag', 'Dragon flag', 'Core', [['core', 85]], [['back', 10], ['shoulders', 5]], 'Bodyweight', 'Advanced'),
+
+  // ============ LOWER BACK (7) ============
+  ex('backExtension', 'Extension lombaire (banc)', 'LowerBack', [['lowerback', 60], ['glutes', 25]], [['hamstrings', 15]], 'Bodyweight', 'Beginner'),
+  ex('superman', 'Superman', 'LowerBack', [['lowerback', 70], ['glutes', 20]], [['back', 10]], 'Bodyweight', 'Beginner'),
+  ex('jeffersonCurl', 'Jefferson curl', 'LowerBack', [['lowerback', 60], ['hamstrings', 30]], [['back', 10]], 'Dumbbells', 'Advanced'),
+  ex('weightedBackExtension', 'Extension lombaire lestée', 'LowerBack', [['lowerback', 55], ['glutes', 30]], [['hamstrings', 15]], 'Plate'),
+  ex('machineBackExtension', 'Extension lombaire machine', 'LowerBack', [['lowerback', 80]], [['glutes', 20]], 'Machine', 'Beginner'),
+  ex('catCow', 'Chat-vache (mobilité)', 'LowerBack', [['lowerback', 80]], [['core', 20]], 'Bodyweight', 'Beginner'),
+  ex('kettlebellSwing', 'Kettlebell swing', 'LowerBack', [['glutes', 45], ['hamstrings', 25], ['lowerback', 20]], [['core', 10]], 'Kettlebell'),
+
+  // ============ FULL BODY / CARDIO (16) ============
+  ex('burpee', 'Burpees', 'FullBody', [['quads', 30], ['chest', 25], ['core', 25]], [['shoulders', 10], ['triceps', 10]], 'Bodyweight'),
+  ex('thruster', 'Thrusters', 'FullBody', [['quads', 35], ['shoulders', 30], ['glutes', 20]], [['triceps', 10], ['core', 5]], 'Barbell', 'Advanced'),
+  ex('cleanAndPress', 'Clean & press', 'FullBody', [['shoulders', 30], ['quads', 25], ['back', 20]], [['glutes', 15], ['core', 10]], 'Barbell', 'Advanced'),
+  ex('kbClean', 'Kettlebell clean', 'FullBody', [['back', 30], ['glutes', 25], ['quads', 20]], [['forearms', 15], ['core', 10]], 'Kettlebell'),
+  ex('kbSnatch', 'Kettlebell snatch', 'FullBody', [['shoulders', 30], ['glutes', 25], ['back', 20]], [['core', 15], ['forearms', 10]], 'Kettlebell', 'Advanced'),
+  ex('turkishGetUp', 'Turkish get-up', 'FullBody', [['core', 40], ['shoulders', 30]], [['glutes', 15], ['quads', 15]], 'Kettlebell', 'Advanced'),
+  ex('bearCrawl', 'Bear crawl', 'FullBody', [['core', 40], ['shoulders', 30]], [['quads', 20], ['triceps', 10]], 'Bodyweight', 'Beginner'),
+  ex('battleRopes', 'Battle ropes', 'FullBody', [['shoulders', 40], ['core', 30]], [['back', 15], ['forearms', 15]], 'Other'),
+  ex('sledPush', 'Poussée de traîneau', 'FullBody', [['quads', 40], ['glutes', 25]], [['calves', 20], ['core', 15]], 'Other'),
+  ex('boxJump', 'Box jump', 'FullBody', [['quads', 40], ['glutes', 30], ['calves', 20]], [['core', 10]], 'Bodyweight'),
+  ex('jumpSquat', 'Squat sauté', 'FullBody', [['quads', 45], ['glutes', 30], ['calves', 15]], [['core', 10]], 'Bodyweight', 'Beginner'),
+  ex('rowingErg', 'Rameur (ergomètre)', 'FullBody', [['back', 35], ['quads', 25], ['hamstrings', 15]], [['biceps', 15], ['core', 10]], 'Machine', 'Beginner'),
+  ex('assaultBike', 'Assault bike', 'FullBody', [['quads', 40], ['shoulders', 20]], [['hamstrings', 20], ['calves', 10], ['core', 10]], 'Machine', 'Beginner'),
+  ex('jumpRope', 'Corde à sauter', 'FullBody', [['calves', 50]], [['shoulders', 20], ['forearms', 15], ['core', 15]], 'Other', 'Beginner'),
+  ex('manMaker', 'Man maker', 'FullBody', [['chest', 25], ['back', 25], ['quads', 20]], [['shoulders', 15], ['core', 15]], 'Dumbbells', 'Advanced'),
+  ex('devilPress', 'Devil press', 'FullBody', [['shoulders', 30], ['quads', 25], ['chest', 20]], [['glutes', 15], ['core', 10]], 'Dumbbells', 'Advanced'),
+];
+
+export const CATEGORIES = [...new Set(EXERCISES.map((e) => e.category))];
+export const EQUIPMENT_TYPES = [...new Set(EXERCISES.map((e) => e.equipment))].sort();
