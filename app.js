@@ -14,32 +14,31 @@ const PAGES = [
 ];
 
 let currentPage = 0;
-const rendered = new Set();
+const appContainer = document.getElementById('app-container');
 
-function goTo(index, force = false) {
+function goTo(index) {
   index = Math.max(0, Math.min(PAGES.length - 1, index));
-  if (index === currentPage && rendered.has(index) && !force) return;
   currentPage = index;
-  document.documentElement.style.setProperty('--page-index', index);
+  // Transform inline en % (fiable sur iOS, contrairement aux CSS vars + vw)
+  appContainer.style.transform = `translateX(-${index * 20}%)`;
+  document.body.dataset.page = index;
   document.querySelectorAll('.nav-btn').forEach((b, i) => b.classList.toggle('active', i === index));
   const page = PAGES[index];
-  const container = document.getElementById(page.id);
-  page.render(container);
-  rendered.add(index);
+  page.render(document.getElementById(page.id));
 }
 
-// ---------- Navigation par boutons ----------
 document.querySelectorAll('.nav-btn').forEach((btn, i) => {
-  btn.addEventListener('click', () => goTo(i, true));
+  btn.addEventListener('click', () => goTo(i));
 });
 
-// ---------- Navigation par swipe ----------
-const appContainer = document.getElementById('app-container');
+// ---------- Swipe latéral ----------
 let touchStartX = null;
 let touchStartY = null;
 
 appContainer.addEventListener('touchstart', (e) => {
-  if (document.body.classList.contains('overlay-open')) return;
+  if (document.body.classList.contains('overlay-open')) { touchStartX = null; return; }
+  // Ne pas déclencher le swipe depuis les zones scrollables horizontalement
+  if (e.target.closest('.no-swipe, .date-ribbon, .segment, input[type="range"]')) { touchStartX = null; return; }
   touchStartX = e.touches[0].clientX;
   touchStartY = e.touches[0].clientY;
 }, { passive: true });
@@ -50,20 +49,17 @@ appContainer.addEventListener('touchend', (e) => {
   const dx = e.changedTouches[0].clientX - touchStartX;
   const dy = e.changedTouches[0].clientY - touchStartY;
   touchStartX = null;
-  // Swipe horizontal dominant, seuil 60px
   if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-    if (dx < 0) goTo(currentPage + 1, true);
-    else goTo(currentPage - 1, true);
+    goTo(currentPage + (dx < 0 ? 1 : -1));
   }
 }, { passive: true });
 
 // ---------- Boot ----------
 applyTheme();
-goTo(0, true);
+goTo(0);
 
-// ---------- Service worker (PWA) ----------
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch((e) => console.warn('SW non enregistré', e));
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
   });
 }

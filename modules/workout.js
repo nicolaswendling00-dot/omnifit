@@ -1,19 +1,20 @@
-// OmniFit — PAGE 2 : Entraînement (routines, séances, volume tracking)
+// OmniFit — PAGE 2 : Entraînement v2
+// Séance minimisable, timer sticky, menu ⋯ (suppr/réorg/superset/remplacer),
+// détail exo (muscles, historique, repos perso), coefficients d'amélioration.
 import { store, todayISO } from '../utils/storage.js';
-import { EXERCISES, MUSCLES, muscleLabel, EQUIPMENT_TYPES } from '../data/exercises.js';
-import {
-  calculateCExo, calculateCMuscle, formatTime,
-  workoutMuscleVolume, weeklySetsByMuscle, topExercisesByVolume,
-} from '../utils/math.js';
+import { EXERCISES, MUSCLES, muscleLabel } from '../data/exercises.js';
+import { calculateCExo, calculateCMuscle, formatTime, workoutMuscleVolume, weeklySetsByMuscle, topExercisesByVolume } from '../utils/math.js';
 import { el, icons, openModal, openSheet, toast, confirmModal, beep, haptic } from '../utils/ui.js';
 
 let volumeChart = null;
 let trendChart = null;
-let session = null; // { startTs, elapsed, running, date, notes, exercises: [{exerciseId, sets:[{weight,reps}]}] }
+let session = null; // { elapsed, running, date, notes, exercises:[{exerciseId, sets:[{weight,reps}], ss}] }
+let sessionUI = null; // { overlay, renderExos, close }
 let chronoInterval = null;
 let restInterval = null;
+let restRemaining = 0;
 
-// ---------- Lookup exercices (base + customs, filtres settings) ----------
+// ---------- Lookup ----------
 export function allExercises() {
   return [...EXERCISES, ...(store.userData.settings.customExercises || [])];
 }
@@ -30,15 +31,88 @@ function filteredExercises() {
   return list;
 }
 
-function lastPerf(exerciseId) {
+function exoRestDuration(exerciseId) {
+  const s = store.userData.settings;
+  return (s.restByExercise && s.restByExercise[exerciseId]) || s.restTimerDefault;
+}
+
+// Volume total d'un exo dans un workout
+const exoVolume = (wx) => wx.sets.reduce((a, s) => a + s.weight * s.reps, 0);
+
+// Dernier workout contenant l'exo → { workout, wx }
+function lastEntry(exerciseId) {
   for (let i = store.userData.workouts.length - 1; i >= 0; i--) {
     const wx = store.userData.workouts[i].exercises.find((x) => x.exerciseId === exerciseId);
-    if (wx && wx.sets.length) {
-      const best = wx.sets.reduce((a, s) => (s.weight > a.weight ? s : a), wx.sets[0]);
-      return `${best.weight}kg × ${best.reps} reps (${store.userData.workouts[i].date})`;
-    }
+    if (wx && wx.sets.length) return { workout: store.userData.workouts[i], wx };
   }
   return null;
+}
+
+// Coefficient d'amélioration exo : volume courant vs dernier volume (%)
+function exoImprovement(exerciseId, currentVolume) {
+  const last = lastEntry(exerciseId);
+  if (!last || !currentVolume) return null;
+  const lv = exoVolume(last.wx);
+  if (!lv) return null;
+  return Math.round(((currentVolume / lv) - 1) * 100);
+}
+
+// Dernier volume d'un muscle dans les séances passées
+function lastMuscleVolume(muscle) {
+  const ratio = store.userData.settings.secondaryRatio;
+  for (let i = store.userData.workouts.length - 1; i >= 0; i--) {
+    const bm = workoutMuscleVolume(store.userData.workouts[i], exerciseLookup, ratio);
+    if (bm[muscle]) return bm[muscle];
+  }
+  return null;
+}
+
+const impBadge = (imp, small = true) => {
+  if (imp == null) return '';
+  const cls = imp >= 0 ? 'green' : 'red';
+  const sign = imp >= 0 ? '+' : '';
+  return `<span class="badge ${cls}" style="${small ? 'font-size:0.62rem;padding:2px 6px' : ''}">${sign}${imp}%</span>`;
+};
+
+// ============================================================
+// PICKER PLEIN ÉCRAN (recherche en haut → jamais derrière le clavier)
+// ============================================================
+function openExercisePicker(onPick, title = 'Ajouter un exercice') {
+  const overlay = el(`<div class="picker-overlay">
+    <div class="picker-topbar">
+      <input id="exo-search" type="text" placeholder="Rechercher…" autocomplete="off">
+      <button class="icon-btn" id="picker-close" aria-label="Fermer">${icons.close}</button>
+    </div>
+    <div class="picker-list" id="exo-list"></div>
+    <button class="btn btn-secondary btn-block" id="btn-custom" style="margin:8px 0 calc(10px + var(--safe-b))">${icons.plus} Exercice custom</button>
+  </div>`);
+  document.body.appendChild(overlay);
+  const wasOpen = document.body.classList.contains('overlay-open');
+  document.body.classList.add('overlay-open');
+
+  const close = () => {
+    overlay.remove();
+    if (!wasOpen) document.body.classList.remove('overlay-open');
+  };
+  const list = overlay.querySelector('#exo-list');
+  const renderList = (q = '') => {
+    const items = filteredExercises().filter((e) => e.name.toLowerCase().includes(q.toLowerCase()));
+    list.innerHTML = items.length ? '' : '<div class="empty-state">Aucun résultat</div>';
+    for (const e of items.slice(0, 80)) {
+      const b = el(`<button class="exo-search-item"><span>${e.name}</span><span class="cat">${e.category}</span></button>`);
+      b.addEventListener('click', () => { close(); onPick(e); });
+      list.appendChild(b);
+    }
+  };
+  renderList();
+  const input = overlay.querySelector('#exo-search');
+  input.addEventListener('input', (e) => renderList(e.target.value));
+  setTimeout(() => input.focus(), 250);
+  overlay.querySelector('#picker-close').addEventListener('click', close);
+  overlay.querySelector('#btn-custom').addEventListener('click', () => {
+    close();
+    openCustomExerciseModal((exo) => onPick(exo));
+  });
 }
 
 // ============================================================
@@ -54,12 +128,11 @@ function openCustomExerciseModal(onCreated) {
     </div>`).join('');
 
   const form = el(`<div>
-    <label class="field"><span>Nom de l'exercice</span><input id="cx-name" type="text" placeholder="Mon exercice"></label>
+    <label class="field"><span>Nom</span><input id="cx-name" type="text" placeholder="Mon exercice"></label>
     <h3 style="font-size:0.85rem;margin:8px 0 4px">Muscles principaux</h3>
     <div style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px 10px">${muscleRows('prim')}</div>
     <h3 style="font-size:0.85rem;margin:12px 0 4px">Muscles secondaires</h3>
     <div style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px 10px">${muscleRows('sec')}</div>
-    <label class="field" style="margin-top:12px"><span>Notes (optionnel)</span><input id="cx-notes" type="text"></label>
   </div>`);
 
   openModal({
@@ -87,11 +160,8 @@ function openCustomExerciseModal(onCreated) {
             name, category: 'Custom', isCustom: true,
             primaryMuscles: primary, secondaryMuscles: secondary,
             difficulty: 'Custom', equipment: 'Other',
-            notes: body.querySelector('#cx-notes').value.trim(),
           };
-          const customs = [...(store.userData.settings.customExercises || []), exo];
-          store.saveUserData({ settings: { customExercises: customs } });
-          toast('Exercice créé', 'success');
+          store.saveUserData({ settings: { customExercises: [...(store.userData.settings.customExercises || []), exo] } });
           if (onCreated) onCreated(exo);
         },
       },
@@ -100,90 +170,291 @@ function openCustomExerciseModal(onCreated) {
 }
 
 // ============================================================
-// SÉLECTEUR D'EXERCICE (dropdown searchable)
+// RÉORGANISATION (drag & drop tactile, réutilisé séance + routines)
 // ============================================================
-function openExercisePicker(onPick) {
+function openReorderSheet(labels, onDone) {
   const form = el(`<div>
-    <input id="exo-search" type="text" placeholder="Rechercher un exercice…" autocomplete="off">
-    <div class="exo-search-list" id="exo-list"></div>
-    <button class="btn btn-secondary btn-block" id="btn-custom" style="margin-top:10px">${icons.plus} Custom</button>
+    <div id="reorder-list"></div>
+    <button class="btn btn-primary btn-block" id="reorder-save" style="margin-top:6px">Valider l'ordre</button>
   </div>`);
-  const sheet = openSheet({ title: 'Ajouter un exercice', content: form });
+  const sheet = openSheet({ title: 'Réorganiser', content: form });
+  const list = form.querySelector('#reorder-list');
 
-  const list = form.querySelector('#exo-list');
-  const renderList = (q = '') => {
-    const items = filteredExercises().filter((e) => e.name.toLowerCase().includes(q.toLowerCase()));
-    list.innerHTML = items.length ? '' : '<div class="empty-state">Aucun résultat</div>';
-    for (const e of items.slice(0, 80)) {
-      const b = el(`<button class="exo-search-item">
-        <span>${e.name}</span>
-        <span class="cat">${e.category} · ${e.equipment}</span>
-      </button>`);
-      b.addEventListener('click', () => { sheet.close(); onPick(e); });
-      list.appendChild(b);
+  labels.forEach((lbl, i) => {
+    list.appendChild(el(`<div class="reorder-row" data-i="${i}">
+      <span class="drag-handle">${icons.drag}</span>
+      <span class="reorder-label">${lbl}</span>
+    </div>`));
+  });
+
+  let dragged = null;
+  list.addEventListener('pointerdown', (e) => {
+    const handle = e.target.closest('.drag-handle');
+    if (!handle) return;
+    dragged = handle.closest('.reorder-row');
+    dragged.classList.add('dragging');
+    dragged.setPointerCapture && handle.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  list.addEventListener('pointermove', (e) => {
+    if (!dragged) return;
+    e.preventDefault();
+    const target = document.elementFromPoint(e.clientX, e.clientY);
+    const row = target && target.closest ? target.closest('.reorder-row') : null;
+    if (row && row !== dragged) {
+      const r = row.getBoundingClientRect();
+      const before = e.clientY < r.top + r.height / 2;
+      list.insertBefore(dragged, before ? row : row.nextSibling);
     }
-  };
-  renderList();
-  form.querySelector('#exo-search').addEventListener('input', (e) => renderList(e.target.value));
-  form.querySelector('#btn-custom').addEventListener('click', () => {
+  });
+  const endDrag = () => { if (dragged) { dragged.classList.remove('dragging'); dragged = null; } };
+  list.addEventListener('pointerup', endDrag);
+  list.addEventListener('pointercancel', endDrag);
+
+  form.querySelector('#reorder-save').addEventListener('click', () => {
+    const order = [...list.querySelectorAll('.reorder-row')].map((r) => +r.dataset.i);
     sheet.close();
-    openCustomExerciseModal((exo) => onPick(exo));
+    onDone(order);
   });
 }
 
 // ============================================================
-// TIMER DE REPOS (anneau SVG décomptant)
+// TIMER DE REPOS — barre sticky en haut, toujours visible
 // ============================================================
-function startRestTimer(host, duration) {
+function startRestTimer(exerciseId) {
+  if (!sessionUI) return;
   clearInterval(restInterval);
-  let remaining = duration;
-  const size = 110, stroke = 8;
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
+  const bar = sessionUI.overlay.querySelector('#rest-topbar');
+  let total = exoRestDuration(exerciseId);
+  restRemaining = total;
 
-  host.innerHTML = `<div class="rest-timer-wrap">
-    <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-      <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="rgba(0,217,255,0.12)" stroke-width="${stroke}"/>
-      <circle id="rt-fg" cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="var(--accent)" stroke-width="${stroke}"
-        stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="0" transform="rotate(-90 ${size / 2} ${size / 2})"/>
-      <text id="rt-txt" x="50%" y="54%" text-anchor="middle" class="ring-label" style="font-size:20px">${formatTime(remaining)}</text>
-    </svg>
-    <div class="rest-buttons">
-      <button class="btn btn-ghost btn-sm" id="rt-skip">Skip repos</button>
-      <button class="btn btn-secondary btn-sm" id="rt-plus">Repos +30s</button>
-    </div>
-  </div>`;
+  bar.classList.add('active');
+  bar.classList.remove('pulse');
+  const render = () => {
+    bar.querySelector('.rt-time').textContent = formatTime(restRemaining);
+    bar.querySelector('.progress-bar > div').style.width = `${(restRemaining / total) * 100}%`;
+  };
+  render();
 
-  const fg = host.querySelector('#rt-fg');
-  const txt = host.querySelector('#rt-txt');
-  const wrap = host.querySelector('.rest-timer-wrap');
-  let total = duration;
-
-  const tick = () => {
-    remaining--;
-    if (remaining <= 0) {
-      clearInterval(restInterval);
+  restInterval = setInterval(() => {
+    restRemaining--;
+    if (restRemaining <= 0) {
+      stopRestTimer();
       if (store.userData.settings.soundEnabled) { beep(880); setTimeout(() => beep(1100), 180); }
       haptic();
-      host.innerHTML = '';
       return;
     }
-    txt.textContent = formatTime(remaining);
-    fg.style.strokeDashoffset = c * (1 - remaining / total);
-    if (remaining <= 5) wrap.classList.add('pulse');
-  };
-  restInterval = setInterval(tick, 1000);
+    render();
+    if (restRemaining <= 5) bar.classList.add('pulse');
+  }, 1000);
 
-  host.querySelector('#rt-skip').addEventListener('click', () => { clearInterval(restInterval); host.innerHTML = ''; });
-  host.querySelector('#rt-plus').addEventListener('click', () => { remaining += 30; total += 30; txt.textContent = formatTime(remaining); });
+  bar.querySelector('#rt-skip').onclick = () => stopRestTimer();
+  bar.querySelector('#rt-plus').onclick = () => { restRemaining += 30; total += 30; render(); };
+}
+function stopRestTimer() {
+  clearInterval(restInterval);
+  restInterval = null;
+  restRemaining = 0;
+  if (sessionUI) {
+    const bar = sessionUI.overlay.querySelector('#rest-topbar');
+    if (bar) { bar.classList.remove('active', 'pulse'); }
+  }
 }
 
 // ============================================================
-// MODE SÉANCE (overlay fullscreen)
+// MINI-BARRE (séance minimisée)
+// ============================================================
+function showMiniBar() {
+  removeMiniBar();
+  const bar = el(`<div id="mini-session">
+    <span class="ms-label">${icons.play} Séance en cours <span class="ms-rest" id="ms-rest"></span></span>
+    <span class="num ms-time" id="ms-time">${formatTime(session.elapsed)}</span>
+  </div>`);
+  bar.addEventListener('click', () => restoreSession());
+  document.body.appendChild(bar);
+}
+function removeMiniBar() {
+  const b = document.getElementById('mini-session');
+  if (b) b.remove();
+}
+function minimizeSession() {
+  if (!sessionUI) return;
+  sessionUI.overlay.classList.add('minimized');
+  document.body.classList.remove('overlay-open');
+  showMiniBar();
+}
+function restoreSession() {
+  if (!sessionUI) return;
+  sessionUI.overlay.classList.remove('minimized');
+  document.body.classList.add('overlay-open');
+  removeMiniBar();
+}
+
+// ============================================================
+// DÉTAIL EXO (muscles, repos perso, historique + vue séance)
+// ============================================================
+function openExerciseDetailSheet(exerciseId) {
+  const def = exerciseLookup(exerciseId);
+  if (!def) return;
+  const rest = exoRestDuration(exerciseId);
+  const history = store.userData.workouts
+    .map((w) => ({ w, wx: w.exercises.find((x) => x.exerciseId === exerciseId) }))
+    .filter((h) => h.wx && h.wx.sets.length)
+    .slice(-12).reverse();
+
+  const form = el(`<div>
+    <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px">
+      ${def.primaryMuscles.map((m) => `<span class="badge">${muscleLabel(m.m)} ${m.p}%</span>`).join('')}
+      ${def.secondaryMuscles.map((m) => `<span class="badge violet">${muscleLabel(m.m)} ${m.p}%</span>`).join('')}
+    </div>
+    <div class="card-row" style="margin-bottom:6px">
+      <span style="font-size:0.85rem">Repos pour cet exercice</span>
+      <span class="num" id="ed-rest-val" style="color:var(--accent)">${rest}s</span>
+    </div>
+    <input id="ed-rest" type="range" min="30" max="300" step="15" value="${rest}" style="margin-bottom:14px">
+    <h3 style="margin-bottom:6px">Historique</h3>
+    <div id="ed-history">${history.length ? '' : '<div class="empty-state">Jamais réalisé</div>'}</div>
+  </div>`);
+
+  const sheet = openSheet({ title: def.name, content: form });
+
+  const slider = form.querySelector('#ed-rest');
+  slider.addEventListener('input', () => { form.querySelector('#ed-rest-val').textContent = slider.value + 's'; });
+  slider.addEventListener('change', () => {
+    const rbe = { ...(store.userData.settings.restByExercise || {}) };
+    rbe[exerciseId] = +slider.value;
+    store.saveUserData({ settings: { restByExercise: rbe } });
+    toast(`Repos mémorisé : ${slider.value}s`, 'success');
+  });
+
+  const hostH = form.querySelector('#ed-history');
+  for (const h of history) {
+    const vol = exoVolume(h.wx);
+    const row = el(`<div class="steps-list-item" style="gap:8px">
+      <div>
+        <div style="font-weight:600;font-size:0.82rem">${h.w.date}</div>
+        <div class="muted">${h.wx.sets.map((s) => `${s.weight}×${s.reps}`).join(' · ')}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="num" style="color:var(--accent);font-size:0.85rem">${vol.toLocaleString('fr-FR')} kg</span>
+        <button class="icon-btn" aria-label="Voir la séance" style="width:38px;height:38px">${icons.history}</button>
+      </div>
+    </div>`);
+    row.querySelector('.icon-btn').addEventListener('click', () => openWorkoutDetail(h.w, exerciseId));
+    hostH.appendChild(row);
+  }
+  return sheet;
+}
+
+// Vue d'une séance complète (ordre des exos, supersets)
+function openWorkoutDetail(w, highlightId = null) {
+  const rows = w.exercises.map((wx, i) => {
+    const def = exerciseLookup(wx.exerciseId) || { name: wx.exerciseId };
+    const hl = wx.exerciseId === highlightId;
+    return `<div class="steps-list-item" style="${hl ? 'background:rgba(0,217,255,0.07);border-radius:8px;padding-left:8px;padding-right:8px' : ''}">
+      <div>
+        <div style="font-weight:600;font-size:0.85rem">${i + 1}. ${def.name} ${wx.ss ? `<span class="ss-chip">SS${wx.ss}</span>` : ''}</div>
+        <div class="muted">${wx.sets.map((s) => `${s.weight}×${s.reps}`).join(' · ')}</div>
+      </div>
+      <span class="num" style="color:var(--accent);font-size:0.82rem">${exoVolume(wx).toLocaleString('fr-FR')} kg</span>
+    </div>`;
+  }).join('');
+  openModal({
+    title: `Séance du ${w.date}`,
+    content: `<div class="muted" style="margin-bottom:8px">${formatTime(w.totalTime || 0)} · ${w.totalVolume.toLocaleString('fr-FR')} kg</div>${rows}`,
+    wide: true,
+    actions: [{ label: 'Fermer', variant: 'btn-primary' }],
+  });
+}
+
+// ============================================================
+// MENU ⋯ D'UN EXO
+// ============================================================
+function openExoMenu(idx) {
+  const wx = session.exercises[idx];
+  const def = exerciseLookup(wx.exerciseId) || { name: '?' };
+  const form = el(`<div>
+    <button class="menu-item" data-a="reorder">${icons.drag} Réorganiser les exercices</button>
+    <button class="menu-item" data-a="superset">${icons.link} Superset…</button>
+    <button class="menu-item" data-a="replace">${icons.swap} Remplacer l'exercice</button>
+    <button class="menu-item danger" data-a="delete">${icons.trash} Supprimer</button>
+  </div>`);
+  const sheet = openSheet({ title: def.name, content: form });
+
+  form.addEventListener('click', (e) => {
+    const btn = e.target.closest('.menu-item');
+    if (!btn) return;
+    const a = btn.dataset.a;
+    sheet.close();
+
+    if (a === 'delete') {
+      confirmModal('Supprimer', `Retirer « ${def.name} » de la séance ?`, () => {
+        session.exercises.splice(idx, 1);
+        sessionUI.renderExos();
+      }, true);
+    } else if (a === 'replace') {
+      openExercisePicker((exo) => {
+        session.exercises[idx].exerciseId = exo.id;
+        sessionUI.renderExos();
+        toast(`Remplacé par ${exo.name}`, 'success');
+      }, 'Remplacer par…');
+    } else if (a === 'reorder') {
+      const labels = session.exercises.map((x) => (exerciseLookup(x.exerciseId) || { name: '?' }).name);
+      openReorderSheet(labels, (order) => {
+        session.exercises = order.map((i) => session.exercises[i]);
+        sessionUI.renderExos();
+      });
+    } else if (a === 'superset') {
+      openSupersetSheet(idx);
+    }
+  });
+}
+
+function openSupersetSheet(idx) {
+  const wx = session.exercises[idx];
+  const others = session.exercises.map((x, i) => ({ x, i })).filter((o) => o.i !== idx);
+  if (!others.length) { toast('Ajoute d\'abord un autre exercice', 'error'); return; }
+
+  const form = el(`<div>
+    <div class="muted" style="margin-bottom:10px">Sélectionne les exercices à lier en superset :</div>
+    ${others.map((o) => {
+      const d = exerciseLookup(o.x.exerciseId) || { name: '?' };
+      const checked = wx.ss && o.x.ss === wx.ss;
+      return `<label class="settings-row" style="cursor:pointer">
+        <span class="row-label">${d.name} ${o.x.ss ? `<span class="ss-chip">SS${o.x.ss}</span>` : ''}</span>
+        <input type="checkbox" data-i="${o.i}" ${checked ? 'checked' : ''} style="width:20px;height:20px;accent-color:var(--accent)">
+      </label>`;
+    }).join('')}
+    <button class="btn btn-primary btn-block" id="ss-save" style="margin-top:10px">Lier</button>
+  </div>`);
+  const sheet = openSheet({ title: 'Superset', content: form });
+
+  form.querySelector('#ss-save').addEventListener('click', () => {
+    const selected = [...form.querySelectorAll('input:checked')].map((c) => +c.dataset.i);
+    // Groupe : réutilise celui de l'exo s'il existe, sinon nouveau numéro
+    const used = new Set(session.exercises.map((x) => x.ss).filter(Boolean));
+    const group = wx.ss || (Math.max(0, ...used) + 1);
+    // Détacher les anciens membres de ce groupe
+    session.exercises.forEach((x, i) => { if (x.ss === group && i !== idx && !selected.includes(i)) delete x.ss; });
+    if (selected.length) {
+      wx.ss = group;
+      selected.forEach((i) => { session.exercises[i].ss = group; });
+      toast(`Superset SS${group} créé`, 'success');
+    } else {
+      delete wx.ss;
+    }
+    sheet.close();
+    sessionUI.renderExos();
+  });
+}
+
+// ============================================================
+// MODE SÉANCE
 // ============================================================
 function openSession(rerenderPage, fromRoutine = null) {
+  if (session && sessionUI) { restoreSession(); return; }
+
   session = {
-    startTs: Date.now(),
     elapsed: 0,
     running: true,
     date: todayISO(),
@@ -192,97 +463,96 @@ function openSession(rerenderPage, fromRoutine = null) {
   };
 
   const overlay = el(`<div class="session-overlay">
-    <div class="session-header">
-      <div>
-        <div class="session-chrono" id="s-chrono">00:00</div>
-        <input id="s-date" type="date" value="${session.date}" style="margin-top:4px;max-width:160px;min-height:38px;padding:6px 10px;font-size:0.8rem">
+    <div class="session-top">
+      <div class="session-header">
+        <span class="num session-chrono" id="s-chrono">00:00</span>
+        <div style="display:flex;gap:2px">
+          <button class="icon-btn" id="s-playpause" aria-label="Pause">${icons.pause}</button>
+          <button class="icon-btn" id="s-minimize" aria-label="Réduire">${icons.chevronDown}</button>
+        </div>
       </div>
-      <div style="display:flex;gap:6px">
-        <button class="icon-btn" id="s-playpause" aria-label="Pause">${icons.pause}</button>
-        <button class="btn btn-danger btn-sm" id="s-quit">Quitter</button>
+      <div class="rest-topbar" id="rest-topbar">
+        <span class="num rt-time">00:00</span>
+        <div class="progress-bar"><div style="width:100%"></div></div>
+        <button class="btn btn-ghost btn-sm" id="rt-plus" style="min-height:32px;padding:4px 8px">+30s</button>
+        <button class="btn btn-secondary btn-sm" id="rt-skip" style="min-height:32px;padding:4px 10px">Skip</button>
       </div>
     </div>
-    <label class="field"><span>Notes de séance</span><input id="s-notes" type="text" placeholder="Ressenti, remarques…"></label>
-    <div id="s-exos"></div>
+    <div id="s-exos" style="margin-top:12px"></div>
     <button class="btn btn-secondary btn-block" id="s-add-exo" style="margin:6px 0 14px">${icons.plus} Ajouter un exercice</button>
     <button class="btn btn-primary btn-block" id="s-finish">${icons.check} Terminer la séance</button>
+    <button class="btn btn-ghost btn-block" id="s-quit" style="margin-top:8px">Abandonner</button>
   </div>`);
   document.body.appendChild(overlay);
   document.body.classList.add('overlay-open');
 
   const chronoEl = overlay.querySelector('#s-chrono');
   chronoInterval = setInterval(() => {
-    if (session && session.running) {
-      session.elapsed++;
-      chronoEl.textContent = formatTime(session.elapsed);
-    }
+    if (!session) return;
+    if (session.running) session.elapsed++;
+    chronoEl.textContent = formatTime(session.elapsed);
+    const msTime = document.getElementById('ms-time');
+    if (msTime) msTime.textContent = formatTime(session.elapsed);
+    const msRest = document.getElementById('ms-rest');
+    if (msRest) msRest.textContent = restInterval ? `· Repos ${formatTime(restRemaining)}` : '';
   }, 1000);
 
   const closeSession = () => {
     clearInterval(chronoInterval);
-    clearInterval(restInterval);
+    stopRestTimer();
     session = null;
+    sessionUI = null;
+    removeMiniBar();
     document.body.classList.remove('overlay-open');
     overlay.remove();
     rerenderPage();
   };
 
-  overlay.querySelector('#s-playpause').addEventListener('click', (e) => {
-    session.running = !session.running;
-    e.currentTarget.innerHTML = session.running ? icons.pause : icons.play;
-  });
-  overlay.querySelector('#s-quit').addEventListener('click', () => {
-    confirmModal('Quitter la séance', 'La séance en cours sera perdue. Continuer ?', closeSession, true);
-  });
-  overlay.querySelector('#s-date').addEventListener('change', (e) => { session.date = e.target.value; });
-  overlay.querySelector('#s-notes').addEventListener('input', (e) => { session.notes = e.target.value; });
-
-  const exosHost = overlay.querySelector('#s-exos');
-
   const renderExos = () => {
-    exosHost.innerHTML = '';
+    const exosHost = overlay.querySelector('#s-exos');
+    exosHost.innerHTML = session.exercises.length ? '' : '<div class="empty-state">Ajoute un premier exercice</div>';
     session.exercises.forEach((wx, idx) => {
       const def = exerciseLookup(wx.exerciseId);
       if (!def) return;
-      const perf = lastPerf(wx.exerciseId);
+      const last = lastEntry(wx.exerciseId);
+      const lastBest = last ? last.wx.sets.reduce((a, s) => (s.weight > a.weight ? s : a), last.wx.sets[0]) : null;
+      const curVol = exoVolume(wx);
+      const imp = exoImprovement(wx.exerciseId, curVol);
       const showC = store.userData.settings.showCExo;
-      const totalW = wx.sets.reduce((a, s) => a + s.weight, 0);
-      const avgW = wx.sets.length ? totalW / wx.sets.length : 0;
-      const avgR = wx.sets.length ? wx.sets.reduce((a, s) => a + s.reps, 0) / wx.sets.length : 0;
-      const cExo = wx.sets.length ? calculateCExo(avgW, avgR, wx.sets.length) : 0;
-      const pVol = def.primaryMuscles.reduce((a, m) => a + m.p, 0);
-      const sVol = def.secondaryMuscles.reduce((a, m) => a + m.p, 0);
-      const cMuscle = calculateCMuscle(pVol, sVol);
+      let cBadges = '';
+      if (showC && wx.sets.length) {
+        const avgW = wx.sets.reduce((a, s) => a + s.weight, 0) / wx.sets.length;
+        const avgR = wx.sets.reduce((a, s) => a + s.reps, 0) / wx.sets.length;
+        const cExo = calculateCExo(avgW, avgR, wx.sets.length);
+        const pV = def.primaryMuscles.reduce((a, m) => a + m.p, 0);
+        const sV = def.secondaryMuscles.reduce((a, m) => a + m.p, 0);
+        cBadges = `<span class="badge" style="font-size:0.62rem">C_exo ${cExo.toFixed(0)}</span> <span class="badge" style="font-size:0.62rem">C_m ${calculateCMuscle(pV, sV).toFixed(2)}</span>`;
+      }
 
-      const card = el(`<div class="card">
-        <div class="card-row">
-          <div>
-            <h3>${def.name}</h3>
-            <div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:5px">
-              ${def.primaryMuscles.map((m) => `<span class="badge">${muscleLabel(m.m)} ${m.p}%</span>`).join('')}
-              ${def.secondaryMuscles.map((m) => `<span class="badge violet">${muscleLabel(m.m)} ${m.p}%</span>`).join('')}
-            </div>
-            ${showC && wx.sets.length ? `<div style="margin-top:6px"><span class="badge green">C_exo: ${cExo.toFixed(1)}</span> <span class="badge green">C_muscle: ${cMuscle.toFixed(2)}</span></div>` : ''}
-          </div>
-          <button class="icon-btn danger" data-del="${idx}" aria-label="Supprimer exercice">${icons.trash}</button>
+      const card = el(`<div class="card exo-card">
+        <div class="exo-head">
+          <button class="exo-name-btn" data-detail="${idx}">
+            <span>${def.name} ${wx.ss ? `<span class="ss-chip">SS${wx.ss}</span>` : ''} ${impBadge(imp)} ${cBadges}</span>
+            ${icons.chevron}
+          </button>
+          <button class="icon-btn" data-menu="${idx}" aria-label="Options">${icons.dots}</button>
         </div>
-        ${perf ? `<div class="exo-lastperf">Dernière perf : ${perf}</div>` : ''}
-        <div class="sets-list">
-          ${wx.sets.map((s, i) => `<div class="set-line"><span class="set-n">#${i + 1}</span><span>${s.weight}kg × ${s.reps} reps</span></div>`).join('')}
-        </div>
-        <div class="rest-host" data-rest="${idx}"></div>
+        ${lastBest ? `<div class="exo-lastw"><span class="num lw-big">${lastBest.weight} kg</span><span class="lw-sub">dernier · ×${lastBest.reps}</span></div>` : ''}
+        <div>${wx.sets.map((s, i) => `<div class="set-line"><span class="set-n">${i + 1}</span><span><b class="num">${s.weight} kg</b> × ${s.reps}</span></div>`).join('')}</div>
         <div class="set-inputs">
-          <label class="field"><span>Poids (kg)</span><input type="number" inputmode="decimal" step="0.5" min="0" class="in-weight" placeholder="0"></label>
-          <label class="field"><span>Reps</span><input type="number" inputmode="numeric" min="1" class="in-reps" placeholder="0"></label>
-          <button class="btn btn-primary btn-sm" data-addset="${idx}" style="min-height:44px">${icons.plus} Série</button>
+          <label class="field"><span>Poids</span><input type="number" inputmode="decimal" step="0.5" min="0" class="in-weight" placeholder="${lastBest ? lastBest.weight : '0'}"></label>
+          <label class="field"><span>Reps</span><input type="number" inputmode="numeric" min="1" class="in-reps" placeholder="${lastBest ? lastBest.reps : '0'}"></label>
+          <button class="btn btn-primary btn-sm" data-addset="${idx}" style="min-height:44px">${icons.plus}</button>
         </div>
       </div>`);
       exosHost.appendChild(card);
     });
   };
+
+  sessionUI = { overlay, renderExos, close: closeSession };
   renderExos();
 
-  exosHost.addEventListener('click', (e) => {
+  overlay.querySelector('#s-exos').addEventListener('click', (e) => {
     const addBtn = e.target.closest('[data-addset]');
     if (addBtn) {
       const idx = +addBtn.dataset.addset;
@@ -293,27 +563,29 @@ function openSession(rerenderPage, fromRoutine = null) {
       session.exercises[idx].sets.push({ weight: w, reps: r });
       haptic();
       renderExos();
-      const host = exosHost.querySelector(`[data-rest="${idx}"]`);
-      if (host) startRestTimer(host, store.userData.settings.restTimerDefault);
+      startRestTimer(session.exercises[idx].exerciseId);
       return;
     }
-    const delBtn = e.target.closest('[data-del]');
-    if (delBtn) {
-      const idx = +delBtn.dataset.del;
-      confirmModal('Supprimer exercice', 'Retirer cet exercice de la séance ?', () => {
-        session.exercises.splice(idx, 1);
-        renderExos();
-      }, true);
-    }
+    const detailBtn = e.target.closest('[data-detail]');
+    if (detailBtn) { openExerciseDetailSheet(session.exercises[+detailBtn.dataset.detail].exerciseId); return; }
+    const menuBtn = e.target.closest('[data-menu]');
+    if (menuBtn) openExoMenu(+menuBtn.dataset.menu);
   });
 
+  overlay.querySelector('#s-playpause').addEventListener('click', (e) => {
+    session.running = !session.running;
+    e.currentTarget.innerHTML = session.running ? icons.pause : icons.play;
+  });
+  overlay.querySelector('#s-minimize').addEventListener('click', minimizeSession);
+  overlay.querySelector('#s-quit').addEventListener('click', () => {
+    confirmModal('Abandonner', 'La séance sera perdue. Continuer ?', closeSession, true);
+  });
   overlay.querySelector('#s-add-exo').addEventListener('click', () => {
     openExercisePicker((exo) => {
       session.exercises.push({ exerciseId: exo.id, sets: [] });
       renderExos();
     });
   });
-
   overlay.querySelector('#s-finish').addEventListener('click', () => {
     const withSets = session.exercises.filter((x) => x.sets.length);
     if (!withSets.length) { toast('Aucune série enregistrée', 'error'); return; }
@@ -323,21 +595,23 @@ function openSession(rerenderPage, fromRoutine = null) {
 
 function showSummary(exercises, closeSession) {
   const s = store.userData.settings;
-  const totalVolume = exercises.reduce((a, x) => a + x.sets.reduce((b, st) => b + st.weight * st.reps, 0), 0);
-  const w = { date: session.date, exercises };
-  const byMuscle = workoutMuscleVolume(w, exerciseLookup, s.secondaryRatio);
+  const totalVolume = exercises.reduce((a, x) => a + exoVolume(x), 0);
+  const byMuscle = workoutMuscleVolume({ exercises }, exerciseLookup, s.secondaryRatio);
   const breakdown = Object.entries(byMuscle).sort((a, b) => b[1] - a[1]);
 
   const content = el(`<div>
     <div class="grid-2" style="margin-bottom:12px">
-      <div class="card" style="margin:0;text-align:center"><div class="muted">Durée</div><div class="mono" style="font-size:1.2rem;color:var(--accent)">${formatTime(session.elapsed)}</div></div>
-      <div class="card" style="margin:0;text-align:center"><div class="muted">Exercices</div><div class="mono" style="font-size:1.2rem;color:var(--accent)">${exercises.length}</div></div>
+      <div class="card" style="margin:0;text-align:center;padding:10px"><div class="muted">Durée</div><div class="num" style="font-size:1.2rem;color:var(--accent)">${formatTime(session.elapsed)}</div></div>
+      <div class="card" style="margin:0;text-align:center;padding:10px"><div class="muted">Volume</div><div class="num" style="font-size:1.2rem;color:var(--accent)">${Math.round(totalVolume).toLocaleString('fr-FR')} kg</div></div>
     </div>
-    <div class="card" style="text-align:center"><div class="muted">Volume total</div><div class="mono" style="font-size:1.5rem;color:var(--accent)">${Math.round(totalVolume).toLocaleString('fr-FR')} kg</div></div>
-    <h3 style="margin:4px 0 8px">Répartition par muscle</h3>
+    <h3 style="margin-bottom:6px">Amélioration par muscle</h3>
     <table class="volume-table">
-      <thead><tr><th>Muscle</th><th>Volume (kg)</th></tr></thead>
-      <tbody>${breakdown.map(([m, v]) => `<tr><td>${muscleLabel(m)}</td><td class="num">${Math.round(v).toLocaleString('fr-FR')}</td></tr>`).join('')}</tbody>
+      <thead><tr><th>Muscle</th><th>Volume</th><th>Δ vs dernière</th></tr></thead>
+      <tbody>${breakdown.map(([m, v]) => {
+        const lastV = lastMuscleVolume(m);
+        const imp = lastV ? Math.round(((v / lastV) - 1) * 100) : null;
+        return `<tr><td>${muscleLabel(m)}</td><td class="tnum">${Math.round(v).toLocaleString('fr-FR')}</td><td>${imp != null ? impBadge(imp, false) : '<span class="muted">—</span>'}</td></tr>`;
+      }).join('')}</tbody>
     </table>
   </div>`);
 
@@ -348,7 +622,7 @@ function showSummary(exercises, closeSession) {
     actions: [
       { label: 'Retour' },
       {
-        label: 'Valider la séance', variant: 'btn-primary',
+        label: 'Valider', variant: 'btn-primary',
         onClick: () => {
           store.addWorkout({
             id: crypto.randomUUID(),
@@ -370,11 +644,16 @@ function showSummary(exercises, closeSession) {
 // ROUTINES
 // ============================================================
 function openRoutineEditor(routine, rerender) {
-  const r = routine || { id: crypto.randomUUID(), name: '', exercises: [] };
+  const r = routine
+    ? { ...routine, exercises: [...routine.exercises] }
+    : { id: crypto.randomUUID(), name: '', exercises: [] };
   const form = el(`<div>
-    <label class="field"><span>Nom de la routine</span><input id="r-name" type="text" value="${r.name}" placeholder="Push A"></label>
+    <label class="field"><span>Nom</span><input id="r-name" type="text" value="${r.name}" placeholder="Push A"></label>
     <div id="r-exos"></div>
-    <button class="btn btn-secondary btn-block" id="r-add">${icons.plus} Ajouter exercice</button>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn btn-secondary btn-sm" id="r-add" style="flex:1">${icons.plus} Exercice</button>
+      <button class="btn btn-secondary btn-sm" id="r-reorder" style="flex:1">${icons.drag} Réorganiser</button>
+    </div>
   </div>`);
 
   const listEl = form.querySelector('#r-exos');
@@ -383,8 +662,8 @@ function openRoutineEditor(routine, rerender) {
     r.exercises.forEach((id, i) => {
       const def = exerciseLookup(id);
       const row = el(`<div class="card-row" style="padding:7px 0;border-bottom:1px solid rgba(0,217,255,0.08)">
-        <span>${def ? def.name : id}</span>
-        <button class="icon-btn danger" aria-label="Retirer">${icons.trash}</button>
+        <span style="font-size:0.9rem">${i + 1}. ${def ? def.name : id}</span>
+        <button class="icon-btn danger" aria-label="Retirer" style="width:38px;height:38px">${icons.trash}</button>
       </div>`);
       row.querySelector('button').addEventListener('click', () => { r.exercises.splice(i, 1); renderList(); });
       listEl.appendChild(row);
@@ -394,16 +673,21 @@ function openRoutineEditor(routine, rerender) {
   form.querySelector('#r-add').addEventListener('click', () => {
     openExercisePicker((exo) => { r.exercises.push(exo.id); renderList(); });
   });
+  form.querySelector('#r-reorder').addEventListener('click', () => {
+    if (r.exercises.length < 2) return;
+    const labels = r.exercises.map((id) => (exerciseLookup(id) || { name: id }).name);
+    openReorderSheet(labels, (order) => {
+      r.exercises = order.map((i) => r.exercises[i]);
+      renderList();
+    });
+  });
 
   openModal({
     title: routine ? 'Modifier la routine' : 'Nouvelle routine',
     content: form,
     actions: [
       { label: 'Annuler' },
-      ...(routine ? [{
-        label: 'Supprimer', variant: 'btn-danger',
-        onClick: () => { store.deleteRoutine(r.id); rerender(); },
-      }] : []),
+      ...(routine ? [{ label: 'Supprimer', variant: 'btn-danger', onClick: () => { store.deleteRoutine(r.id); rerender(); } }] : []),
       {
         label: 'Enregistrer', variant: 'btn-primary',
         onClick: (body) => {
@@ -417,7 +701,7 @@ function openRoutineEditor(routine, rerender) {
 }
 
 // ============================================================
-// VOLUME TRACKING DASHBOARD
+// VOLUME DASHBOARD
 // ============================================================
 function renderVolumeDashboard(host) {
   const s = store.userData.settings;
@@ -433,73 +717,55 @@ function renderVolumeDashboard(host) {
     const pct = goal ? Math.round((done / goal) * 100) : 0;
     return { m, done, goal, pct };
   });
-
-  const alerts = rows.filter((r) => r.goal > 0 && r.pct < 50 && r.pct >= 0)
-    .filter((r) => r.done < r.goal * 0.5);
+  const alerts = rows.filter((r) => r.goal > 0 && r.done < r.goal * 0.5);
 
   const card = el(`<div class="card">
-    <h3>Volume hebdo (7 derniers jours)</h3>
-    ${alerts.slice(0, 3).map((a) => `<div class="alert-banner">${muscleLabel(a.m.id)} en retard cette semaine (${a.pct}% de l'objectif)</div>`).join('')}
+    <h3>Volume hebdo</h3>
+    ${alerts.slice(0, 3).map((a) => `<div class="alert-banner">${a.m.label} en retard (${a.pct}%)</div>`).join('')}
     <table class="volume-table">
-      <thead><tr><th>Muscle</th><th>Sets</th><th>Objectif</th><th>Progrès</th></tr></thead>
+      <thead><tr><th>Muscle</th><th>Sets</th><th>Obj.</th><th>%</th></tr></thead>
       <tbody>
         ${rows.map((r) => `<tr>
           <td>${r.m.label}</td>
-          <td class="num">${r.done}</td>
-          <td class="num">${r.goal}</td>
-          <td class="num ${r.pct >= 100 ? 'pct-ok' : r.pct >= 50 ? '' : 'pct-warn'}">${r.goal ? r.pct + '%' : '—'}</td>
+          <td class="tnum">${r.done}</td>
+          <td class="tnum">${r.goal}</td>
+          <td class="tnum ${r.pct >= 100 ? 'pct-ok' : r.pct >= 50 ? '' : 'pct-warn'}">${r.goal ? r.pct + '%' : '—'}</td>
         </tr>`).join('')}
       </tbody>
     </table>
-    <div class="chart-wrap" style="margin-top:14px;height:190px"><canvas id="vol-chart"></canvas></div>
-    <h3 style="margin-top:14px">Top 5 exercices (volume)</h3>
-    <div class="chart-wrap" style="height:170px"><canvas id="trend-chart"></canvas></div>
+    <div class="chart-wrap" style="margin-top:14px;height:180px"><canvas id="vol-chart"></canvas></div>
+    <h3 style="margin-top:14px">Top 5 exercices</h3>
+    <div class="chart-wrap" style="height:160px"><canvas id="trend-chart"></canvas></div>
   </div>`);
   host.appendChild(card);
 
-  const vols = workoutsWeekVolume(start, end, s.secondaryRatio);
+  const acc = {};
+  for (const w of store.userData.workouts) {
+    if (w.date < start || w.date > end) continue;
+    const bm = workoutMuscleVolume(w, exerciseLookup, s.secondaryRatio);
+    for (const [m, v] of Object.entries(bm)) acc[m] = (acc[m] || 0) + v;
+  }
+  const chartOpts = {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { color: '#9CA3AF', font: { size: 8, family: 'Inter' } }, grid: { color: 'rgba(0,217,255,0.06)' } },
+      y: { ticks: { color: '#9CA3AF', font: { size: 9, family: 'Inter' } }, grid: { color: 'rgba(0,217,255,0.06)' } },
+    },
+  };
   if (volumeChart) volumeChart.destroy();
   volumeChart = new Chart(card.querySelector('#vol-chart'), {
     type: 'bar',
-    data: {
-      labels: MUSCLES.map((m) => m.label),
-      datasets: [{ label: 'Volume (kg)', data: MUSCLES.map((m) => Math.round(vols[m.id] || 0)), backgroundColor: 'rgba(0,217,255,0.55)', borderRadius: 5 }],
-    },
-    options: chartOpts(),
+    data: { labels: MUSCLES.map((m) => m.label), datasets: [{ data: MUSCLES.map((m) => Math.round(acc[m.id] || 0)), backgroundColor: 'rgba(0,217,255,0.55)', borderRadius: 5 }] },
+    options: chartOpts,
   });
-
   const top = topExercisesByVolume(store.userData.workouts, exerciseLookup, start, end, 5);
   if (trendChart) trendChart.destroy();
   trendChart = new Chart(card.querySelector('#trend-chart'), {
     type: 'bar',
-    data: {
-      labels: top.map((t) => t.name),
-      datasets: [{ label: 'Volume (kg)', data: top.map((t) => Math.round(t.vol)), backgroundColor: 'rgba(124,58,237,0.6)', borderRadius: 5 }],
-    },
-    options: { ...chartOpts(), indexAxis: 'y' },
+    data: { labels: top.map((t) => t.name), datasets: [{ data: top.map((t) => Math.round(t.vol)), backgroundColor: 'rgba(124,58,237,0.6)', borderRadius: 5 }] },
+    options: { ...chartOpts, indexAxis: 'y' },
   });
-}
-
-function workoutsWeekVolume(start, end, ratio) {
-  const acc = {};
-  for (const w of store.userData.workouts) {
-    if (w.date < start || w.date > end) continue;
-    const bm = workoutMuscleVolume(w, exerciseLookup, ratio);
-    for (const [m, v] of Object.entries(bm)) acc[m] = (acc[m] || 0) + v;
-  }
-  return acc;
-}
-
-function chartOpts() {
-  return {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: { legend: { display: false } },
-    scales: {
-      x: { ticks: { color: '#9CA3AF', font: { size: 8 } }, grid: { color: 'rgba(0,217,255,0.06)' } },
-      y: { ticks: { color: '#9CA3AF', font: { size: 9 } }, grid: { color: 'rgba(0,217,255,0.06)' } },
-    },
-  };
 }
 
 // ============================================================
@@ -509,22 +775,25 @@ export function render(container) {
   const rerender = () => render(container);
   const routines = store.userData.routines;
   const recent = [...store.userData.workouts].reverse().slice(0, 5);
+  const active = !!session;
 
   container.innerHTML = '';
   const root = el(`<div>
     <div class="page-title"><h1>Entraînement</h1></div>
-    <button class="btn btn-primary btn-block" id="btn-new-session" style="margin-bottom:${'var(--space)'}">${icons.play} Nouvelle séance</button>
+    <button class="btn btn-primary btn-block" id="btn-new-session" style="margin-bottom:var(--space)">
+      ${icons.play} ${active ? 'Reprendre la séance' : 'Nouvelle séance'}
+    </button>
     <div class="card">
       <div class="card-row" style="margin-bottom:8px">
-        <h3>Routines</h3>
-        <button class="btn btn-secondary btn-sm" id="btn-new-routine">${icons.plus} Créer</button>
+        <h3 style="margin:0">Routines</h3>
+        <button class="btn btn-secondary btn-sm" id="btn-new-routine">${icons.plus}</button>
       </div>
-      <div id="routine-list">${routines.length ? '' : '<div class="empty-state">Aucune routine sauvegardée</div>'}</div>
+      <div id="routine-list">${routines.length ? '' : '<div class="empty-state">Aucune routine</div>'}</div>
     </div>
     <div id="volume-host"></div>
     <div class="card">
       <h3>Séances récentes</h3>
-      <div id="recent-list">${recent.length ? '' : '<div class="empty-state">Aucune séance enregistrée</div>'}</div>
+      <div id="recent-list">${recent.length ? '' : '<div class="empty-state">Aucune séance</div>'}</div>
     </div>
   </div>`);
   container.appendChild(root);
@@ -532,10 +801,10 @@ export function render(container) {
   const rlist = root.querySelector('#routine-list');
   for (const r of routines) {
     const names = r.exercises.map((id) => (exerciseLookup(id) || { name: id }).name).join(' · ');
-    const card = el(`<div class="card routine-card" style="background:var(--surface-2)">
-      <div class="card-row"><h3>${r.name}</h3>
+    const card = el(`<div class="card" style="background:var(--surface-2);padding:12px">
+      <div class="card-row"><h3 style="margin:0">${r.name}</h3>
         <button class="icon-btn" aria-label="Modifier">${icons.edit}</button></div>
-      <div class="routine-exos">${names || 'Vide'}</div>
+      <div class="muted" style="margin:4px 0 10px">${names || 'Vide'}</div>
       <button class="btn btn-primary btn-sm btn-block">Lancer</button>
     </div>`);
     card.querySelector('.icon-btn').addEventListener('click', () => openRoutineEditor(r, rerender));
@@ -545,10 +814,12 @@ export function render(container) {
 
   const recList = root.querySelector('#recent-list');
   for (const w of recent) {
-    recList.appendChild(el(`<div class="steps-list-item">
+    const row = el(`<div class="steps-list-item" style="cursor:pointer">
       <span>${w.date} · ${w.exercises.length} exos</span>
-      <span class="mono" style="color:var(--accent)">${w.totalVolume.toLocaleString('fr-FR')} kg · ${formatTime(w.totalTime)}</span>
-    </div>`));
+      <span class="num" style="color:var(--accent)">${w.totalVolume.toLocaleString('fr-FR')} kg</span>
+    </div>`);
+    row.addEventListener('click', () => openWorkoutDetail(w));
+    recList.appendChild(row);
   }
 
   root.querySelector('#btn-new-session').addEventListener('click', () => openSession(rerender));

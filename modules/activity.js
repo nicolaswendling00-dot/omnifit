@@ -8,11 +8,9 @@ let viewDays = 7;
 const STEP_GOAL = 10000;
 
 function openLogStepsModal(rerender) {
-  const form = el(`<div>
-    <div class="field-row">
-      <label class="field"><span>Date</span><input id="st-date" type="date" value="${todayISO()}"></label>
-      <label class="field"><span>Nombre de pas</span><input id="st-count" type="number" inputmode="numeric" min="0" placeholder="8500"></label>
-    </div>
+  const form = el(`<div class="field-stack">
+    <label class="field"><span>Nombre de pas</span><input id="st-count" type="number" inputmode="numeric" min="0" placeholder="8500" autofocus></label>
+    <label class="field"><span>Date</span><input id="st-date" type="date" value="${todayISO()}"></label>
   </div>`);
   openModal({
     title: 'Log pas',
@@ -119,10 +117,10 @@ export function render(container) {
       </div>
 
       <div class="grid-2">
-        <div class="card" style="margin:0"><div class="muted">Moyenne hebdo</div><div class="mono" style="font-size:1.15rem;color:var(--accent)">${weekAvg.toLocaleString('fr-FR')}</div></div>
-        <div class="card" style="margin:0"><div class="muted">Record (30 j)</div><div class="mono" style="font-size:1.15rem;color:var(--accent)">${record.v.toLocaleString('fr-FR')}</div><div class="muted" style="font-size:0.68rem">${record.date}</div></div>
-        <div class="card" style="margin:0"><div class="muted">Jours actifs (30 j)</div><div class="mono" style="font-size:1.15rem;color:var(--success)">${activeDays}</div></div>
-        <div class="card" style="margin:0"><div class="muted">Tendance</div><div class="mono" style="font-size:1.15rem;color:${trend >= 0 ? 'var(--success)' : 'var(--danger)'}">${trend >= 0 ? '↑ +' : '↓ '}${trend}%</div><div class="muted" style="font-size:0.68rem">vs mois dernier</div></div>
+        <div class="card" style="margin:0"><div class="muted">Moyenne hebdo</div><div class="num" style="font-size:1.3rem;color:var(--accent)">${weekAvg.toLocaleString('fr-FR')}</div></div>
+        <div class="card" style="margin:0"><div class="muted">Record 30 j</div><div class="num" style="font-size:1.3rem;color:var(--accent)">${record.v.toLocaleString('fr-FR')}</div></div>
+        <div class="card" style="margin:0"><div class="muted">Jours actifs</div><div class="num" style="font-size:1.3rem;color:var(--success)">${activeDays}</div></div>
+        <div class="card" style="margin:0"><div class="muted">Tendance</div><div class="num" style="font-size:1.3rem;color:${trend >= 0 ? 'var(--success)' : 'var(--danger)'}">${trend >= 0 ? '+' : ''}${trend}%</div></div>
       </div>
 
       <div class="card" style="margin-top:var(--space)">
@@ -142,7 +140,7 @@ export function render(container) {
     list.appendChild(el(`<div class="steps-list-item">
       <span>${fmtDateShort(d)}</span>
       <span>
-        <span class="mono">${v.toLocaleString('fr-FR')}</span>
+        <span class="num">${v.toLocaleString('fr-FR')}</span>
         ${delta != null ? `<span class="${delta >= 0 ? 'delta-up' : 'delta-down'}"> ${delta >= 0 ? '+' : ''}${delta.toLocaleString('fr-FR')}</span>` : ''}
       </span>
     </div>`));
