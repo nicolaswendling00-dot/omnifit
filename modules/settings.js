@@ -4,7 +4,7 @@ import { harrisBenedict } from '../utils/math.js';
 import { EQUIPMENT_TYPES } from '../data/exercises.js';
 import { el, icons, openModal, toast, confirmModal } from '../utils/ui.js';
 
-const VERSION = '3.0';
+const VERSION = '3.1';
 
 function toggleRow(label, key, sub = '') {
   const s = store.userData.settings;

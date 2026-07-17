@@ -3,11 +3,10 @@
 // détail exo (muscles, historique, repos perso), coefficients d'amélioration.
 import { store, todayISO } from '../utils/storage.js';
 import { EXERCISES, MUSCLES, muscleLabel } from '../data/exercises.js';
-import { calculateCExo, calculateCMuscle, formatTime, workoutMuscleVolume, weeklySetsByMuscle, topExercisesByVolume, muscleAttenuation } from '../utils/math.js';
+import { calculateCExo, calculateCMuscle, formatTime, workoutMuscleVolume, weeklySetsByMuscle, muscleAttenuation } from '../utils/math.js';
 import { el, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong } from '../utils/ui.js';
 
 let volumeChart = null;
-let trendChart = null;
 let session = null; // { elapsed, running, date, notes, exercises:[{exerciseId, sets:[{weight,reps}], ss}] }
 let sessionUI = null; // { overlay, renderExos, close }
 let chronoInterval = null;
@@ -73,6 +72,53 @@ const impBadge = (imp, small = true) => {
   const sign = imp >= 0 ? '+' : '';
   return `<span class="badge ${cls}" style="${small ? 'font-size:0.62rem;padding:2px 6px' : ''}">${sign}${imp}%</span>`;
 };
+
+// Libellés courts des muscles (cases du calendrier)
+const MUSCLE_SHORT = {
+  chest: 'Pecs', back: 'Dos', shoulders: 'Delts', biceps: 'Biceps', triceps: 'Triceps',
+  forearms: 'Av-B', quads: 'Quads', hamstrings: 'Ischio', glutes: 'Fess.', calves: 'Mollet',
+  core: 'Abdos', lowerback: 'Lomb.',
+};
+
+// Muscle le plus travaillé d'une séance
+function topMuscle(w) {
+  const bm = workoutMuscleVolume(w, exerciseLookup, store.userData.settings.secondaryRatio);
+  let best = null; let bv = -1;
+  for (const [m, v] of Object.entries(bm)) if (v > bv) { bv = v; best = m; }
+  return best;
+}
+
+// Historique {date,id,vol} d'un exo, trié par date
+function exoHistory(exerciseId) {
+  const h = [];
+  for (const w of store.userData.workouts) {
+    const wx = w.exercises.find((x) => x.exerciseId === exerciseId);
+    if (wx && wx.sets.length) h.push({ date: w.date, id: w.id, vol: exoVolume(wx) });
+  }
+  h.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  return h;
+}
+
+// Amélioration (%) d'un exo dans une séance donnée vs l'occurrence précédente
+function exoImprovementAt(exerciseId, workout) {
+  const h = exoHistory(exerciseId);
+  const idx = h.findIndex((e) => e.id === workout.id);
+  if (idx <= 0) return null;
+  const prev = h[idx - 1].vol;
+  if (!prev) return null;
+  return Math.round(((h[idx].vol / prev) - 1) * 100);
+}
+
+// Coefficient d'amélioration d'une séance = moyenne des améliorations d'exos ayant un précédent
+function sessionImprovement(workout) {
+  const vals = [];
+  for (const wx of workout.exercises) {
+    const imp = exoImprovementAt(wx.exerciseId, workout);
+    if (imp != null) vals.push(imp);
+  }
+  if (!vals.length) return null;
+  return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+}
 
 // ============================================================
 // PICKER PLEIN ÉCRAN (recherche en haut → jamais derrière le clavier)
@@ -346,22 +392,39 @@ function openExerciseDetailSheet(exerciseId) {
   return sheet;
 }
 
-// Vue d'une séance complète (ordre des exos, supersets)
+// Vue d'une séance complète (séries empilées, coefficient d'amélioration, exos cliquables)
 function openWorkoutDetail(w, highlightId = null) {
-  const rows = w.exercises.map((wx, i) => {
-    const def = exerciseLookup(wx.exerciseId) || { name: wx.exerciseId };
-    const hl = wx.exerciseId === highlightId;
-    return `<div class="steps-list-item" style="${hl ? 'background:rgba(0,217,255,0.07);border-radius:8px;padding-left:8px;padding-right:8px' : ''}">
-      <div>
-        <div style="font-weight:600;font-size:0.85rem">${i + 1}. ${def.name} ${wx.ss ? `<span class="ss-chip">SS${wx.ss}</span>` : ''}</div>
-        <div class="muted">${wx.sets.map((s) => `${s.weight}×${s.reps}`).join(' · ')}</div>
-      </div>
-      <span class="num" style="color:var(--accent);font-size:0.82rem">${exoVolume(wx).toLocaleString('fr-FR')} kg</span>
-    </div>`;
-  }).join('');
+  const sessImp = sessionImprovement(w);
+  const content = el(`<div>
+    <div class="wd-top">
+      <span class="muted">${formatTime(w.totalTime || 0)}</span>
+      ${sessImp != null
+        ? `<span class="wd-sess-imp ${sessImp >= 0 ? 'up' : 'down'}">Amélioration ${sessImp >= 0 ? '+' : ''}${sessImp}%</span>`
+        : '<span class="muted">Séance de référence</span>'}
+    </div>
+    ${w.exercises.map((wx, i) => {
+      const def = exerciseLookup(wx.exerciseId) || { name: wx.exerciseId };
+      const hl = wx.exerciseId === highlightId;
+      const imp = exoImprovementAt(wx.exerciseId, w);
+      return `<div class="wd-exo${hl ? ' hl' : ''}" data-exo="${wx.exerciseId}">
+        <div class="wd-exo-head">
+          <span class="wd-exo-name">${i + 1}. ${def.name} ${wx.ss ? `<span class="ss-chip">SS${wx.ss}</span>` : ''}</span>
+          ${imp != null ? impBadge(imp, false) : '<span class="muted" style="font-size:0.68rem">nouveau</span>'}
+        </div>
+        <div class="wd-sets">
+          ${wx.sets.map((s, j) => `<div class="wd-set"><span class="wd-set-n">${j + 1}</span><span class="wd-set-v">${s.weight} kg × ${s.reps}</span></div>`).join('')}
+        </div>
+      </div>`;
+    }).join('')}
+    <div class="muted" style="text-align:center;font-size:0.7rem;margin-top:6px">Touchez un exercice pour ses statistiques</div>
+  </div>`);
+  content.addEventListener('click', (e) => {
+    const exo = e.target.closest('.wd-exo');
+    if (exo) openExerciseDetailSheet(exo.dataset.exo);
+  });
   openModal({
     title: `Séance du ${w.date}`,
-    content: `<div class="muted" style="margin-bottom:8px">${formatTime(w.totalTime || 0)} · ${w.totalVolume.toLocaleString('fr-FR')} kg</div>${rows}`,
+    content,
     wide: true,
     actions: [{ label: 'Fermer', variant: 'btn-primary' }],
   });
@@ -600,12 +663,15 @@ function showSummary(exercises, closeSession) {
   const byMuscle = workoutMuscleVolume({ exercises }, exerciseLookup, s.secondaryRatio);
   const atten = muscleAttenuation({ exercises }, exerciseLookup, s.secondaryRatio);
   const breakdown = Object.keys(atten).sort((a, b) => atten[b] - atten[a]);
+  const impVals = exercises.map((x) => exoImprovement(x.exerciseId, exoVolume(x))).filter((v) => v != null);
+  const sessImp = impVals.length ? Math.round(impVals.reduce((a, b) => a + b, 0) / impVals.length) : null;
 
   const content = el(`<div>
     <div class="grid-2" style="margin-bottom:12px">
       <div class="card" style="margin:0;text-align:center;padding:10px"><div class="muted">Durée</div><div class="num" style="font-size:1.2rem;color:var(--accent)">${formatTime(session.elapsed)}</div></div>
       <div class="card" style="margin:0;text-align:center;padding:10px"><div class="muted">Séries</div><div class="num" style="font-size:1.2rem;color:var(--accent)">${totalSets}</div></div>
     </div>
+    ${sessImp != null ? `<div class="wd-sess-imp ${sessImp >= 0 ? 'up' : 'down'}" style="text-align:center;margin-bottom:12px">Amélioration de la séance : ${sessImp >= 0 ? '+' : ''}${sessImp}%</div>` : ''}
     <h3 style="margin-bottom:6px">Coefficients d'atténuation</h3>
     <div class="muted" style="font-size:0.72rem;margin-bottom:8px">Implication moyenne par muscle (1.0 = moteur principal) · Δ vs dernière séance</div>
     <table class="volume-table">
@@ -763,10 +829,19 @@ function earliestDataDate() {
 }
 
 function dayCell(iso, byDate, todayIso, dim) {
-  const has = byDate[iso] && byDate[iso].length;
+  const ws = byDate[iso];
+  const has = ws && ws.length;
+  let extra = '';
+  if (has) {
+    const w = ws[ws.length - 1];
+    const tm = topMuscle(w);
+    const imp = sessionImprovement(w);
+    extra = `<span class="cal-mus">${tm ? (MUSCLE_SHORT[tm] || muscleLabel(tm)) : ''}</span>
+      ${imp != null ? `<span class="cal-imp ${imp >= 0 ? 'up' : 'down'}">${imp >= 0 ? '+' : ''}${imp}%</span>` : ''}`;
+  }
   return el(`<button class="cal-day${has ? ' has-session' : ''}${iso === todayIso ? ' is-today' : ''}${dim ? ' dim' : ''}" ${has ? '' : 'disabled'} data-date="${iso}">
     <span class="cal-dnum">${Number(iso.slice(8))}</span>
-    ${has ? '<span class="cal-dot"></span>' : ''}
+    ${extra}
   </button>`);
 }
 
@@ -888,8 +963,6 @@ function renderVolumeDashboard(host, rerender) {
       </tbody>
     </table>
     <div class="chart-wrap" style="margin-top:14px;height:180px"><canvas id="vol-chart"></canvas></div>
-    <h3 style="margin-top:14px">Top 5 exercices</h3>
-    <div class="chart-wrap" style="height:160px"><canvas id="trend-chart"></canvas></div>
   </div>`);
   host.appendChild(card);
 
@@ -913,14 +986,6 @@ function renderVolumeDashboard(host, rerender) {
     data: { labels: MUSCLES.map((m) => m.label), datasets: [{ data: MUSCLES.map((m) => Math.round(acc[m.id] || 0)), backgroundColor: 'rgba(0,217,255,0.55)', borderRadius: 5 }] },
     options: chartOpts,
   });
-  const top = topExercisesByVolume(store.userData.workouts, exerciseLookup, start, end, 5);
-  if (trendChart) trendChart.destroy();
-  trendChart = new Chart(card.querySelector('#trend-chart'), {
-    type: 'bar',
-    data: { labels: top.map((t) => t.name), datasets: [{ data: top.map((t) => Math.round(t.vol)), backgroundColor: 'rgba(124,58,237,0.6)', borderRadius: 5 }] },
-    options: { ...chartOpts, indexAxis: 'y' },
-  });
-
   const vgBtn = card.querySelector('#vol-goals-btn');
   if (vgBtn && rerender) vgBtn.addEventListener('click', () => openVolumeGoalsModal(rerender));
 }
@@ -940,6 +1005,7 @@ export function render(container) {
     <button class="btn btn-primary btn-block" id="btn-new-session" style="margin-bottom:var(--space)">
       ${icons.play} ${active ? 'Reprendre la séance' : 'Nouvelle séance'}
     </button>
+    <div id="calendar-host"></div>
     <div class="card">
       <div class="card-row" style="margin-bottom:8px">
         <h3 style="margin:0">Routines</h3>
@@ -948,7 +1014,6 @@ export function render(container) {
       <div id="routine-list">${routines.length ? '' : '<div class="empty-state">Aucune routine</div>'}</div>
     </div>
     <div id="volume-host"></div>
-    <div id="calendar-host"></div>
   </div>`);
   container.appendChild(root);
 
