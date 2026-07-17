@@ -3,8 +3,8 @@
 // détail exo (muscles, historique, repos perso), coefficients d'amélioration.
 import { store, todayISO } from '../utils/storage.js';
 import { EXERCISES, MUSCLES, muscleLabel } from '../data/exercises.js';
-import { calculateCExo, calculateCMuscle, formatTime, workoutMuscleVolume, weeklySetsByMuscle, topExercisesByVolume } from '../utils/math.js';
-import { el, icons, openModal, openSheet, toast, confirmModal, beep, haptic } from '../utils/ui.js';
+import { calculateCExo, calculateCMuscle, formatTime, workoutMuscleVolume, weeklySetsByMuscle, topExercisesByVolume, muscleAttenuation } from '../utils/math.js';
+import { el, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong } from '../utils/ui.js';
 
 let volumeChart = null;
 let trendChart = null;
@@ -596,21 +596,25 @@ function openSession(rerenderPage, fromRoutine = null) {
 function showSummary(exercises, closeSession) {
   const s = store.userData.settings;
   const totalVolume = exercises.reduce((a, x) => a + exoVolume(x), 0);
+  const totalSets = exercises.reduce((a, x) => a + x.sets.length, 0);
   const byMuscle = workoutMuscleVolume({ exercises }, exerciseLookup, s.secondaryRatio);
-  const breakdown = Object.entries(byMuscle).sort((a, b) => b[1] - a[1]);
+  const atten = muscleAttenuation({ exercises }, exerciseLookup, s.secondaryRatio);
+  const breakdown = Object.keys(atten).sort((a, b) => atten[b] - atten[a]);
 
   const content = el(`<div>
     <div class="grid-2" style="margin-bottom:12px">
       <div class="card" style="margin:0;text-align:center;padding:10px"><div class="muted">Durée</div><div class="num" style="font-size:1.2rem;color:var(--accent)">${formatTime(session.elapsed)}</div></div>
-      <div class="card" style="margin:0;text-align:center;padding:10px"><div class="muted">Volume</div><div class="num" style="font-size:1.2rem;color:var(--accent)">${Math.round(totalVolume).toLocaleString('fr-FR')} kg</div></div>
+      <div class="card" style="margin:0;text-align:center;padding:10px"><div class="muted">Séries</div><div class="num" style="font-size:1.2rem;color:var(--accent)">${totalSets}</div></div>
     </div>
-    <h3 style="margin-bottom:6px">Amélioration par muscle</h3>
+    <h3 style="margin-bottom:6px">Coefficients d'atténuation</h3>
+    <div class="muted" style="font-size:0.72rem;margin-bottom:8px">Implication moyenne par muscle (1.0 = moteur principal) · Δ vs dernière séance</div>
     <table class="volume-table">
-      <thead><tr><th>Muscle</th><th>Volume</th><th>Δ vs dernière</th></tr></thead>
-      <tbody>${breakdown.map(([m, v]) => {
+      <thead><tr><th>Muscle</th><th>Atténuation</th><th>Δ</th></tr></thead>
+      <tbody>${breakdown.map((m) => {
+        const v = byMuscle[m] || 0;
         const lastV = lastMuscleVolume(m);
         const imp = lastV ? Math.round(((v / lastV) - 1) * 100) : null;
-        return `<tr><td>${muscleLabel(m)}</td><td class="tnum">${Math.round(v).toLocaleString('fr-FR')}</td><td>${imp != null ? impBadge(imp, false) : '<span class="muted">—</span>'}</td></tr>`;
+        return `<tr><td>${muscleLabel(m)}</td><td class="tnum" style="color:var(--accent)">${atten[m].toFixed(2)}</td><td>${imp != null ? impBadge(imp, false) : '<span class="muted">—</span>'}</td></tr>`;
       }).join('')}</tbody>
     </table>
   </div>`);
@@ -703,7 +707,154 @@ function openRoutineEditor(routine, rerender) {
 // ============================================================
 // VOLUME DASHBOARD
 // ============================================================
-function renderVolumeDashboard(host) {
+// ============================================================
+// OBJECTIFS DE VOLUME (déplacés depuis les réglages)
+// ============================================================
+function openVolumeGoalsModal(rerender) {
+  const goals = store.userData.settings.volumeGoals;
+  const form = el(`<div>${MUSCLES.map((m) => `
+    <div class="settings-row" style="padding:7px 0">
+      <span class="row-label">${m.label}</span>
+      <input type="number" inputmode="numeric" data-m="${m.id}" min="0" max="40" value="${goals[m.id] || 0}" style="width:80px;min-height:40px">
+    </div>`).join('')}
+    <div class="muted" style="margin-top:8px">Sets / semaine / muscle</div>
+  </div>`);
+  openModal({
+    title: 'Objectifs de volume',
+    content: form,
+    actions: [
+      { label: 'Annuler' },
+      {
+        label: 'Enregistrer', variant: 'btn-primary',
+        onClick: (body) => {
+          const vg = {};
+          body.querySelectorAll('input[data-m]').forEach((inp) => { vg[inp.dataset.m] = parseInt(inp.value, 10) || 0; });
+          store.saveUserData({ settings: { volumeGoals: vg } });
+          rerender();
+        },
+      },
+    ],
+  });
+}
+
+// ============================================================
+// CALENDRIER DES SÉANCES
+// ============================================================
+const WD = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+const pad2 = (n) => String(n).padStart(2, '0');
+
+function workoutsByDate() {
+  const map = {};
+  for (const w of store.userData.workouts) (map[w.date] = map[w.date] || []).push(w);
+  return map;
+}
+function isoOf(d) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+function parseISO(iso) { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d); }
+function mondayOf(d) { const x = new Date(d); const off = (x.getDay() + 6) % 7; x.setDate(x.getDate() - off); return x; }
+
+function earliestDataDate() {
+  const dates = [];
+  store.userData.workouts.forEach((w) => dates.push(w.date));
+  store.userData.weights.forEach((w) => dates.push(w.date));
+  Object.keys(store.userData.nutrition.byDate).forEach((d) => dates.push(d));
+  Object.keys(store.userData.steps.byDate).forEach((d) => dates.push(d));
+  if (!dates.length) return todayISO();
+  return dates.sort()[0];
+}
+
+function dayCell(iso, byDate, todayIso, dim) {
+  const has = byDate[iso] && byDate[iso].length;
+  return el(`<button class="cal-day${has ? ' has-session' : ''}${iso === todayIso ? ' is-today' : ''}${dim ? ' dim' : ''}" ${has ? '' : 'disabled'} data-date="${iso}">
+    <span class="cal-dnum">${Number(iso.slice(8))}</span>
+    ${has ? '<span class="cal-dot"></span>' : ''}
+  </button>`);
+}
+
+function renderTwoWeekCalendar(host) {
+  const byDate = workoutsByDate();
+  const t = new Date();
+  const todayIso = isoOf(t);
+  const start = mondayOf(t);
+  start.setDate(start.getDate() - 7); // lundi il y a deux semaines
+
+  const card = el(`<div class="card">
+    <div class="card-row" style="margin-bottom:8px">
+      <h3 style="margin:0">Calendrier</h3>
+      <button class="btn btn-ghost btn-sm" id="cal-more">${icons.calendar} Voir plus</button>
+    </div>
+    <div class="cal-wd">${WD.map((d) => `<span>${d}</span>`).join('')}</div>
+    <div class="cal-grid" id="cal-grid"></div>
+  </div>`);
+  const grid = card.querySelector('#cal-grid');
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(start); d.setDate(start.getDate() + i);
+    const iso = isoOf(d);
+    grid.appendChild(dayCell(iso, byDate, todayIso, iso > todayIso));
+  }
+  grid.addEventListener('click', (e) => {
+    const b = e.target.closest('.cal-day'); if (!b || b.disabled) return;
+    const ws = byDate[b.dataset.date]; if (!ws) return;
+    openWorkoutDetail(ws[ws.length - 1]);
+  });
+  card.querySelector('#cal-more').addEventListener('click', () => openFullCalendar());
+  host.appendChild(card);
+}
+
+function monthGrid(year, month, byDate, todayIso) {
+  const first = new Date(year, month, 1);
+  const monthName = first.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+  const offset = (first.getDay() + 6) % 7;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const wrap = el(`<div class="cal-month">
+    <div class="cal-month-title">${monthName}</div>
+    <div class="cal-wd">${WD.map((d) => `<span>${d}</span>`).join('')}</div>
+    <div class="cal-grid"></div>
+  </div>`);
+  const grid = wrap.querySelector('.cal-grid');
+  for (let i = 0; i < offset; i++) grid.appendChild(el('<span class="cal-empty"></span>'));
+  for (let day = 1; day <= daysInMonth; day++) {
+    const iso = `${year}-${pad2(month + 1)}-${pad2(day)}`;
+    grid.appendChild(dayCell(iso, byDate, todayIso, iso > todayIso));
+  }
+  return wrap;
+}
+
+function openFullCalendar() {
+  const byDate = workoutsByDate();
+  const todayIso = todayISO();
+  const overlay = el(`<div class="picker-overlay cal-overlay">
+    <div class="picker-topbar">
+      <h3 style="margin:0;flex:1">Historique complet</h3>
+      <button class="icon-btn" id="cal-close" aria-label="Fermer">${icons.close}</button>
+    </div>
+    <div class="cal-scroll" id="cal-scroll"></div>
+  </div>`);
+  document.body.appendChild(overlay);
+  const wasOpen = document.body.classList.contains('overlay-open');
+  document.body.classList.add('overlay-open');
+  const close = () => { overlay.remove(); if (!wasOpen) document.body.classList.remove('overlay-open'); };
+
+  const scroll = overlay.querySelector('#cal-scroll');
+  const start = parseISO(earliestDataDate());
+  const end = new Date();
+  const months = [];
+  let y = start.getFullYear(); let m = start.getMonth();
+  while (y < end.getFullYear() || (y === end.getFullYear() && m <= end.getMonth())) {
+    months.push([y, m]);
+    m++; if (m > 11) { m = 0; y++; }
+  }
+  months.reverse().forEach(([yy, mm]) => scroll.appendChild(monthGrid(yy, mm, byDate, todayIso)));
+
+  scroll.addEventListener('click', (e) => {
+    const b = e.target.closest('.cal-day'); if (!b || b.disabled) return;
+    const ws = byDate[b.dataset.date]; if (!ws) return;
+    close();
+    openWorkoutDetail(ws[ws.length - 1]);
+  });
+  overlay.querySelector('#cal-close').addEventListener('click', close);
+}
+
+function renderVolumeDashboard(host, rerender) {
   const s = store.userData.settings;
   if (!s.volumeTrackingEnabled) return;
   const end = todayISO();
@@ -720,7 +871,10 @@ function renderVolumeDashboard(host) {
   const alerts = rows.filter((r) => r.goal > 0 && r.done < r.goal * 0.5);
 
   const card = el(`<div class="card">
-    <h3>Volume hebdo</h3>
+    <div class="card-row" style="margin-bottom:6px">
+      <h3 style="margin:0">Volume hebdo</h3>
+      <button class="btn btn-secondary btn-sm" id="vol-goals-btn">${icons.edit} Objectifs</button>
+    </div>
     ${alerts.slice(0, 3).map((a) => `<div class="alert-banner">${a.m.label} en retard (${a.pct}%)</div>`).join('')}
     <table class="volume-table">
       <thead><tr><th>Muscle</th><th>Sets</th><th>Obj.</th><th>%</th></tr></thead>
@@ -766,6 +920,9 @@ function renderVolumeDashboard(host) {
     data: { labels: top.map((t) => t.name), datasets: [{ data: top.map((t) => Math.round(t.vol)), backgroundColor: 'rgba(124,58,237,0.6)', borderRadius: 5 }] },
     options: { ...chartOpts, indexAxis: 'y' },
   });
+
+  const vgBtn = card.querySelector('#vol-goals-btn');
+  if (vgBtn && rerender) vgBtn.addEventListener('click', () => openVolumeGoalsModal(rerender));
 }
 
 // ============================================================
@@ -791,10 +948,7 @@ export function render(container) {
       <div id="routine-list">${routines.length ? '' : '<div class="empty-state">Aucune routine</div>'}</div>
     </div>
     <div id="volume-host"></div>
-    <div class="card">
-      <h3>Séances récentes</h3>
-      <div id="recent-list">${recent.length ? '' : '<div class="empty-state">Aucune séance</div>'}</div>
-    </div>
+    <div id="calendar-host"></div>
   </div>`);
   container.appendChild(root);
 
@@ -813,17 +967,20 @@ export function render(container) {
   }
 
   const recList = root.querySelector('#recent-list');
-  for (const w of recent) {
-    const row = el(`<div class="steps-list-item" style="cursor:pointer">
-      <span>${w.date} · ${w.exercises.length} exos</span>
-      <span class="num" style="color:var(--accent)">${w.totalVolume.toLocaleString('fr-FR')} kg</span>
-    </div>`);
-    row.addEventListener('click', () => openWorkoutDetail(w));
-    recList.appendChild(row);
+  if (recList) {
+    for (const w of recent) {
+      const row = el(`<div class="steps-list-item" style="cursor:pointer">
+        <span>${w.date} · ${w.exercises.length} exos</span>
+        <span class="num" style="color:var(--accent)">${w.totalVolume.toLocaleString('fr-FR')} kg</span>
+      </div>`);
+      row.addEventListener('click', () => openWorkoutDetail(w));
+      recList.appendChild(row);
+    }
   }
 
   root.querySelector('#btn-new-session').addEventListener('click', () => openSession(rerender));
   root.querySelector('#btn-new-routine').addEventListener('click', () => openRoutineEditor(null, rerender));
 
-  renderVolumeDashboard(root.querySelector('#volume-host'));
+  renderVolumeDashboard(root.querySelector('#volume-host'), rerender);
+  renderTwoWeekCalendar(root.querySelector('#calendar-host'));
 }

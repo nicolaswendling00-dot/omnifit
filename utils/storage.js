@@ -25,6 +25,8 @@ function defaultUserData() {
       protPct: 30,
       carbsPct: 40,
       fatPct: 30,
+      protMult: 2.2,
+      fatMult: 1.0,
       waterGoal: 3,
       unitSystem: 'kg',
       restTimerDefault: 120,
@@ -53,6 +55,7 @@ function defaultUserData() {
     water: { byDate: {} },
     workouts: [],
     routines: [],
+    recipes: [],
     steps: { byDate: {} },
   };
 }
@@ -170,6 +173,19 @@ class StorageManager {
 
   deleteRoutine(id) {
     this.userData.routines = this.userData.routines.filter((r) => r.id !== id);
+    this.persist();
+  }
+
+  saveRecipe(recipe) {
+    if (!this.userData.recipes) this.userData.recipes = [];
+    const idx = this.userData.recipes.findIndex((r) => r.id === recipe.id);
+    if (idx >= 0) this.userData.recipes[idx] = recipe;
+    else this.userData.recipes.push(recipe);
+    this.persist();
+  }
+
+  deleteRecipe(id) {
+    this.userData.recipes = (this.userData.recipes || []).filter((r) => r.id !== id);
     this.persist();
   }
 

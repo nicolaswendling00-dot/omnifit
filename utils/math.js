@@ -35,6 +35,37 @@ export function calcKcal(prot, carbs, fat) {
   return Math.round(prot * 4 + carbs * 4 + fat * 9);
 }
 
+// Objectif fibres : 10 g pour 1000 kcal ingérées
+export function fiberGoalFromKcal(kcal) {
+  return Math.round((kcal / 1000) * 10);
+}
+
+// Coefficient d'atténuation par muscle sur une séance.
+// Pour chaque set, un muscle reçoit p/100 s'il est principal, p/100 × secondaryRatio s'il est secondaire.
+// Le coefficient = moyenne pondérée (par le nb de sets) de ce facteur d'implication (0–1+).
+export function muscleAttenuation(workout, exerciseLookup, secondaryRatio = 1.0) {
+  const acc = {}; // { muscle: { sum, sets } }
+  for (const wx of workout.exercises) {
+    const def = exerciseLookup(wx.exerciseId);
+    if (!def) continue;
+    const n = wx.sets.length;
+    if (!n) continue;
+    for (const pm of def.primaryMuscles) {
+      acc[pm.m] = acc[pm.m] || { sum: 0, sets: 0 };
+      acc[pm.m].sum += (pm.p / 100) * n;
+      acc[pm.m].sets += n;
+    }
+    for (const sm of def.secondaryMuscles) {
+      acc[sm.m] = acc[sm.m] || { sum: 0, sets: 0 };
+      acc[sm.m].sum += (sm.p / 100) * secondaryRatio * n;
+      acc[sm.m].sets += n;
+    }
+  }
+  const out = {};
+  for (const [m, v] of Object.entries(acc)) out[m] = v.sets ? v.sum / v.sets : 0;
+  return out;
+}
+
 // Harris-Benedict révisée + facteur activité modéré
 export function harrisBenedict(profile, goalType) {
   const { weight: W, height: H, age: A, sex } = profile;

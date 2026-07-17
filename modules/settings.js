@@ -1,10 +1,10 @@
 // OmniFit — PAGE 4 : Réglages (macros déplacées dans Nutrition)
 import { store } from '../utils/storage.js';
 import { harrisBenedict } from '../utils/math.js';
-import { MUSCLES, EQUIPMENT_TYPES } from '../data/exercises.js';
+import { EQUIPMENT_TYPES } from '../data/exercises.js';
 import { el, icons, openModal, toast, confirmModal } from '../utils/ui.js';
 
-const VERSION = '2.0';
+const VERSION = '3.0';
 
 function toggleRow(label, key, sub = '') {
   const s = store.userData.settings;
@@ -51,33 +51,6 @@ function openProfileModal(rerender) {
             height: parseInt(body.querySelector('#p-height').value, 10) || p.height,
           } });
           applyCalorieAuto();
-          rerender();
-        },
-      },
-    ],
-  });
-}
-
-function openVolumeGoalsModal(rerender) {
-  const goals = store.userData.settings.volumeGoals;
-  const form = el(`<div>${MUSCLES.map((m) => `
-    <div class="settings-row" style="padding:7px 0">
-      <span class="row-label">${m.label}</span>
-      <input type="number" inputmode="numeric" data-m="${m.id}" min="0" max="40" value="${goals[m.id] || 0}" style="width:80px;min-height:40px">
-    </div>`).join('')}
-    <div class="muted" style="margin-top:8px">Sets / semaine / muscle</div>
-  </div>`);
-  openModal({
-    title: 'Objectifs de volume',
-    content: form,
-    actions: [
-      { label: 'Annuler' },
-      {
-        label: 'Enregistrer', variant: 'btn-primary',
-        onClick: (body) => {
-          const vg = {};
-          body.querySelectorAll('input[data-m]').forEach((inp) => { vg[inp.dataset.m] = parseInt(inp.value, 10) || 0; });
-          store.saveUserData({ settings: { volumeGoals: vg } });
           rerender();
         },
       },
@@ -137,10 +110,6 @@ export function render(container) {
       <div class="settings-row" style="flex-direction:column;align-items:stretch">
         <div class="card-row"><span class="row-label">Repos par défaut</span><span class="num" id="rest-val" style="color:var(--accent)">${s.restTimerDefault}s</span></div>
         <input id="set-rest" type="range" min="60" max="300" step="15" value="${s.restTimerDefault}">
-      </div>
-      <div class="settings-row">
-        <div><div class="row-label">Objectifs de volume</div><div class="row-sub">Sets / semaine</div></div>
-        <button class="btn btn-secondary btn-sm" id="btn-vol-goals">${icons.edit}</button>
       </div>
       <div id="row-vol-tracking"></div>
       <div id="row-db-full"></div>
@@ -239,7 +208,6 @@ export function render(container) {
   }
 
   root.querySelector('#btn-edit-profile').addEventListener('click', () => openProfileModal(rerender));
-  root.querySelector('#btn-vol-goals').addEventListener('click', () => openVolumeGoalsModal(rerender));
   root.querySelector('#set-goal-type').addEventListener('change', (e) => {
     store.saveUserData({ goal: { type: e.target.value } });
     applyCalorieAuto();
