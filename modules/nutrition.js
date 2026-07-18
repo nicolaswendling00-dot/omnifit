@@ -5,6 +5,7 @@ import { el, icons, openSheet, openModal, toast, ringSVG, confirmModal, fmtDateS
 
 let selectedDate = todayISO();
 let currentRerender = null;
+const mealOpen = {};
 
 // Couleurs macros : Prot orange · Glucides bleu clair · Lipides violet
 const C_PROT = '#FB923C';
@@ -481,7 +482,15 @@ export function render(container) {
     const group = byCat[cat];
     if (!group || !group.length) continue;
     const catKcal = group.reduce((a, m) => a + m.kcal, 0);
-    list.appendChild(el(`<div class="meal-cat-head"><span>${cat}</span><span class="num">${Math.round(catKcal)} kcal</span></div>`));
+    const open = !!mealOpen[cat];
+    const groupEl = el(`<div class="meal-group${open ? '' : ' collapsed'}">
+      <div class="meal-cat-head" data-cat="${cat}">
+        <span><span class="collapse-caret">${icons.chevron}</span> ${cat} <span class="meal-count">${group.length}</span></span>
+        <span class="num">${Math.round(catKcal)} kcal</span>
+      </div>
+      <div class="meal-group-body"></div>
+    </div>`);
+    const body = groupEl.querySelector('.meal-group-body');
     for (const m of group) {
       const item = el(`<div class="meal-item">
         <div>
@@ -503,8 +512,13 @@ export function render(container) {
           rerender();
         }, true);
       });
-      list.appendChild(item);
+      body.appendChild(item);
     }
+    groupEl.querySelector('.meal-cat-head').addEventListener('click', () => {
+      mealOpen[cat] = !mealOpen[cat];
+      groupEl.classList.toggle('collapsed', !mealOpen[cat]);
+    });
+    list.appendChild(groupEl);
   }
 
   container.querySelector('#date-ribbon').addEventListener('click', (e) => {

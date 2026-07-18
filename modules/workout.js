@@ -5,10 +5,12 @@ import { store, todayISO } from '../utils/storage.js';
 import { EXERCISES, MUSCLES, muscleLabel } from '../data/exercises.js';
 import { formatTime, workoutMuscleVolume, weeklySetsByMuscle, muscleAttenuation } from '../utils/math.js';
 import { el, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong } from '../utils/ui.js';
+import { computeExerciseLP, rankFromLP, rankBadge, rankChip } from '../utils/ranks.js';
 
 let volumeChart = null;
 let impChart = null;
 let pageRerender = null;
+let routinesOpen = false;
 let session = null; // { elapsed, running, date, notes, exercises:[{exerciseId, sets:[{weight,reps}], ss}] }
 let sessionUI = null; // { overlay, renderExos, close }
 let chronoInterval = null;
@@ -28,6 +30,11 @@ export function exerciseLookup(id) {
 // Normalisation pour recherche : minuscules, sans accents
 function normalizeStr(s) {
   return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+// Rang d'un exo (dérivé du LP cumulé). lpMap optionnel pour éviter de recalculer en boucle.
+function exerciseRank(exerciseId, lpMap) {
+  const map = lpMap || computeExerciseLP(store.userData.workouts);
+  return rankFromLP(map[exerciseId] || 0);
 }
 // Synonymes anglais/familiers par muscle et catégorie (recherche inclusive)
 const MUSCLE_SYN = {
@@ -184,8 +191,10 @@ function openExercisePicker(onPick, title = 'Ajouter un exercice') {
     const nq = normalizeStr(q);
     const items = filteredExercises().filter((e) => exoMatches(e, nq));
     list.innerHTML = items.length ? '' : '<div class="empty-state">Aucun résultat</div>';
+    const lpMap = computeExerciseLP(store.userData.workouts);
     for (const e of items.slice(0, 80)) {
-      const b = el(`<button class="exo-search-item"><span>${e.name}</span><span class="cat">${e.category}</span></button>`);
+      const rk = rankFromLP(lpMap[e.id] || 0);
+      const b = el(`<button class="exo-search-item"><span>${(exerciseLookup(e.id) || e).name}</span><span class="rank-inline" title="${rk.name}${rk.division ? ' ' + rk.division : ''}">${rankChip(rk.id, 28)}</span></button>`);
       b.addEventListener('click', () => { close(); onPick(e); });
       list.appendChild(b);
     }
@@ -400,7 +409,24 @@ function openExerciseDetailSheet(exerciseId) {
     }
   }
 
+  const rk = exerciseRank(exerciseId);
+  const lpTxt = rk.division ? `${rk.lp} / ${rk.lpNeeded} LP` : `${rk.lp} LP`;
+  const rkFull = rk.division ? `${rk.name} ${rk.division}` : rk.name;
+
   const form = el(`<div>
+    <div class="rank-flip" id="ed-rank" title="Toucher pour voir les LP">
+      <div class="rank-flip-inner">
+        <div class="rank-face rank-front">
+          ${rankBadge(rk.id, 132)}
+          <div class="rank-name" style="color:${rk.color}">${rkFull}</div>
+        </div>
+        <div class="rank-face rank-back" style="border-color:${rk.color}">
+          <div class="rank-back-rank" style="color:${rk.color}">${rkFull}</div>
+          <div class="rank-back-lp">${lpTxt}</div>
+          ${rk.division ? `<div class="rank-back-bar"><div style="width:${rk.lp}%;background:${rk.color}"></div></div>` : '<div class="rank-back-sub">Rang ultime atteint</div>'}
+        </div>
+      </div>
+    </div>
     <button class="btn btn-secondary btn-sm btn-block" id="ed-rename" style="margin-bottom:12px">${icons.edit} Modifier le nom</button>
     ${best1rm ? `<div class="orm-card">
       <div class="orm-head">Meilleure série</div>
@@ -421,6 +447,9 @@ function openExerciseDetailSheet(exerciseId) {
   </div>`);
 
   const sheet = openSheet({ title: def.name, content: form });
+
+  const rankEl = form.querySelector('#ed-rank');
+  if (rankEl) rankEl.addEventListener('click', () => rankEl.classList.toggle('flipped'));
 
   form.querySelector('#ed-rename').addEventListener('click', () => {
     const input = el(`<input type="text" class="rename-input" value="${def.name.replace(/"/g, '&quot;')}" style="width:100%">`);
@@ -689,6 +718,7 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null) {
   const renderExos = () => {
     const exosHost = overlay.querySelector('#s-exos');
     exosHost.innerHTML = session.exercises.length ? '' : '<div class="empty-state">Ajoute un premier exercice</div>';
+    const lpMap = computeExerciseLP(store.userData.workouts);
     session.exercises.forEach((wx, idx) => {
       const def = exerciseLookup(wx.exerciseId);
       if (!def) return;
@@ -718,6 +748,7 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null) {
       const card = el(`<div class="card exo-card">
         <div class="exo-head">
           <button class="exo-name-btn" data-detail="${idx}">
+            <span class="rank-inline">${rankChip(exerciseRank(wx.exerciseId, lpMap).id, 26)}</span>
             <span>${def.name} ${wx.ss ? `<span class="ss-chip">SS${wx.ss}</span>` : ''} ${impBadge(imp)}</span>
             ${icons.chevron}
           </button>
@@ -1294,8 +1325,10 @@ function openExerciseBrowser() {
       .filter((x) => exoMatches(x.e, nq))
       .sort((a, b) => a.name.localeCompare(b.name));
     list.innerHTML = items.length ? '' : '<div class="empty-state">Aucun résultat</div>';
+    const lpMap = computeExerciseLP(store.userData.workouts);
     for (const { e, name } of items.slice(0, 150)) {
-      const b = el(`<button class="exo-search-item"><span>${name}</span><span class="cat">${e.category}</span></button>`);
+      const rk = rankFromLP(lpMap[e.id] || 0);
+      const b = el(`<button class="exo-search-item"><span>${name}</span><span class="rank-inline" title="${rk.name}${rk.division ? ' ' + rk.division : ''}">${rankChip(rk.id, 28)}</span></button>`);
       b.addEventListener('click', () => { close(); openExerciseDetailSheet(e.id); });
       list.appendChild(b);
     }
@@ -1396,11 +1429,11 @@ export function render(container) {
     </button>
     <div id="calendar-host"></div>
     <div class="card">
-      <div class="card-row" style="margin-bottom:8px">
-        <h3 style="margin:0">Routines</h3>
+      <div class="card-row collapse-head" id="routine-toggle" style="margin-bottom:8px;cursor:pointer">
+        <h3 style="margin:0;display:flex;align-items:center;gap:6px"><span class="collapse-caret">${icons.chevron}</span> Routines <span class="muted" style="font-size:0.72rem">(${routines.length})</span></h3>
         <button class="btn btn-secondary btn-sm" id="btn-new-routine">${icons.plus}</button>
       </div>
-      <div id="routine-list">${routines.length ? '' : '<div class="empty-state">Aucune routine</div>'}</div>
+      <div id="routine-list" class="collapse-body">${routines.length ? '' : '<div class="empty-state">Aucune routine</div>'}</div>
     </div>
     <div id="volume-host"></div>
     <button class="btn btn-secondary btn-block" id="btn-exo-browser" style="margin-top:6px">${icons.book} Exercices & statistiques</button>
@@ -1435,6 +1468,13 @@ export function render(container) {
 
   root.querySelector('#btn-new-session').addEventListener('click', () => openSession(rerender));
   root.querySelector('#btn-new-routine').addEventListener('click', () => openRoutineEditor(null, rerender));
+  const rtCard = root.querySelector('#routine-toggle').closest('.card');
+  rtCard.classList.toggle('collapsed', !routinesOpen);
+  root.querySelector('#routine-toggle').addEventListener('click', (e) => {
+    if (e.target.closest('#btn-new-routine')) return;
+    routinesOpen = !routinesOpen;
+    rtCard.classList.toggle('collapsed', !routinesOpen);
+  });
 
   renderVolumeDashboard(root.querySelector('#volume-host'), rerender);
   renderTwoWeekCalendar(root.querySelector('#calendar-host'));
