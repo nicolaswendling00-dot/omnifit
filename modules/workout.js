@@ -366,8 +366,25 @@ function openExerciseDetailSheet(exerciseId) {
     .filter((h) => h.wx && h.wx.sets.length)
     .slice(-12).reverse();
 
+  // Meilleur 1RM estimé (Epley : poids × (1 + reps/30)) sur tout l'historique
+  let best1rm = null;
+  for (const w of store.userData.workouts) {
+    const wx = w.exercises.find((x) => x.exerciseId === exerciseId);
+    if (!wx) continue;
+    for (const s of wx.sets) {
+      if (!s.weight || !s.reps) continue;
+      const orm = s.weight * (1 + s.reps / 30);
+      if (!best1rm || orm > best1rm.orm) best1rm = { orm, weight: s.weight, reps: s.reps, date: w.date };
+    }
+  }
+
   const form = el(`<div>
     <button class="btn btn-secondary btn-sm btn-block" id="ed-rename" style="margin-bottom:12px">${icons.edit} Modifier le nom</button>
+    ${best1rm ? `<div class="orm-card">
+      <div class="orm-head">Meilleur 1RM estimé</div>
+      <div class="orm-value">${Math.round(best1rm.orm)} kg</div>
+      <div class="orm-sub">${best1rm.weight} kg × ${best1rm.reps} · ${best1rm.date}</div>
+    </div>` : ''}
     <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px">
       ${def.primaryMuscles.map((m) => `<span class="badge">${muscleLabel(m.m)} ${m.p}%</span>`).join('')}
       ${def.secondaryMuscles.map((m) => `<span class="badge violet">${muscleLabel(m.m)} ${m.p}%</span>`).join('')}
@@ -471,7 +488,34 @@ function openWorkoutDetail(w, highlightId = null) {
     wide: true,
     actions: [
       { label: 'Fermer' },
+      { label: 'Ajouter aux routines', onClick: () => { addSessionToRoutine(w); } },
       { label: 'Modifier', variant: 'btn-primary', onClick: () => { if (pageRerender) openSession(pageRerender, null, w); } },
+    ],
+  });
+}
+
+// Crée une routine à partir d'une séance (les séries seront pré-remplies via la colonne PRÉC)
+function addSessionToRoutine(w) {
+  const ids = w.exercises.map((wx) => wx.exerciseId);
+  const input = el(`<div class="field-stack">
+    <label class="field"><span>Nom de la routine</span><input type="text" class="rt-name-input" placeholder="Push A" value="Séance du ${w.date}" autofocus></label>
+    <div class="muted" style="font-size:0.75rem">${ids.length} exercice${ids.length > 1 ? 's' : ''} · les séries précédentes s'afficheront dans la colonne PRÉC quand tu lanceras la routine.</div>
+  </div>`);
+  openModal({
+    title: 'Ajouter aux routines',
+    content: input,
+    actions: [
+      { label: 'Annuler' },
+      {
+        label: 'Créer', variant: 'btn-primary',
+        onClick: (body) => {
+          const name = body.querySelector('.rt-name-input').value.trim();
+          if (!name) { toast('Nom requis', 'error'); return 'keep'; }
+          store.saveRoutine({ id: crypto.randomUUID(), name, exercises: ids });
+          toast('Routine créée', 'success');
+          if (pageRerender) pageRerender();
+        },
+      },
     ],
   });
 }
@@ -804,6 +848,10 @@ function showSummary(exercises, closeSession) {
   const breakdown = Object.keys(atten).sort((a, b) => atten[b] - atten[a]);
   const impVals = exercises.map((x) => exoImprovement(x.exerciseId, exoVolume(x))).filter((v) => v != null);
   const sessImp = impVals.length ? Math.round(impVals.reduce((a, b) => a + b, 0) / impVals.length) : null;
+  const progress = exercises
+    .map((x) => ({ name: (exerciseLookup(x.exerciseId) || { name: x.exerciseId }).name, imp: exoImprovement(x.exerciseId, exoVolume(x)) }))
+    .filter((p) => p.imp != null && p.imp > 0)
+    .sort((a, b) => b.imp - a.imp);
 
   const content = el(`<div>
     <div class="grid-2" style="margin-bottom:12px">
@@ -811,7 +859,9 @@ function showSummary(exercises, closeSession) {
       <div class="card" style="margin:0;text-align:center;padding:10px"><div class="muted">Séries</div><div class="num" style="font-size:1.2rem;color:var(--accent)">${totalSets}</div></div>
     </div>
     ${sessImp != null ? `<div class="wd-sess-imp ${sessImp >= 0 ? 'up' : 'down'}" style="text-align:center;margin-bottom:12px">Amélioration de la séance : ${sessImp >= 0 ? '+' : ''}${sessImp}%</div>` : ''}
-    <h3 style="margin-bottom:6px">Coefficients d'atténuation</h3>
+    ${progress.length ? `<h3 style="margin:2px 0 6px">Tu as progressé sur</h3>
+      <div class="recap-list">${progress.map((p) => `<div class="recap-row"><span>${p.name}</span>${impBadge(p.imp, false)}</div>`).join('')}</div>` : ''}
+    <h3 style="margin:14px 0 6px">Coefficients d'atténuation</h3>
     <div class="muted" style="font-size:0.72rem;margin-bottom:8px">Implication moyenne par muscle (1.0 = moteur principal) · Δ vs dernière séance</div>
     <table class="volume-table">
       <thead><tr><th>Muscle</th><th>Atténuation</th><th>Δ</th></tr></thead>
@@ -1107,14 +1157,13 @@ function renderVolumeDashboard(host, rerender) {
     const pct = goal ? Math.round((done / goal) * 100) : 0;
     return { m, done, goal, pct };
   });
-  const alerts = rows.filter((r) => r.goal > 0 && r.done < r.goal * 0.5);
 
   const card = el(`<div class="card">
     <div class="card-row" style="margin-bottom:6px">
       <h3 style="margin:0">Volume hebdo</h3>
       <button class="btn btn-secondary btn-sm" id="vol-goals-btn">${icons.edit} Objectifs</button>
     </div>
-    ${alerts.slice(0, 3).map((a) => `<div class="alert-banner">${a.m.label} en retard (${a.pct}%)</div>`).join('')}
+
     <table class="volume-table" id="vol-table">
       <thead><tr><th>Muscle</th><th>Sets</th><th>Obj.</th><th>%</th></tr></thead>
       <tbody>
@@ -1222,28 +1271,61 @@ function openExerciseBrowser() {
   setTimeout(() => overlay.querySelector('#xb-search').focus(), 250);
 }
 
-// Graphe de progression d'un muscle : coefficient d'amélioration (%) au fil du temps
+// Clic sur un muscle : exercices de la semaine qui l'ont travaillé + amélioration dans le temps
 function openMuscleChart(muscleId) {
   const ratio = store.userData.settings.secondaryRatio;
-  const since = todayISO(-13);
   const sorted = [...store.userData.workouts].sort((a, b) => a.date.localeCompare(b.date));
+
+  const weekStart = todayISO(-6);
+  const perExo = {};
+  for (const w of store.userData.workouts) {
+    if (w.date < weekStart) continue;
+    for (const wx of w.exercises) {
+      const def = exerciseLookup(wx.exerciseId);
+      if (!def) continue;
+      const pm = def.primaryMuscles.find((m) => m.m === muscleId);
+      const sm = def.secondaryMuscles.find((m) => m.m === muscleId);
+      if (!pm && !sm) continue;
+      const share = pm ? pm.p / 100 : (sm.p / 100) * ratio;
+      const e = perExo[wx.exerciseId] || (perExo[wx.exerciseId] = { name: def.name, sets: 0, vol: 0, primary: !!pm });
+      e.sets += wx.sets.length;
+      e.vol += exoVolume(wx) * share;
+    }
+  }
+  const exoRows = Object.entries(perExo).sort((a, b) => b[1].sets - a[1].sets);
+
   const series = [];
   for (const w of sorted) {
     const bm = workoutMuscleVolume(w, exerciseLookup, ratio);
-    if (bm[muscleId]) series.push({ date: w.date, v: bm[muscleId] });
+    if (bm[muscleId]) series.push({ v: bm[muscleId] });
   }
   const pts = [];
   for (let i = 1; i < series.length; i++) {
     if (!series[i - 1].v) continue;
-    if (series[i].date < since) continue;
-    const imp = Math.round(((series[i].v / series[i - 1].v) - 1) * 100);
-    pts.push({ date: series[i].date, v: Math.max(-100, Math.min(100, imp)) });
+    pts.push(Math.max(-100, Math.min(100, Math.round(((series[i].v / series[i - 1].v) - 1) * 100))));
   }
+
   const content = el(`<div>
-    ${pts.length ? '' : '<div class="empty-state">Pas assez de données pour ce muscle</div>'}
-    <div class="chart-wrap" style="height:240px"><canvas id="mus-chart"></canvas></div>
+    <h3 style="margin:0 0 4px">Exercices cette semaine</h3>
+    <div class="muted" style="font-size:0.7rem;margin-bottom:8px">Ce qui a compté pour ${muscleLabel(muscleId)} sur 7 jours</div>
+    <div id="mus-exos">${exoRows.length ? '' : '<div class="empty-state">Aucun exercice cette semaine</div>'}</div>
+    <h3 style="margin:16px 0 6px">Amélioration</h3>
+    <div class="chart-wrap" style="height:170px"><canvas id="mus-chart"></canvas></div>
   </div>`);
-  openModal({ title: `Amélioration – ${muscleLabel(muscleId)}`, content, wide: true, actions: [{ label: 'Fermer', variant: 'btn-primary' }] });
+  const listHost = content.querySelector('#mus-exos');
+  for (const [id, e] of exoRows) {
+    const row = el(`<div class="mus-exo-row" data-exo="${id}">
+      <div>
+        <div class="mus-exo-name">${e.name} ${e.primary ? '' : '<span class="badge violet" style="font-size:0.56rem">secondaire</span>'}</div>
+        <div class="muted">${e.sets} série${e.sets > 1 ? 's' : ''} · ${Math.round(e.vol).toLocaleString('fr-FR')} kg pondérés</div>
+      </div>
+      ${icons.chevron}
+    </div>`);
+    row.addEventListener('click', () => openExerciseDetailSheet(id));
+    listHost.appendChild(row);
+  }
+
+  openModal({ title: `${muscleLabel(muscleId)}`, content, wide: true, actions: [{ label: 'Fermer', variant: 'btn-primary' }] });
   if (!pts.length) return;
   const opts = {
     responsive: true, maintainAspectRatio: false,
@@ -1255,7 +1337,7 @@ function openMuscleChart(muscleId) {
   };
   new Chart(content.querySelector('#mus-chart'), {
     type: 'line',
-    data: { labels: pts.map((p) => p.date.slice(5)), datasets: [{ data: pts.map((p) => p.v), borderColor: '#00D9FF', backgroundColor: 'rgba(0,217,255,0.15)', fill: true, tension: 0.3, pointRadius: 3 }] },
+    data: { labels: pts.map((_, i) => i + 1), datasets: [{ data: pts, borderColor: '#00D9FF', backgroundColor: 'rgba(0,217,255,0.15)', fill: true, tension: 0.3, pointRadius: 3 }] },
     options: opts,
   });
 }

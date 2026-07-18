@@ -160,16 +160,37 @@ export function openSheet({ title, content }) {
 }
 
 // ---------- Anneau SVG de progression ----------
-export function ringSVG({ size = 72, stroke = 7, progress = 0, color = 'var(--accent)', label = '', sub = '' }) {
+let _ringUid = 0;
+export function ringSVG({ size = 72, stroke = 7, progress = 0, color = 'var(--accent)', label = '', sub = '', gradient = false }) {
+  const uid = 'r' + (++_ringUid);
   const r = (size - stroke) / 2;
+  const cx = size / 2; const cy = size / 2;
   const c = 2 * Math.PI * r;
-  const off = c * (1 - Math.min(1, Math.max(0, progress)));
+  const p = Math.max(0, progress);
+  const base = Math.min(1, p);
+  const off = c * (1 - base);
+  const stroking = gradient ? `url(#grad-${uid})` : color;
+
+  // Arc de dépassement (au-delà de 100 %) : rayures claires sur la superposition
+  let overshoot = '';
+  if (p > 1) {
+    const fo = Math.min(1, p - 1);
+    const a0 = -Math.PI / 2;
+    const a1 = a0 + fo * 2 * Math.PI;
+    const x0 = cx + r * Math.cos(a0); const y0 = cy + r * Math.sin(a0);
+    const x1 = cx + r * Math.cos(a1); const y1 = cy + r * Math.sin(a1);
+    const largeArc = fo > 0.5 ? 1 : 0;
+    overshoot = `<path d="M ${x0.toFixed(1)} ${y0.toFixed(1)} A ${r} ${r} 0 ${largeArc} 1 ${x1.toFixed(1)} ${y1.toFixed(1)}" fill="none" stroke="rgba(255,255,255,0.75)" stroke-width="${stroke}" stroke-linecap="butt" stroke-dasharray="2 3"/>`;
+  }
+
   return `
-    <svg class="ring" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="${label} ${Math.round(progress * 100)}%">
-      <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="rgba(0,217,255,0.12)" stroke-width="${stroke}"/>
-      <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${color}" stroke-width="${stroke}"
+    <svg class="ring" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="${label} ${Math.round(p * 100)}%">
+      ${gradient ? `<defs><linearGradient id="grad-${uid}" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00D9FF"/><stop offset="100%" stop-color="#7C3AED"/></linearGradient></defs>` : ''}
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(0,217,255,0.12)" stroke-width="${stroke}"/>
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${stroking}" stroke-width="${stroke}"
         stroke-linecap="round" stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"
-        transform="rotate(-90 ${size / 2} ${size / 2})" class="ring-fg"/>
+        transform="rotate(-90 ${cx} ${cy})" class="ring-fg"/>
+      ${overshoot}
       <text x="50%" y="${sub ? '46%' : '52%'}" text-anchor="middle" dominant-baseline="middle" class="ring-label">${label}</text>
       ${sub ? `<text x="50%" y="64%" text-anchor="middle" dominant-baseline="middle" class="ring-sub">${sub}</text>` : ''}
     </svg>`;

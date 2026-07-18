@@ -51,6 +51,22 @@ export function macroGoals() {
   return { protG, carbsG, fatG, kcalGoal: calcKcal(protG, carbsG, fatG) };
 }
 
+// Objectif figé par jour : les jours passés gardent l'objectif qu'ils avaient
+// (changer l'objectif aujourd'hui ne modifie plus l'historique).
+export function macroGoalsFor(date) {
+  const day = store.userData.nutrition.byDate[date];
+  const live = macroGoals();
+  if (date === todayISO()) {
+    if (day) { day.goal = live; store.persist(); }
+    return live;
+  }
+  if (day) {
+    if (!day.goal) { day.goal = live; store.persist(); }
+    return day.goal;
+  }
+  return live;
+}
+
 // ============================================================
 // OBJECTIFS MACROS — sheet (Grammes / Auto / Pourcentages)
 // ============================================================
@@ -396,7 +412,7 @@ export function render(container) {
   const rerender = () => render(container);
   currentRerender = rerender;
   const totals = store.dayTotals(selectedDate);
-  const mg = macroGoals();
+  const mg = macroGoalsFor(selectedDate);
   const consumed = Math.round(totals.kcal);
   const remaining = mg.kcalGoal - totals.kcal;
   const fiberGoal = fiberGoalFromKcal(mg.kcalGoal, store.userData.settings.fiberPer1000 ?? 10);

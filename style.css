@@ -259,10 +259,12 @@ input[type="range"] { width: 100%; accent-color: var(--accent); min-height: 34px
 
 /* ---------- Accueil ---------- */
 .stat-card { margin-bottom: 0; padding: 13px 14px; }
+.stat-body { display: flex; align-items: center; gap: 10px; }
+.stat-body .ring { flex: none; }
 .stat-head { display: flex; align-items: center; gap: 6px; color: var(--text-2); font-size: 0.68rem; font-weight: 600; margin-bottom: 6px; letter-spacing: 0.04em; }
 .stat-head svg { width: 15px; height: 15px; color: var(--accent); }
-.stat-big { font-size: 1.5rem; }
-.stat-big small { color: var(--text-2); font-weight: 500; font-size: 0.7rem; }
+.stat-big { font-size: 1.3rem; }
+.stat-big small { color: var(--text-2); font-weight: 500; font-size: 0.66rem; }
 canvas { max-width: 100%; }
 .chart-wrap { position: relative; height: 220px; }
 .weight-hero { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -478,6 +480,22 @@ body.theme-amoled .session-top { background: rgba(0,0,0,0.94); }
 .wd-note { background: var(--surface-2); border-left: 3px solid var(--accent); border-radius: 8px; padding: 10px 12px; font-size: 0.9rem; color: var(--text); white-space: pre-wrap; margin-bottom: 12px; }
 .note-input { width: 100%; min-height: 90px; font-family: inherit; font-size: 1rem; padding: 10px 12px; resize: vertical; }
 
+/* Meilleur 1RM estimé (stats exo) */
+.orm-card { background: linear-gradient(135deg, rgba(0,217,255,0.16), rgba(124,58,237,0.16)); border: 1px solid var(--accent); border-radius: 12px; padding: 14px; text-align: center; margin-bottom: 14px; box-shadow: 0 0 22px rgba(0,217,255,0.18); }
+.orm-head { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-2); }
+.orm-value { font-size: 2.2rem; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; text-shadow: 0 0 18px rgba(0,217,255,0.4); line-height: 1.1; }
+.orm-sub { font-size: 0.76rem; color: var(--text-2); font-variant-numeric: tabular-nums; }
+
+/* Liste exercices d'un muscle */
+.mus-exo-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(0,217,255,0.08); cursor: pointer; }
+.mus-exo-row:last-child { border-bottom: none; }
+.mus-exo-row svg { width: 18px; height: 18px; color: var(--text-2); flex: none; }
+.mus-exo-name { font-weight: 600; font-size: 0.92rem; }
+
+/* Récap des progrès (fin de séance) */
+.recap-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; }
+.recap-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: rgba(34,211,166,0.08); border-radius: 8px; padding: 8px 10px; font-size: 0.9rem; }
+
 /* Lignes muscle cliquables (Volume hebdo) */
 .vol-row { cursor: pointer; }
 .vol-row:active { background: rgba(0, 217, 255, 0.08); }
@@ -529,9 +547,11 @@ body.theme-amoled .session-top { background: rgba(0,0,0,0.94); }
 .alert-banner { border: 1px solid rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.08); color: var(--warning); border-radius: var(--r-btn); font-size: 0.78rem; padding: 9px 12px; margin-bottom: 8px; }
 
 /* ---------- Activité ---------- */
-.steps-hero { text-align: center; padding: 6px 0 2px; }
-.steps-hero .big { font-size: 2.1rem; color: var(--accent); text-shadow: 0 0 22px rgba(0, 217, 255, 0.45); }
-.steps-hero .sub { color: var(--text-2); font-size: 0.75rem; }
+.steps-hero { text-align: center; padding: 14px 0 10px; }
+.steps-hero .ring { margin: 0 auto; }
+.steps-hero .ring-label { font-size: 30px; }
+.steps-hero .ring-sub { font-size: 11px; fill: var(--text-2); }
+.steps-remaining { color: var(--text-2); font-size: 0.8rem; margin-top: 8px; }
 .steps-list-item { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid rgba(0, 217, 255, 0.08); font-size: 0.85rem; }
 .steps-list-item:last-child { border-bottom: none; }
 .delta-up { color: var(--success); font-size: 0.72rem; }

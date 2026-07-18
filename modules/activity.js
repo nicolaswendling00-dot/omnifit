@@ -118,19 +118,15 @@ export function render(container) {
     <div>
       <div class="page-title">
         <h1>Activité</h1>
-        <button class="btn btn-primary btn-sm" id="btn-log-steps">${icons.plus} Log</button>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-ghost btn-sm" id="btn-step-goal">${icons.edit} Objectif</button>
+          <button class="btn btn-primary btn-sm" id="btn-log-steps">${icons.plus} Log</button>
+        </div>
       </div>
 
       <div class="card card-glow steps-hero">
-        <div class="kcal-total">
-          <span class="num kcal-consumed">${steps.toLocaleString('fr-FR')}</span>
-          <span class="kcal-sep">/ ${stepGoal().toLocaleString('fr-FR')} pas</span>
-        </div>
-        <div class="kcal-sub">
-          <span>${steps >= stepGoal() ? 'Objectif atteint' : `${(stepGoal() - steps).toLocaleString('fr-FR')} pas restants`}</span>
-        </div>
-        <div class="progress-bar ${steps >= stepGoal() ? 'green' : ''}" style="margin-top:8px"><div style="width:${Math.min(100, (steps / stepGoal()) * 100)}%"></div></div>
-        <button class="btn btn-secondary btn-sm btn-block" id="btn-step-goal" style="margin-top:12px">${icons.edit} Modifier l'objectif de pas</button>
+        ${ringSVG({ size: 168, stroke: 13, progress: steps / stepGoal(), gradient: true, label: steps.toLocaleString('fr-FR'), sub: `/ ${stepGoal().toLocaleString('fr-FR')} pas` })}
+        <div class="steps-remaining">${steps >= stepGoal() ? 'Objectif atteint 🎯' : `${(stepGoal() - steps).toLocaleString('fr-FR')} pas restants`}</div>
       </div>
 
       <div class="card">

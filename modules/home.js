@@ -166,26 +166,34 @@ export function render(container) {
       <div class="grid-2" style="margin-bottom:var(--space)">
         <div class="card stat-card">
           <div class="stat-head">${icons.flame} CALORIES</div>
-          <div class="num stat-big">${Math.round(totals.kcal)} <small>/ ${mg.kcalGoal}</small></div>
-          <div class="progress-bar" style="margin-top:6px"><div style="width:${Math.min(100, (totals.kcal / mg.kcalGoal) * 100)}%"></div></div>
+          <div class="stat-body">
+            ${ringSVG({ size: 54, stroke: 6, progress: totals.kcal / mg.kcalGoal, color: 'var(--accent)', label: `${Math.round((totals.kcal / mg.kcalGoal) * 100)}%` })}
+            <div class="num stat-big">${Math.round(totals.kcal)} <small>/ ${mg.kcalGoal}</small></div>
+          </div>
         </div>
         <div class="card stat-card">
           <div class="stat-head">${icons.activity} PAS</div>
-          <div class="num stat-big">${steps.toLocaleString('fr-FR')} <small>/ ${(settings.stepsGoal || 10000).toLocaleString('fr-FR')}</small></div>
-          <div class="progress-bar green" style="margin-top:6px"><div style="width:${Math.min(100, (steps / (settings.stepsGoal || 10000)) * 100)}%"></div></div>
+          <div class="stat-body">
+            ${ringSVG({ size: 54, stroke: 6, progress: steps / (settings.stepsGoal || 10000), gradient: true, label: `${Math.round((steps / (settings.stepsGoal || 10000)) * 100)}%` })}
+            <div class="num stat-big">${steps.toLocaleString('fr-FR')} <small>/ ${(settings.stepsGoal || 10000).toLocaleString('fr-FR')}</small></div>
+          </div>
         </div>
         <div class="card stat-card">
           <div class="stat-head">${icons.protein} PROTÉINES</div>
-          <div class="num stat-big">${Math.round(totals.prot)}<small>g / ${mg.protG}g</small></div>
-          <div class="progress-bar" style="margin-top:6px"><div style="width:${Math.min(100, (totals.prot / mg.protG) * 100)}%"></div></div>
+          <div class="stat-body">
+            ${ringSVG({ size: 54, stroke: 6, progress: totals.prot / mg.protG, color: '#FB923C', label: `${Math.round((totals.prot / mg.protG) * 100)}%` })}
+            <div class="num stat-big">${Math.round(totals.prot)}<small>g / ${mg.protG}g</small></div>
+          </div>
         </div>
         <div class="card stat-card">
           <div class="stat-head">${icons.water} EAU</div>
-          <div class="card-row">
-            <div class="num stat-big">${water.toFixed(1)}<small>L / ${settings.waterGoal}L</small></div>
-            <button class="btn btn-secondary btn-sm" id="btn-add-water" style="min-height:34px;padding:4px 10px">+0.25</button>
+          <div class="stat-body">
+            ${ringSVG({ size: 54, stroke: 6, progress: water / settings.waterGoal, color: '#38BDF8', label: `${Math.round((water / settings.waterGoal) * 100)}%` })}
+            <div>
+              <div class="num stat-big">${water.toFixed(1)}<small>L / ${settings.waterGoal}L</small></div>
+              <button class="btn btn-secondary btn-sm" id="btn-add-water" style="min-height:34px;padding:4px 10px;margin-top:4px">+0.25</button>
+            </div>
           </div>
-          <div class="progress-bar" style="margin-top:6px"><div style="width:${Math.min(100, (water / settings.waterGoal) * 100)}%"></div></div>
         </div>
       </div>
 
