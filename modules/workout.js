@@ -3,7 +3,7 @@
 // détail exo (muscles, historique, repos perso), coefficients d'amélioration.
 import { store, todayISO } from '../utils/storage.js';
 import { EXERCISES, MUSCLES, muscleLabel } from '../data/exercises.js';
-import { calculateCExo, calculateCMuscle, formatTime, workoutMuscleVolume, weeklySetsByMuscle, muscleAttenuation } from '../utils/math.js';
+import { formatTime, workoutMuscleVolume, weeklySetsByMuscle, muscleAttenuation } from '../utils/math.js';
 import { el, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong } from '../utils/ui.js';
 
 let volumeChart = null;
@@ -630,16 +630,6 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null) {
       const prevSets = last ? last.wx.sets : [];
       const curVol = exoVolume(wx);
       const imp = exoImprovement(wx.exerciseId, curVol);
-      const showC = store.userData.settings.showCExo;
-      let cBadges = '';
-      if (showC && wx.sets.length) {
-        const avgW = wx.sets.reduce((a, s) => a + s.weight, 0) / wx.sets.length;
-        const avgR = wx.sets.reduce((a, s) => a + s.reps, 0) / wx.sets.length;
-        const cExo = calculateCExo(avgW, avgR, wx.sets.length);
-        const pV = def.primaryMuscles.reduce((a, m) => a + m.p, 0);
-        const sV = def.secondaryMuscles.reduce((a, m) => a + m.p, 0);
-        cBadges = `<span class="badge" style="font-size:0.62rem">C_exo ${cExo.toFixed(0)}</span> <span class="badge" style="font-size:0.62rem">C_m ${calculateCMuscle(pV, sV).toFixed(2)}</span>`;
-      }
 
       const rowCount = Math.max(wx.sets.length + 1, prevSets.length);
       let rowsHtml = '';
@@ -662,7 +652,7 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null) {
       const card = el(`<div class="card exo-card">
         <div class="exo-head">
           <button class="exo-name-btn" data-detail="${idx}">
-            <span>${def.name} ${wx.ss ? `<span class="ss-chip">SS${wx.ss}</span>` : ''} ${impBadge(imp)} ${cBadges}</span>
+            <span>${def.name} ${wx.ss ? `<span class="ss-chip">SS${wx.ss}</span>` : ''} ${impBadge(imp)}</span>
             ${icons.chevron}
           </button>
           <button class="icon-btn" data-menu="${idx}" aria-label="Options">${icons.dots}</button>
@@ -744,28 +734,39 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null) {
   // Swipe vers la gauche sur une série validée → révèle la poubelle rouge
   (() => {
     const exosHost = overlay.querySelector('#s-exos');
-    let swipeRow = null; let startX = 0; let dx = 0; let openRow = null;
-    const closeOpen = () => { if (openRow) { openRow.querySelector('.sr-content').style.transform = ''; openRow.classList.remove('swiped'); openRow = null; } };
+    let row = null; let startX = 0; let startY = 0; let dx = 0; let mode = null; // null | 'h' | 'v'
+    let openRow = null;
+    const closeOpen = (except) => {
+      if (openRow && openRow !== except) { openRow.querySelector('.sr-content').style.transform = ''; openRow.classList.remove('swiped'); openRow = null; }
+    };
     exosHost.addEventListener('touchstart', (e) => {
-      if (e.target.closest('input, button')) { return; }
-      const content = e.target.closest('.sr-content');
-      const row = content && content.closest('.set-row.done');
-      if (openRow && openRow !== row) closeOpen();
-      if (!row) return;
-      swipeRow = row; startX = e.touches[0].clientX; dx = 0;
+      const r = e.target.closest('.set-row.done');
+      closeOpen(r);
+      if (!r) { row = null; return; }
+      row = r; startX = e.touches[0].clientX; startY = e.touches[0].clientY; dx = 0; mode = null;
     }, { passive: true });
     exosHost.addEventListener('touchmove', (e) => {
-      if (!swipeRow) return;
-      dx = e.touches[0].clientX - startX;
-      const t = Math.max(-76, Math.min(0, dx));
-      swipeRow.querySelector('.sr-content').style.transform = `translateX(${t}px)`;
-    }, { passive: true });
+      if (!row) return;
+      const cx = e.touches[0].clientX; const cy = e.touches[0].clientY;
+      dx = cx - startX; const dy = cy - startY;
+      if (mode === null) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        mode = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
+      }
+      if (mode !== 'h') return;
+      e.preventDefault(); // bloque le scroll vertical pendant le swipe
+      const base = row.classList.contains('swiped') ? -76 : 0;
+      const t = Math.max(-76, Math.min(0, base + dx));
+      row.querySelector('.sr-content').style.transform = `translateX(${t}px)`;
+    }, { passive: false });
     exosHost.addEventListener('touchend', () => {
-      if (!swipeRow) return;
-      const content = swipeRow.querySelector('.sr-content');
-      if (dx < -40) { content.style.transform = 'translateX(-76px)'; swipeRow.classList.add('swiped'); openRow = swipeRow; }
-      else { content.style.transform = ''; swipeRow.classList.remove('swiped'); }
-      swipeRow = null;
+      if (!row || mode !== 'h') { row = null; mode = null; return; }
+      const content = row.querySelector('.sr-content');
+      const wasOpen = row.classList.contains('swiped');
+      const open = wasOpen ? dx < 40 : dx < -40; // ouvrir si glissé assez à gauche
+      if (open) { content.style.transform = 'translateX(-76px)'; row.classList.add('swiped'); openRow = row; }
+      else { content.style.transform = ''; row.classList.remove('swiped'); if (openRow === row) openRow = null; }
+      row = null; mode = null;
     });
   })();
 
@@ -1159,9 +1160,9 @@ function renderVolumeDashboard(host, rerender) {
     options: chartOpts,
   });
 
-  // Graphe amélioration des séances — semaine en cours, axe vertical fixé à [-100, 100] %
+  // Graphe amélioration des séances — 2 dernières semaines, axe vertical fixé à [-100, 100] %
   const sorted = [...store.userData.workouts].sort((a, b) => a.date.localeCompare(b.date));
-  const weekStart = todayISO(-6);
+  const weekStart = todayISO(-13);
   const impPts = [];
   for (const w of sorted) {
     if (w.date < weekStart) continue;
@@ -1211,7 +1212,7 @@ function openExerciseBrowser() {
     list.innerHTML = items.length ? '' : '<div class="empty-state">Aucun résultat</div>';
     for (const { e, name } of items.slice(0, 150)) {
       const b = el(`<button class="exo-search-item"><span>${name}</span><span class="cat">${e.category}</span></button>`);
-      b.addEventListener('click', () => openExerciseDetailSheet(e.id));
+      b.addEventListener('click', () => { close(); openExerciseDetailSheet(e.id); });
       list.appendChild(b);
     }
   };
@@ -1224,6 +1225,7 @@ function openExerciseBrowser() {
 // Graphe de progression d'un muscle : coefficient d'amélioration (%) au fil du temps
 function openMuscleChart(muscleId) {
   const ratio = store.userData.settings.secondaryRatio;
+  const since = todayISO(-13);
   const sorted = [...store.userData.workouts].sort((a, b) => a.date.localeCompare(b.date));
   const series = [];
   for (const w of sorted) {
@@ -1233,6 +1235,7 @@ function openMuscleChart(muscleId) {
   const pts = [];
   for (let i = 1; i < series.length; i++) {
     if (!series[i - 1].v) continue;
+    if (series[i].date < since) continue;
     const imp = Math.round(((series[i].v / series[i - 1].v) - 1) * 100);
     pts.push({ date: series[i].date, v: Math.max(-100, Math.min(100, imp)) });
   }

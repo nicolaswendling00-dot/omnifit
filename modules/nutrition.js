@@ -65,6 +65,11 @@ function openMacroGoalsSheet(rerender) {
       <button data-v="pct" class="${mode === 'pct' ? 'active' : ''}">%</button>
     </div>
     <div id="mg-body"></div>
+    <div style="margin:8px 0 4px">
+      <div class="card-row"><span style="font-size:0.9rem;color:#38BDF8">Fibres / 1000 kcal</span>
+        <span class="num" id="mg-fiber-val" style="color:#38BDF8">${s.fiberPer1000 ?? 10} g</span></div>
+      <input id="mg-fiber-per" type="range" min="5" max="25" step="1" value="${s.fiberPer1000 ?? 10}" style="accent-color:#38BDF8">
+    </div>
     <div class="macro-kcal-sticky">
       <span class="muted">Calories cibles</span>
       <span class="num" id="mg-kcal" style="color:var(--accent);font-size:1.2rem">—</span>
@@ -74,6 +79,8 @@ function openMacroGoalsSheet(rerender) {
   const sheet = openSheet({ title: 'Objectifs macros', content: form });
   const body = form.querySelector('#mg-body');
   const kcalEl = form.querySelector('#mg-kcal');
+  const fiberSlider = form.querySelector('#mg-fiber-per');
+  fiberSlider.addEventListener('input', () => { form.querySelector('#mg-fiber-val').textContent = `${fiberSlider.value} g`; });
   const w = currentWeight();
 
   const renderBody = () => {
@@ -195,6 +202,7 @@ function openMacroGoalsSheet(rerender) {
         fatPct: +body.querySelector('#mgp-f').value,
       } });
     }
+    store.saveUserData({ settings: { fiberPer1000: +fiberSlider.value } });
     sheet.close();
     toast('Objectifs enregistrés', 'success');
     rerender();
@@ -391,7 +399,7 @@ export function render(container) {
   const mg = macroGoals();
   const consumed = Math.round(totals.kcal);
   const remaining = mg.kcalGoal - totals.kcal;
-  const fiberGoal = fiberGoalFromKcal(mg.kcalGoal);
+  const fiberGoal = fiberGoalFromKcal(mg.kcalGoal, store.userData.settings.fiberPer1000 ?? 10);
   const day = store.userData.nutrition.byDate[selectedDate];
   const meals = day ? day.meals : [];
 

@@ -35,9 +35,9 @@ export function calcKcal(prot, carbs, fat) {
   return Math.round(prot * 4 + carbs * 4 + fat * 9);
 }
 
-// Objectif fibres : 15 g pour 1000 kcal d'objectif
-export function fiberGoalFromKcal(kcal) {
-  return Math.round((kcal / 1000) * 15);
+// Objectif fibres : g de fibres pour 1000 kcal d'objectif (défaut 10, réglable)
+export function fiberGoalFromKcal(kcal, per1000 = 10) {
+  return Math.round((kcal / 1000) * per1000);
 }
 
 // Coefficient d'atténuation par muscle sur une séance.
