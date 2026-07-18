@@ -25,8 +25,11 @@ export function exerciseLookup(id) {
   const ov = store.userData.settings.exerciseNames;
   return ov && ov[id] ? { ...e, name: ov[id] } : e;
 }
-function filteredExercises() {
-  const s = store.userData.settings;
+// Normalisation pour recherche : minuscules, sans accents
+function normalizeStr(s) {
+  return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+function filteredExercises() {  const s = store.userData.settings;
   let list = allExercises();
   if (!s.exerciseDbFull) list = list.filter((e) => e.difficulty === 'Beginner' || e.isCustom);
   if (s.equipmentFilter && s.equipmentFilter.length) {
@@ -156,7 +159,8 @@ function openExercisePicker(onPick, title = 'Ajouter un exercice') {
   };
   const list = overlay.querySelector('#exo-list');
   const renderList = (q = '') => {
-    const items = filteredExercises().filter((e) => e.name.toLowerCase().includes(q.toLowerCase()));
+    const nq = normalizeStr(q);
+    const items = filteredExercises().filter((e) => normalizeStr(e.name).includes(nq));
     list.innerHTML = items.length ? '' : '<div class="empty-state">Aucun résultat</div>';
     for (const e of items.slice(0, 80)) {
       const b = el(`<button class="exo-search-item"><span>${e.name}</span><span class="cat">${e.category}</span></button>`);
@@ -440,6 +444,7 @@ function openWorkoutDetail(w, highlightId = null) {
         ? `<span class="wd-sess-imp ${sessImp >= 0 ? 'up' : 'down'}">Amélioration ${sessImp >= 0 ? '+' : ''}${sessImp}%</span>`
         : '<span class="muted">Séance de référence</span>'}
     </div>
+    ${w.notes ? `<div class="wd-note">${String(w.notes).replace(/</g, '&lt;')}</div>` : ''}
     ${w.exercises.map((wx, i) => {
       const def = exerciseLookup(wx.exerciseId) || { name: wx.exerciseId };
       const hl = wx.exerciseId === highlightId;
@@ -587,8 +592,8 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null) {
     </div>
     <div id="s-exos" style="margin-top:12px"></div>
     <button class="btn btn-secondary btn-block" id="s-add-exo" style="margin:6px 0 14px">${icons.plus} Ajouter un exercice</button>
-    <button class="btn btn-primary btn-block" id="s-finish">${icons.check} Terminer la séance</button>
-    <button class="btn btn-ghost btn-block" id="s-quit" style="margin-top:8px">Abandonner</button>
+    <button class="btn btn-primary btn-block" id="s-finish">${icons.check} ${session.editingId ? 'Valider les modifications' : 'Terminer la séance'}</button>
+    <button class="btn btn-ghost btn-block" id="s-quit" style="margin-top:8px">${session.editingId ? 'Annuler les modifications' : 'Abandonner'}</button>
   </div>`);
   document.body.appendChild(overlay);
   document.body.classList.add('overlay-open');
@@ -643,11 +648,14 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null) {
         const s = confirmed ? wx.sets[i] : null;
         const prev = prevSets[i];
         rowsHtml += `<div class="set-row${confirmed ? ' done' : ''}" data-idx="${idx}" data-set="${i}">
-          <span class="sr-n">${i + 1}</span>
-          <button class="sr-prev" data-prev="${i}" ${prev ? '' : 'disabled'}>${prev ? `${prev.weight} × ${prev.reps}` : '–'}</button>
-          <input class="sr-kg" type="number" inputmode="decimal" step="0.5" min="0" value="${confirmed ? s.weight : ''}" placeholder="${prev ? prev.weight : ''}">
-          <input class="sr-reps" type="number" inputmode="numeric" min="1" value="${confirmed ? s.reps : ''}" placeholder="${prev ? prev.reps : ''}">
-          <button class="sr-check${confirmed ? ' on' : ''}" data-check="${i}" aria-label="Valider la série">${icons.check}</button>
+          ${confirmed ? '<button class="sr-del" data-del aria-label="Supprimer la série">' + icons.trash + '</button>' : ''}
+          <div class="sr-content">
+            <span class="sr-n">${i + 1}</span>
+            <button class="sr-prev" data-prev="${i}" ${prev ? '' : 'disabled'}>${prev ? `${prev.weight} × ${prev.reps}` : '–'}</button>
+            <input class="sr-kg" type="number" inputmode="decimal" step="0.5" min="0" value="${confirmed ? s.weight : ''}" placeholder="${prev ? prev.weight : ''}">
+            <input class="sr-reps" type="number" inputmode="numeric" min="1" value="${confirmed ? s.reps : ''}" placeholder="${prev ? prev.reps : ''}">
+            <button class="sr-check${confirmed ? ' on' : ''}" data-check="${i}" aria-label="Valider la série">${icons.check}</button>
+          </div>
         </div>`;
       }
 
@@ -705,6 +713,13 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null) {
       }
       return;
     }
+    const delBtn = e.target.closest('.sr-del');
+    if (delBtn) {
+      const row = delBtn.closest('.set-row');
+      session.exercises[+row.dataset.idx].sets.splice(+row.dataset.set, 1);
+      renderExos();
+      return;
+    }
     const detailBtn = e.target.closest('[data-detail]');
     if (detailBtn) { openExerciseDetailSheet(session.exercises[+detailBtn.dataset.detail].exerciseId); return; }
     const menuBtn = e.target.closest('[data-menu]');
@@ -726,13 +741,45 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null) {
     }
   });
 
+  // Swipe vers la gauche sur une série validée → révèle la poubelle rouge
+  (() => {
+    const exosHost = overlay.querySelector('#s-exos');
+    let swipeRow = null; let startX = 0; let dx = 0; let openRow = null;
+    const closeOpen = () => { if (openRow) { openRow.querySelector('.sr-content').style.transform = ''; openRow.classList.remove('swiped'); openRow = null; } };
+    exosHost.addEventListener('touchstart', (e) => {
+      if (e.target.closest('input, button')) { return; }
+      const content = e.target.closest('.sr-content');
+      const row = content && content.closest('.set-row.done');
+      if (openRow && openRow !== row) closeOpen();
+      if (!row) return;
+      swipeRow = row; startX = e.touches[0].clientX; dx = 0;
+    }, { passive: true });
+    exosHost.addEventListener('touchmove', (e) => {
+      if (!swipeRow) return;
+      dx = e.touches[0].clientX - startX;
+      const t = Math.max(-76, Math.min(0, dx));
+      swipeRow.querySelector('.sr-content').style.transform = `translateX(${t}px)`;
+    }, { passive: true });
+    exosHost.addEventListener('touchend', () => {
+      if (!swipeRow) return;
+      const content = swipeRow.querySelector('.sr-content');
+      if (dx < -40) { content.style.transform = 'translateX(-76px)'; swipeRow.classList.add('swiped'); openRow = swipeRow; }
+      else { content.style.transform = ''; swipeRow.classList.remove('swiped'); }
+      swipeRow = null;
+    });
+  })();
+
   overlay.querySelector('#s-playpause').addEventListener('click', (e) => {
     session.running = !session.running;
     e.currentTarget.innerHTML = session.running ? icons.pause : icons.play;
   });
   overlay.querySelector('#s-minimize').addEventListener('click', minimizeSession);
   overlay.querySelector('#s-quit').addEventListener('click', () => {
-    confirmModal('Abandonner', 'La séance sera perdue. Continuer ?', closeSession, true);
+    confirmModal(
+      session.editingId ? 'Annuler les modifications' : 'Abandonner',
+      session.editingId ? 'Les modifications ne seront pas enregistrées. Continuer ?' : 'La séance sera perdue. Continuer ?',
+      closeSession, true,
+    );
   });
   overlay.querySelector('#s-add-exo').addEventListener('click', () => {
     openExercisePicker((exo) => {
@@ -774,7 +821,30 @@ function showSummary(exercises, closeSession) {
         return `<tr><td>${muscleLabel(m)}</td><td class="tnum" style="color:var(--accent)">${atten[m].toFixed(2)}</td><td>${imp != null ? impBadge(imp, false) : '<span class="muted">—</span>'}</td></tr>`;
       }).join('')}</tbody>
     </table>
+    <button class="btn btn-secondary btn-block" id="sum-note" style="margin-top:14px">${icons.edit} <span id="sum-note-lbl">${session.notes ? 'Modifier la note' : 'Note de séance'}</span></button>
+    ${session.notes ? `<div class="wd-note" id="sum-note-preview" style="margin-top:8px">${session.notes}</div>` : '<div id="sum-note-preview"></div>'}
   </div>`);
+
+  content.querySelector('#sum-note').addEventListener('click', () => {
+    const ta = el(`<textarea class="note-input" rows="4" placeholder="Ressenti, charges, douleurs…">${(session.notes || '').replace(/</g, '&lt;')}</textarea>`);
+    openModal({
+      title: 'Note de séance',
+      content: ta,
+      actions: [
+        { label: 'Annuler' },
+        {
+          label: 'Enregistrer', variant: 'btn-primary',
+          onClick: (body) => {
+            session.notes = body.querySelector('.note-input').value.trim();
+            content.querySelector('#sum-note-lbl').textContent = session.notes ? 'Modifier la note' : 'Note de séance';
+            content.querySelector('#sum-note-preview').outerHTML = session.notes
+              ? `<div class="wd-note" id="sum-note-preview" style="margin-top:8px">${session.notes.replace(/</g, '&lt;')}</div>`
+              : '<div id="sum-note-preview"></div>';
+          },
+        },
+      ],
+    });
+  });
 
   openModal({
     title: 'Résumé de séance',
@@ -1089,53 +1159,100 @@ function renderVolumeDashboard(host, rerender) {
     options: chartOpts,
   });
 
-  // Graphe amélioration des séances au fil du temps
+  // Graphe amélioration des séances — semaine en cours, axe vertical fixé à [-100, 100] %
   const sorted = [...store.userData.workouts].sort((a, b) => a.date.localeCompare(b.date));
+  const weekStart = todayISO(-6);
   const impPts = [];
   for (const w of sorted) {
+    if (w.date < weekStart) continue;
     const si = sessionImprovement(w);
-    if (si != null) impPts.push({ date: w.date, v: si });
+    if (si != null) impPts.push({ date: w.date, v: Math.max(-100, Math.min(100, si)) });
   }
   if (impChart) impChart.destroy();
   impChart = new Chart(card.querySelector('#imp-chart'), {
     type: 'line',
     data: {
       labels: impPts.map((p) => p.date.slice(5)),
-      datasets: [{ data: impPts.map((p) => p.v), borderColor: '#22D3A6', backgroundColor: 'rgba(34,211,166,0.14)', fill: true, tension: 0.3, pointRadius: 2 }],
+      datasets: [{ data: impPts.map((p) => p.v), borderColor: '#22D3A6', backgroundColor: 'rgba(34,211,166,0.14)', fill: true, tension: 0.3, pointRadius: 3 }],
     },
-    options: chartOpts,
+    options: {
+      ...chartOpts,
+      scales: {
+        x: chartOpts.scales.x,
+        y: { ...chartOpts.scales.y, min: -100, max: 100, ticks: { ...chartOpts.scales.y.ticks, callback: (v) => v + '%' } },
+      },
+    },
   });
 
   const vgBtn = card.querySelector('#vol-goals-btn');
   if (vgBtn && rerender) vgBtn.addEventListener('click', () => openVolumeGoalsModal(rerender));
 }
 
-// Graphe de progression d'un muscle (volume par séance au fil du temps)
+// Navigateur d'exercices : liste + recherche (sans accents) → statistiques
+function openExerciseBrowser() {
+  const overlay = el(`<div class="picker-overlay">
+    <div class="picker-topbar">
+      <input id="xb-search" type="text" placeholder="Rechercher un exercice…" autocomplete="off">
+      <button class="icon-btn" id="xb-close" aria-label="Fermer">${icons.close}</button>
+    </div>
+    <div class="picker-list" id="xb-list"></div>
+  </div>`);
+  document.body.appendChild(overlay);
+  const wasOpen = document.body.classList.contains('overlay-open');
+  document.body.classList.add('overlay-open');
+  const close = () => { overlay.remove(); if (!wasOpen) document.body.classList.remove('overlay-open'); };
+  const list = overlay.querySelector('#xb-list');
+  const draw = (q = '') => {
+    const nq = normalizeStr(q);
+    const items = allExercises()
+      .map((e) => ({ e, name: (exerciseLookup(e.id) || e).name }))
+      .filter((x) => normalizeStr(x.name).includes(nq))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    list.innerHTML = items.length ? '' : '<div class="empty-state">Aucun résultat</div>';
+    for (const { e, name } of items.slice(0, 150)) {
+      const b = el(`<button class="exo-search-item"><span>${name}</span><span class="cat">${e.category}</span></button>`);
+      b.addEventListener('click', () => openExerciseDetailSheet(e.id));
+      list.appendChild(b);
+    }
+  };
+  draw();
+  overlay.querySelector('#xb-search').addEventListener('input', (e) => draw(e.target.value));
+  overlay.querySelector('#xb-close').addEventListener('click', close);
+  setTimeout(() => overlay.querySelector('#xb-search').focus(), 250);
+}
+
+// Graphe de progression d'un muscle : coefficient d'amélioration (%) au fil du temps
 function openMuscleChart(muscleId) {
   const ratio = store.userData.settings.secondaryRatio;
   const sorted = [...store.userData.workouts].sort((a, b) => a.date.localeCompare(b.date));
-  const pts = [];
+  const series = [];
   for (const w of sorted) {
     const bm = workoutMuscleVolume(w, exerciseLookup, ratio);
-    if (bm[muscleId]) pts.push({ date: w.date, v: Math.round(bm[muscleId]) });
+    if (bm[muscleId]) series.push({ date: w.date, v: bm[muscleId] });
+  }
+  const pts = [];
+  for (let i = 1; i < series.length; i++) {
+    if (!series[i - 1].v) continue;
+    const imp = Math.round(((series[i].v / series[i - 1].v) - 1) * 100);
+    pts.push({ date: series[i].date, v: Math.max(-100, Math.min(100, imp)) });
   }
   const content = el(`<div>
-    ${pts.length ? '' : '<div class="empty-state">Aucune donnée pour ce muscle</div>'}
+    ${pts.length ? '' : '<div class="empty-state">Pas assez de données pour ce muscle</div>'}
     <div class="chart-wrap" style="height:240px"><canvas id="mus-chart"></canvas></div>
   </div>`);
-  openModal({ title: `Progression – ${muscleLabel(muscleId)}`, content, wide: true, actions: [{ label: 'Fermer', variant: 'btn-primary' }] });
+  openModal({ title: `Amélioration – ${muscleLabel(muscleId)}`, content, wide: true, actions: [{ label: 'Fermer', variant: 'btn-primary' }] });
   if (!pts.length) return;
   const opts = {
     responsive: true, maintainAspectRatio: false,
     plugins: { legend: { display: false } },
     scales: {
       x: { ticks: { color: '#9CA3AF', font: { size: 8, family: 'Inter' } }, grid: { color: 'rgba(0,217,255,0.06)' } },
-      y: { ticks: { color: '#9CA3AF', font: { size: 9, family: 'Inter' } }, grid: { color: 'rgba(0,217,255,0.06)' } },
+      y: { min: -100, max: 100, ticks: { color: '#9CA3AF', font: { size: 9, family: 'Inter' }, callback: (v) => v + '%' }, grid: { color: 'rgba(0,217,255,0.06)' } },
     },
   };
   new Chart(content.querySelector('#mus-chart'), {
     type: 'line',
-    data: { labels: pts.map((p) => p.date.slice(5)), datasets: [{ data: pts.map((p) => p.v), borderColor: '#00D9FF', backgroundColor: 'rgba(0,217,255,0.15)', fill: true, tension: 0.3, pointRadius: 2 }] },
+    data: { labels: pts.map((p) => p.date.slice(5)), datasets: [{ data: pts.map((p) => p.v), borderColor: '#00D9FF', backgroundColor: 'rgba(0,217,255,0.15)', fill: true, tension: 0.3, pointRadius: 3 }] },
     options: opts,
   });
 }
@@ -1165,6 +1282,7 @@ export function render(container) {
       <div id="routine-list">${routines.length ? '' : '<div class="empty-state">Aucune routine</div>'}</div>
     </div>
     <div id="volume-host"></div>
+    <button class="btn btn-secondary btn-block" id="btn-exo-browser" style="margin-top:6px">${icons.book} Exercices & statistiques</button>
   </div>`);
   container.appendChild(root);
 
@@ -1199,4 +1317,5 @@ export function render(container) {
 
   renderVolumeDashboard(root.querySelector('#volume-host'), rerender);
   renderTwoWeekCalendar(root.querySelector('#calendar-host'));
+  root.querySelector('#btn-exo-browser').addEventListener('click', openExerciseBrowser);
 }

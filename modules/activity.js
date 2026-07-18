@@ -99,9 +99,14 @@ export function render(container) {
       </div>
 
       <div class="card card-glow steps-hero">
-        ${ringSVG({ size: 140, stroke: 11, progress: steps / stepGoal(), label: '', color: steps >= stepGoal() ? 'var(--success)' : 'var(--accent)' })}
-        <div class="big">${steps.toLocaleString('fr-FR')} / ${stepGoal().toLocaleString('fr-FR')}</div>
-        <div class="sub">pas aujourd'hui</div>
+        <div class="kcal-total">
+          <span class="num kcal-consumed">${steps.toLocaleString('fr-FR')}</span>
+          <span class="kcal-sep">/ ${stepGoal().toLocaleString('fr-FR')} pas</span>
+        </div>
+        <div class="kcal-sub">
+          <span>${steps >= stepGoal() ? 'Objectif atteint' : `${(stepGoal() - steps).toLocaleString('fr-FR')} pas restants`}</span>
+        </div>
+        <div class="progress-bar ${steps >= stepGoal() ? 'green' : ''}" style="margin-top:8px"><div style="width:${Math.min(100, (steps / stepGoal()) * 100)}%"></div></div>
       </div>
 
       <div class="card">

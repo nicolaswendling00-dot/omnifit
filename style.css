@@ -456,11 +456,14 @@ body.theme-amoled .session-top { background: rgba(0,0,0,0.94); }
 
 /* Table de séries en séance (SÉRIE · PRÉC · KG · RÉPS · ✓) */
 .set-table { margin-top: 8px; }
-.set-thead, .set-row { display: grid; grid-template-columns: 0.55fr 1.25fr 1fr 1fr 0.7fr; gap: 6px; align-items: center; }
+.set-thead, .sr-content { display: grid; grid-template-columns: 0.55fr 1.25fr 1fr 1fr 0.7fr; gap: 6px; align-items: center; }
 .set-thead { padding: 0 2px 6px; }
 .set-thead span { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em; color: var(--text-2); text-align: center; }
 .set-thead span:first-child { text-align: left; }
-.set-row { margin-bottom: 6px; }
+.set-row { position: relative; margin-bottom: 6px; overflow: hidden; border-radius: 10px; }
+.sr-content { background: var(--surface); transition: transform 180ms var(--ease); position: relative; z-index: 1; }
+.sr-del { position: absolute; top: 0; right: 0; bottom: 0; width: 70px; border: none; border-radius: 10px; background: var(--danger); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 0; }
+.sr-del svg { width: 22px; height: 22px; }
 .set-row .sr-n { font-size: 1.1rem; font-weight: 800; color: var(--text); text-align: center; font-variant-numeric: tabular-nums; }
 .sr-prev { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; color: var(--text-2); font-family: inherit; font-size: 0.8rem; font-variant-numeric: tabular-nums; min-height: 44px; cursor: pointer; }
 .sr-prev:active:not(:disabled) { border-color: var(--accent); color: var(--accent); }
@@ -470,6 +473,10 @@ body.theme-amoled .session-top { background: rgba(0,0,0,0.94); }
 .sr-check svg { width: 20px; height: 20px; }
 .sr-check.on { background: var(--accent); border-color: var(--accent); color: #04101d; }
 .set-row.done .sr-kg, .set-row.done .sr-reps { color: var(--text); }
+
+/* Note de séance */
+.wd-note { background: var(--surface-2); border-left: 3px solid var(--accent); border-radius: 8px; padding: 10px 12px; font-size: 0.9rem; color: var(--text); white-space: pre-wrap; margin-bottom: 12px; }
+.note-input { width: 100%; min-height: 90px; font-family: inherit; font-size: 1rem; padding: 10px 12px; resize: vertical; }
 
 /* Lignes muscle cliquables (Volume hebdo) */
 .vol-row { cursor: pointer; }

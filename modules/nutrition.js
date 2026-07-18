@@ -391,7 +391,7 @@ export function render(container) {
   const mg = macroGoals();
   const consumed = Math.round(totals.kcal);
   const remaining = mg.kcalGoal - totals.kcal;
-  const fiberGoal = fiberGoalFromKcal(totals.kcal);
+  const fiberGoal = fiberGoalFromKcal(mg.kcalGoal);
   const day = store.userData.nutrition.byDate[selectedDate];
   const meals = day ? day.meals : [];
 

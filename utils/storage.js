@@ -34,8 +34,8 @@ function defaultUserData() {
       restByExercise: {},
       exerciseNames: {},
       volumeTrackingEnabled: true,
-      showCExo: false,
-      secondaryRatio: 1.0,
+      showCExo: true,
+      secondaryRatio: 0.5,
       exerciseDbFull: true,
       equipmentFilter: [],
       customExercises: [],
@@ -88,7 +88,14 @@ class StorageManager {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return defaultUserData();
-      return deepMerge(defaultUserData(), JSON.parse(raw));
+      const data = deepMerge(defaultUserData(), JSON.parse(raw));
+      // Migration v3.3 : ratio secondaires fixé à 0.5 et badges C_exo/C_muscle activés
+      if (!data.settings._v33) {
+        data.settings.secondaryRatio = 0.5;
+        data.settings.showCExo = true;
+        data.settings._v33 = true;
+      }
+      return data;
     } catch (e) {
       console.error('Erreur chargement userData', e);
       return defaultUserData();

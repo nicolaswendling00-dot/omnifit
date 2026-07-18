@@ -4,7 +4,7 @@ import { harrisBenedict } from '../utils/math.js';
 import { EQUIPMENT_TYPES } from '../data/exercises.js';
 import { el, icons, openModal, toast, confirmModal } from '../utils/ui.js';
 
-const VERSION = '3.2';
+const VERSION = '3.3';
 
 function toggleRow(label, key, sub = '') {
   const s = store.userData.settings;
@@ -113,11 +113,6 @@ export function render(container) {
         <div class="row-label" style="margin-bottom:6px">Filtre équipement <span class="muted">(aucun = tout)</span></div>
         <div id="equip-filter" style="display:flex;flex-wrap:wrap;gap:6px"></div>
       </div>
-      <div id="row-cexo"></div>
-      <div class="settings-row" style="flex-direction:column;align-items:stretch">
-        <div class="card-row"><span class="row-label">Ratio secondaires</span><span class="num" id="ratio-val" style="color:var(--accent)">${s.secondaryRatio.toFixed(1)}</span></div>
-        <input id="set-ratio" type="range" min="0.5" max="2.0" step="0.1" value="${s.secondaryRatio}">
-      </div>
     </div>
 
     <!-- 4. NUTRITION -->
@@ -183,7 +178,6 @@ export function render(container) {
 
   root.querySelector('#row-vol-tracking').replaceWith(toggleRow('Volume tracking', 'volumeTrackingEnabled'));
   root.querySelector('#row-db-full').replaceWith(toggleRow('Base complète', 'exerciseDbFull', 'Décoché : débutant uniquement'));
-  root.querySelector('#row-cexo').replaceWith(toggleRow('C_exo / C_muscle', 'showCExo', 'Badges avancés en séance'));
   const rowsInt = root.querySelector('#rows-interface');
   rowsInt.appendChild(toggleRow('Son', 'soundEnabled'));
   rowsInt.appendChild(toggleRow('Haptique', 'hapticEnabled'));
@@ -218,7 +212,6 @@ export function render(container) {
     inp.addEventListener('change', () => { store.saveUserData({ settings: { [key]: parse(inp.value) } }); });
   };
   bindRange('#set-rest', '#rest-val', 'restTimerDefault', (v) => `${v}s`, (v) => parseInt(v, 10));
-  bindRange('#set-ratio', '#ratio-val', 'secondaryRatio', (v) => parseFloat(v).toFixed(1));
   bindRange('#set-water', '#water-val', 'waterGoal', (v) => `${v}L`);
 
   root.querySelector('#seg-theme').addEventListener('click', (e) => {
