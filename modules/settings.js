@@ -4,7 +4,7 @@ import { harrisBenedict } from '../utils/math.js';
 import { EQUIPMENT_TYPES } from '../data/exercises.js';
 import { el, icons, openModal, toast, confirmModal } from '../utils/ui.js';
 
-const VERSION = '3.7';
+const VERSION = '3.8';
 
 function toggleRow(label, key, sub = '') {
   const s = store.userData.settings;
@@ -79,24 +79,6 @@ export function render(container) {
           </div>
         </div>
         <button class="icon-btn" id="btn-edit-profile" aria-label="Modifier">${icons.edit}</button>
-      </div>
-    </div>
-
-    <!-- 2. OBJECTIFS -->
-    <div class="card settings-section">
-      <h3>Objectifs</h3>
-      <div class="settings-row">
-        <span class="row-label">Objectif global</span>
-        <select id="set-goal-type" style="max-width:170px">
-          ${['Perte de poids', 'Prise de muscle', 'Recomposition'].map((t) => `<option ${t === u.goal.type ? 'selected' : ''}>${t}</option>`).join('')}
-        </select>
-      </div>
-      <div class="settings-row">
-        <span class="row-label">Objectif de pas / jour</span>
-        <input id="set-steps" type="number" inputmode="numeric" step="500" min="0" value="${s.stepsGoal || 10000}" style="width:110px;min-height:40px">
-      </div>
-      <div class="settings-row">
-        <div><div class="row-label">Calories & macros</div><div class="row-sub">Gérés dans l'onglet Nutrition</div></div>
       </div>
     </div>
 
@@ -179,7 +161,6 @@ export function render(container) {
   root.querySelector('#row-vol-tracking').replaceWith(toggleRow('Volume tracking', 'volumeTrackingEnabled'));
   root.querySelector('#row-db-full').replaceWith(toggleRow('Base complète', 'exerciseDbFull', 'Décoché : débutant uniquement'));
   const rowsInt = root.querySelector('#rows-interface');
-  rowsInt.appendChild(toggleRow('Son', 'soundEnabled'));
   rowsInt.appendChild(toggleRow('Haptique', 'hapticEnabled'));
   rowsInt.appendChild(toggleRow('Notifications', 'notificationsEnabled'));
 
@@ -198,13 +179,6 @@ export function render(container) {
   }
 
   root.querySelector('#btn-edit-profile').addEventListener('click', () => openProfileModal(rerender));
-  root.querySelector('#set-goal-type').addEventListener('change', (e) => {
-    store.saveUserData({ goal: { type: e.target.value } });
-    rerender();
-  });
-  root.querySelector('#set-steps').addEventListener('change', (e) => {
-    store.saveUserData({ settings: { stepsGoal: parseInt(e.target.value, 10) || 10000 } });
-  });
 
   const bindRange = (id, valId, key, fmt = (v) => v, parse = parseFloat) => {
     const inp = root.querySelector(id);

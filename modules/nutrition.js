@@ -462,7 +462,6 @@ export function render(container) {
           <h3 style="margin:0">Repas</h3>
           <div style="display:flex;gap:6px">
             <button class="btn btn-ghost btn-sm" id="btn-recipes" aria-label="Recettes">${icons.book}</button>
-            <button class="btn btn-secondary btn-sm" id="btn-add-meal-2">${icons.plus} Ajouter</button>
           </div>
         </div>
         <div id="meal-list">
@@ -518,7 +517,6 @@ export function render(container) {
   if (active && active.scrollIntoView) active.scrollIntoView({ inline: 'center', block: 'nearest' });
 
   container.querySelector('#btn-macro-goals').addEventListener('click', () => openMacroGoalsSheet(rerender));
-  container.querySelector('#btn-add-meal-2').addEventListener('click', () => openAddMealSheet(rerender));
   container.querySelector('#btn-recipes').addEventListener('click', () => openRecipesSheet(rerender));
   ensureFab();
 }

@@ -44,9 +44,9 @@ function defaultUserData() {
         chest: 12, back: 14, shoulders: 10, biceps: 8, triceps: 8, forearms: 4,
         quads: 12, hamstrings: 8, glutes: 10, calves: 6, core: 8, lowerback: 4,
       },
-      theme: 'dark',
-      density: 'normal',
-      soundEnabled: true,
+      theme: 'amoled',
+      density: 'spacious',
+      soundEnabled: false,
       hapticEnabled: true,
       notificationsEnabled: false,
       notifWeight: false,
@@ -95,6 +95,13 @@ class StorageManager {
         data.settings.secondaryRatio = 0.5;
         data.settings.showCExo = true;
         data.settings._v33 = true;
+      }
+      // Migration v3.7 : thème AMOLED + densité spacieuse par défaut, sons retirés
+      if (!data.settings._v37) {
+        data.settings.theme = 'amoled';
+        data.settings.density = 'spacious';
+        data.settings.soundEnabled = false;
+        data.settings._v37 = true;
       }
       return data;
     } catch (e) {

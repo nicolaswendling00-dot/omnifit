@@ -29,6 +29,28 @@ export function exerciseLookup(id) {
 function normalizeStr(s) {
   return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
+// Synonymes anglais/familiers par muscle et catégorie (recherche inclusive)
+const MUSCLE_SYN = {
+  chest: 'chest pecs pectoraux', back: 'back dos lats dorsaux', shoulders: 'shoulders epaules delts deltoides',
+  biceps: 'biceps', triceps: 'triceps', forearms: 'forearms avant-bras grip',
+  quads: 'quads quadriceps legs jambes cuisses', hamstrings: 'hamstrings ischios legs jambes',
+  glutes: 'glutes fessiers', calves: 'calves mollets', core: 'core abs abdos abdominaux', lowerback: 'lower back lombaires',
+};
+const CAT_SYN = {
+  Chest: 'chest pecs', Back: 'back dos', Shoulders: 'shoulders epaules', Biceps: 'biceps', Triceps: 'triceps',
+  Forearms: 'forearms avant-bras', Quads: 'quads legs jambes', Hamstrings: 'hamstrings ischios',
+  Glutes: 'glutes fessiers', Calves: 'calves mollets', Core: 'core abs', 'Lower Back': 'lower back lombaires', FullBody: 'full body cardio',
+};
+function exoKeywords(e) {
+  const parts = [(exerciseLookup(e.id) || e).name, e.category, CAT_SYN[e.category] || ''];
+  for (const m of [...e.primaryMuscles, ...e.secondaryMuscles]) {
+    parts.push(m.m, muscleLabel(m.m), MUSCLE_SYN[m.m] || '');
+  }
+  return normalizeStr(parts.join(' '));
+}
+function exoMatches(e, nq) {
+  return !nq || exoKeywords(e).includes(nq);
+}
 function filteredExercises() {  const s = store.userData.settings;
   let list = allExercises();
   if (!s.exerciseDbFull) list = list.filter((e) => e.difficulty === 'Beginner' || e.isCustom);
@@ -160,7 +182,7 @@ function openExercisePicker(onPick, title = 'Ajouter un exercice') {
   const list = overlay.querySelector('#exo-list');
   const renderList = (q = '') => {
     const nq = normalizeStr(q);
-    const items = filteredExercises().filter((e) => normalizeStr(e.name).includes(nq));
+    const items = filteredExercises().filter((e) => exoMatches(e, nq));
     list.innerHTML = items.length ? '' : '<div class="empty-state">Aucun résultat</div>';
     for (const e of items.slice(0, 80)) {
       const b = el(`<button class="exo-search-item"><span>${e.name}</span><span class="cat">${e.category}</span></button>`);
@@ -760,6 +782,17 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null) {
     if (menuBtn) openExoMenu(+menuBtn.dataset.menu);
   });
 
+  // Au clic sur un champ poids/reps déjà rempli : sélectionne tout (ou curseur à la fin)
+  overlay.querySelector('#s-exos').addEventListener('focusin', (e) => {
+    const inp = e.target.closest('.sr-kg, .sr-reps');
+    if (!inp || !inp.value) return;
+    setTimeout(() => {
+      try { inp.select(); } catch (_) {
+        try { inp.setSelectionRange(inp.value.length, inp.value.length); } catch (_) { /* noop */ }
+      }
+    }, 0);
+  });
+
   // Édition inline d'une série déjà validée
   overlay.querySelector('#s-exos').addEventListener('change', (e) => {
     const inp = e.target.closest('.sr-kg, .sr-reps');
@@ -1132,7 +1165,9 @@ function openFullCalendar() {
     months.push([y, m]);
     m++; if (m > 11) { m = 0; y++; }
   }
-  months.reverse().forEach(([yy, mm]) => scroll.appendChild(monthGrid(yy, mm, byDate, todayIso)));
+  months.forEach(([yy, mm]) => scroll.appendChild(monthGrid(yy, mm, byDate, todayIso)));
+  // À l'ouverture : positionné en bas, sur le mois en cours
+  requestAnimationFrame(() => { scroll.scrollTop = scroll.scrollHeight; });
 
   scroll.addEventListener('click', (e) => {
     const b = e.target.closest('.cal-day'); if (!b || b.disabled) return;
@@ -1256,7 +1291,7 @@ function openExerciseBrowser() {
     const nq = normalizeStr(q);
     const items = allExercises()
       .map((e) => ({ e, name: (exerciseLookup(e.id) || e).name }))
-      .filter((x) => normalizeStr(x.name).includes(nq))
+      .filter((x) => exoMatches(x.e, nq))
       .sort((a, b) => a.name.localeCompare(b.name));
     list.innerHTML = items.length ? '' : '<div class="empty-state">Aucun résultat</div>';
     for (const { e, name } of items.slice(0, 150)) {
@@ -1297,13 +1332,14 @@ function openMuscleChart(muscleId) {
   const series = [];
   for (const w of sorted) {
     const bm = workoutMuscleVolume(w, exerciseLookup, ratio);
-    if (bm[muscleId]) series.push({ v: bm[muscleId] });
+    if (bm[muscleId]) series.push({ date: w.date, v: bm[muscleId] });
   }
-  const pts = [];
+  let pts = [];
   for (let i = 1; i < series.length; i++) {
     if (!series[i - 1].v) continue;
-    pts.push(Math.max(-100, Math.min(100, Math.round(((series[i].v / series[i - 1].v) - 1) * 100))));
+    pts.push({ date: series[i].date, v: Math.max(-100, Math.min(100, Math.round(((series[i].v / series[i - 1].v) - 1) * 100))) });
   }
+  pts = pts.slice(-6); // zoom sur les 6 derniers entraînements
 
   const content = el(`<div>
     <h3 style="margin:0 0 4px">Exercices cette semaine</h3>
@@ -1337,7 +1373,7 @@ function openMuscleChart(muscleId) {
   };
   new Chart(content.querySelector('#mus-chart'), {
     type: 'line',
-    data: { labels: pts.map((_, i) => i + 1), datasets: [{ data: pts, borderColor: '#00D9FF', backgroundColor: 'rgba(0,217,255,0.15)', fill: true, tension: 0.3, pointRadius: 3 }] },
+    data: { labels: pts.map((p) => p.date.slice(5)), datasets: [{ data: pts.map((p) => p.v), borderColor: '#00D9FF', backgroundColor: 'rgba(0,217,255,0.15)', fill: true, tension: 0.3, pointRadius: 4 }] },
     options: opts,
   });
 }
