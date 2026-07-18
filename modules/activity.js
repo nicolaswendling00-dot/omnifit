@@ -130,7 +130,7 @@ export function render(container) {
           <span>${steps >= stepGoal() ? 'Objectif atteint' : `${(stepGoal() - steps).toLocaleString('fr-FR')} pas restants`}</span>
         </div>
         <div class="progress-bar ${steps >= stepGoal() ? 'green' : ''}" style="margin-top:8px"><div style="width:${Math.min(100, (steps / stepGoal()) * 100)}%"></div></div>
-        <button class="btn btn-ghost btn-sm" id="btn-step-goal" style="margin-top:10px">${icons.edit} Objectif de pas</button>
+        <button class="btn btn-secondary btn-sm btn-block" id="btn-step-goal" style="margin-top:12px">${icons.edit} Modifier l'objectif de pas</button>
       </div>
 
       <div class="card">
