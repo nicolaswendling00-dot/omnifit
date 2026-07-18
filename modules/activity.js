@@ -7,6 +7,29 @@ let stepsChart = null;
 let viewDays = 7;
 const stepGoal = () => store.userData.settings.stepsGoal || 10000;
 
+function openStepGoalModal(rerender) {
+  const form = el(`<div class="field-stack">
+    <label class="field"><span>Objectif de pas / jour</span><input id="sg-value" type="number" inputmode="numeric" step="500" min="0" value="${stepGoal()}" autofocus></label>
+  </div>`);
+  openModal({
+    title: 'Objectif de pas',
+    content: form,
+    actions: [
+      { label: 'Annuler' },
+      {
+        label: 'Enregistrer', variant: 'btn-primary',
+        onClick: (body) => {
+          const v = parseInt(body.querySelector('#sg-value').value, 10);
+          if (!v || v <= 0) { toast('Valeur invalide', 'error'); return 'keep'; }
+          store.saveUserData({ settings: { stepsGoal: v } });
+          haptic();
+          rerender();
+        },
+      },
+    ],
+  });
+}
+
 function openLogStepsModal(rerender, prefill = null) {
   const form = el(`<div class="field-stack">
     <label class="field"><span>Nombre de pas</span><input id="st-count" type="number" inputmode="numeric" min="0" placeholder="8500" value="${prefill ? prefill.count : ''}" autofocus></label>
@@ -107,6 +130,7 @@ export function render(container) {
           <span>${steps >= stepGoal() ? 'Objectif atteint' : `${(stepGoal() - steps).toLocaleString('fr-FR')} pas restants`}</span>
         </div>
         <div class="progress-bar ${steps >= stepGoal() ? 'green' : ''}" style="margin-top:8px"><div style="width:${Math.min(100, (steps / stepGoal()) * 100)}%"></div></div>
+        <button class="btn btn-ghost btn-sm" id="btn-step-goal" style="margin-top:10px">${icons.edit} Objectif de pas</button>
       </div>
 
       <div class="card">
@@ -155,6 +179,7 @@ export function render(container) {
   if (!hasAny) list.innerHTML = '<div class="empty-state">Aucun log de pas.</div>';
 
   container.querySelector('#btn-log-steps').addEventListener('click', () => openLogStepsModal(rerender));
+  container.querySelector('#btn-step-goal').addEventListener('click', () => openStepGoalModal(rerender));
   container.querySelector('#view-toggle').addEventListener('click', (e) => {
     const b = e.target.closest('button');
     if (!b) return;
