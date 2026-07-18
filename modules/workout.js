@@ -381,9 +381,9 @@ function openExerciseDetailSheet(exerciseId) {
   const form = el(`<div>
     <button class="btn btn-secondary btn-sm btn-block" id="ed-rename" style="margin-bottom:12px">${icons.edit} Modifier le nom</button>
     ${best1rm ? `<div class="orm-card">
-      <div class="orm-head">Meilleur 1RM estimé</div>
-      <div class="orm-value">${Math.round(best1rm.orm)} kg</div>
-      <div class="orm-sub">${best1rm.weight} kg × ${best1rm.reps} · ${best1rm.date}</div>
+      <div class="orm-head">Meilleure série</div>
+      <div class="orm-value">${best1rm.weight} kg × ${best1rm.reps}</div>
+      <div class="orm-sub">${best1rm.date}</div>
     </div>` : ''}
     <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px">
       ${def.primaryMuscles.map((m) => `<span class="badge">${muscleLabel(m.m)} ${m.p}%</span>`).join('')}
