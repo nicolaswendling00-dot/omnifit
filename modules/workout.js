@@ -7,6 +7,8 @@ import { calculateCExo, calculateCMuscle, formatTime, workoutMuscleVolume, weekl
 import { el, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong } from '../utils/ui.js';
 
 let volumeChart = null;
+let impChart = null;
+let pageRerender = null;
 let session = null; // { elapsed, running, date, notes, exercises:[{exerciseId, sets:[{weight,reps}], ss}] }
 let sessionUI = null; // { overlay, renderExos, close }
 let chronoInterval = null;
@@ -18,7 +20,10 @@ export function allExercises() {
   return [...EXERCISES, ...(store.userData.settings.customExercises || [])];
 }
 export function exerciseLookup(id) {
-  return allExercises().find((e) => e.id === id);
+  const e = allExercises().find((x) => x.id === id);
+  if (!e) return undefined;
+  const ov = store.userData.settings.exerciseNames;
+  return ov && ov[id] ? { ...e, name: ov[id] } : e;
 }
 function filteredExercises() {
   const s = store.userData.settings;
@@ -80,11 +85,20 @@ const MUSCLE_SHORT = {
   core: 'Abdos', lowerback: 'Lomb.',
 };
 
-// Muscle le plus travaillé d'une séance
+// Muscle le plus travaillé d'une séance — pondéré par le NOMBRE DE SÉRIES
+// (et non le volume : sinon les mollets/presse à fortes charges faussent tout)
 function topMuscle(w) {
-  const bm = workoutMuscleVolume(w, exerciseLookup, store.userData.settings.secondaryRatio);
+  const ratio = store.userData.settings.secondaryRatio;
+  const acc = {};
+  for (const wx of w.exercises) {
+    const def = exerciseLookup(wx.exerciseId);
+    if (!def || !wx.sets.length) continue;
+    const n = wx.sets.length;
+    for (const pm of def.primaryMuscles) acc[pm.m] = (acc[pm.m] || 0) + (pm.p / 100) * n;
+    for (const sm of def.secondaryMuscles) acc[sm.m] = (acc[sm.m] || 0) + (sm.p / 100) * ratio * n;
+  }
   let best = null; let bv = -1;
-  for (const [m, v] of Object.entries(bm)) if (v > bv) { bv = v; best = m; }
+  for (const [m, v] of Object.entries(acc)) if (v > bv) { bv = v; best = m; }
   return best;
 }
 
@@ -349,6 +363,7 @@ function openExerciseDetailSheet(exerciseId) {
     .slice(-12).reverse();
 
   const form = el(`<div>
+    <button class="btn btn-secondary btn-sm btn-block" id="ed-rename" style="margin-bottom:12px">${icons.edit} Modifier le nom</button>
     <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px">
       ${def.primaryMuscles.map((m) => `<span class="badge">${muscleLabel(m.m)} ${m.p}%</span>`).join('')}
       ${def.secondaryMuscles.map((m) => `<span class="badge violet">${muscleLabel(m.m)} ${m.p}%</span>`).join('')}
@@ -363,6 +378,29 @@ function openExerciseDetailSheet(exerciseId) {
   </div>`);
 
   const sheet = openSheet({ title: def.name, content: form });
+
+  form.querySelector('#ed-rename').addEventListener('click', () => {
+    const input = el(`<input type="text" class="rename-input" value="${def.name.replace(/"/g, '&quot;')}" style="width:100%">`);
+    openModal({
+      title: 'Modifier le nom',
+      content: input,
+      actions: [
+        { label: 'Annuler' },
+        {
+          label: 'Enregistrer', variant: 'btn-primary',
+          onClick: (body) => {
+            const name = body.querySelector('.rename-input').value.trim();
+            if (!name) { toast('Nom requis', 'error'); return 'keep'; }
+            const ov = { ...(store.userData.settings.exerciseNames || {}) };
+            ov[exerciseId] = name;
+            store.saveUserData({ settings: { exerciseNames: ov } });
+            toast('Nom modifié', 'success');
+            sheet.close();
+          },
+        },
+      ],
+    });
+  });
 
   const slider = form.querySelector('#ed-rest');
   slider.addEventListener('input', () => { form.querySelector('#ed-rest-val').textContent = slider.value + 's'; });
@@ -426,7 +464,10 @@ function openWorkoutDetail(w, highlightId = null) {
     title: `Séance du ${w.date}`,
     content,
     wide: true,
-    actions: [{ label: 'Fermer', variant: 'btn-primary' }],
+    actions: [
+      { label: 'Fermer' },
+      { label: 'Modifier', variant: 'btn-primary', onClick: () => { if (pageRerender) openSession(pageRerender, null, w); } },
+    ],
   });
 }
 
@@ -514,15 +555,18 @@ function openSupersetSheet(idx) {
 // ============================================================
 // MODE SÉANCE
 // ============================================================
-function openSession(rerenderPage, fromRoutine = null) {
+function openSession(rerenderPage, fromRoutine = null, editWorkout = null) {
   if (session && sessionUI) { restoreSession(); return; }
 
   session = {
-    elapsed: 0,
-    running: true,
-    date: todayISO(),
-    notes: '',
-    exercises: fromRoutine ? fromRoutine.exercises.map((id) => ({ exerciseId: id, sets: [] })) : [],
+    elapsed: editWorkout ? (editWorkout.totalTime || 0) : 0,
+    running: !editWorkout,
+    date: editWorkout ? editWorkout.date : todayISO(),
+    notes: editWorkout ? (editWorkout.notes || '') : '',
+    editingId: editWorkout ? editWorkout.id : null,
+    exercises: editWorkout
+      ? editWorkout.exercises.map((wx) => ({ exerciseId: wx.exerciseId, ss: wx.ss, sets: wx.sets.map((s) => ({ ...s })) }))
+      : (fromRoutine ? fromRoutine.exercises.map((id) => ({ exerciseId: id, sets: [] })) : []),
   };
 
   const overlay = el(`<div class="session-overlay">
@@ -578,7 +622,7 @@ function openSession(rerenderPage, fromRoutine = null) {
       const def = exerciseLookup(wx.exerciseId);
       if (!def) return;
       const last = lastEntry(wx.exerciseId);
-      const lastBest = last ? last.wx.sets.reduce((a, s) => (s.weight > a.weight ? s : a), last.wx.sets[0]) : null;
+      const prevSets = last ? last.wx.sets : [];
       const curVol = exoVolume(wx);
       const imp = exoImprovement(wx.exerciseId, curVol);
       const showC = store.userData.settings.showCExo;
@@ -592,6 +636,21 @@ function openSession(rerenderPage, fromRoutine = null) {
         cBadges = `<span class="badge" style="font-size:0.62rem">C_exo ${cExo.toFixed(0)}</span> <span class="badge" style="font-size:0.62rem">C_m ${calculateCMuscle(pV, sV).toFixed(2)}</span>`;
       }
 
+      const rowCount = Math.max(wx.sets.length + 1, prevSets.length);
+      let rowsHtml = '';
+      for (let i = 0; i < rowCount; i++) {
+        const confirmed = i < wx.sets.length;
+        const s = confirmed ? wx.sets[i] : null;
+        const prev = prevSets[i];
+        rowsHtml += `<div class="set-row${confirmed ? ' done' : ''}" data-idx="${idx}" data-set="${i}">
+          <span class="sr-n">${i + 1}</span>
+          <button class="sr-prev" data-prev="${i}" ${prev ? '' : 'disabled'}>${prev ? `${prev.weight} × ${prev.reps}` : '–'}</button>
+          <input class="sr-kg" type="number" inputmode="decimal" step="0.5" min="0" value="${confirmed ? s.weight : ''}" placeholder="${prev ? prev.weight : ''}">
+          <input class="sr-reps" type="number" inputmode="numeric" min="1" value="${confirmed ? s.reps : ''}" placeholder="${prev ? prev.reps : ''}">
+          <button class="sr-check${confirmed ? ' on' : ''}" data-check="${i}" aria-label="Valider la série">${icons.check}</button>
+        </div>`;
+      }
+
       const card = el(`<div class="card exo-card">
         <div class="exo-head">
           <button class="exo-name-btn" data-detail="${idx}">
@@ -600,12 +659,9 @@ function openSession(rerenderPage, fromRoutine = null) {
           </button>
           <button class="icon-btn" data-menu="${idx}" aria-label="Options">${icons.dots}</button>
         </div>
-        ${lastBest ? `<div class="exo-lastw"><span class="num lw-big">${lastBest.weight} kg</span><span class="lw-sub">dernier · ×${lastBest.reps}</span></div>` : ''}
-        <div>${wx.sets.map((s, i) => `<div class="set-line"><span class="set-n">${i + 1}</span><span><b class="num">${s.weight} kg</b> × ${s.reps}</span></div>`).join('')}</div>
-        <div class="set-inputs">
-          <label class="field"><span>Poids</span><input type="number" inputmode="decimal" step="0.5" min="0" class="in-weight" placeholder="${lastBest ? lastBest.weight : '0'}"></label>
-          <label class="field"><span>Reps</span><input type="number" inputmode="numeric" min="1" class="in-reps" placeholder="${lastBest ? lastBest.reps : '0'}"></label>
-          <button class="btn btn-primary btn-sm" data-addset="${idx}" style="min-height:44px">${icons.plus}</button>
+        <div class="set-table">
+          <div class="set-thead"><span>SÉRIE</span><span>PRÉC</span><span>KG</span><span>RÉPS</span><span></span></div>
+          ${rowsHtml}
         </div>
       </div>`);
       exosHost.appendChild(card);
@@ -616,23 +672,58 @@ function openSession(rerenderPage, fromRoutine = null) {
   renderExos();
 
   overlay.querySelector('#s-exos').addEventListener('click', (e) => {
-    const addBtn = e.target.closest('[data-addset]');
-    if (addBtn) {
-      const idx = +addBtn.dataset.addset;
-      const card = addBtn.closest('.card');
-      const w = parseFloat(card.querySelector('.in-weight').value);
-      const r = parseInt(card.querySelector('.in-reps').value, 10);
-      if (isNaN(w) || !r) { toast('Poids et reps requis', 'error'); return; }
-      session.exercises[idx].sets.push({ weight: w, reps: r });
-      haptic();
-      renderExos();
-      startRestTimer(session.exercises[idx].exerciseId);
+    const prevBtn = e.target.closest('.sr-prev');
+    if (prevBtn) {
+      if (prevBtn.disabled) return;
+      const row = prevBtn.closest('.set-row');
+      const exoIdx = +row.dataset.idx; const i = +row.dataset.set;
+      const last = lastEntry(session.exercises[exoIdx].exerciseId);
+      const prev = last && last.wx.sets[i];
+      if (prev) {
+        row.querySelector('.sr-kg').value = prev.weight;
+        row.querySelector('.sr-reps').value = prev.reps;
+        haptic();
+      }
+      return;
+    }
+    const checkBtn = e.target.closest('.sr-check');
+    if (checkBtn) {
+      const row = checkBtn.closest('.set-row');
+      const exoIdx = +row.dataset.idx; const i = +row.dataset.set;
+      const wxx = session.exercises[exoIdx];
+      if (i < wxx.sets.length) {
+        wxx.sets.splice(i, 1); // décocher = retirer la série
+        renderExos();
+      } else {
+        const w = parseFloat(row.querySelector('.sr-kg').value);
+        const r = parseInt(row.querySelector('.sr-reps').value, 10);
+        if (isNaN(w) || !r) { toast('Poids et reps requis', 'error'); return; }
+        wxx.sets.push({ weight: w, reps: r });
+        haptic();
+        renderExos();
+        startRestTimer(wxx.exerciseId);
+      }
       return;
     }
     const detailBtn = e.target.closest('[data-detail]');
     if (detailBtn) { openExerciseDetailSheet(session.exercises[+detailBtn.dataset.detail].exerciseId); return; }
     const menuBtn = e.target.closest('[data-menu]');
     if (menuBtn) openExoMenu(+menuBtn.dataset.menu);
+  });
+
+  // Édition inline d'une série déjà validée
+  overlay.querySelector('#s-exos').addEventListener('change', (e) => {
+    const inp = e.target.closest('.sr-kg, .sr-reps');
+    if (!inp) return;
+    const row = inp.closest('.set-row');
+    const exoIdx = +row.dataset.idx; const i = +row.dataset.set;
+    const wxx = session.exercises[exoIdx];
+    if (i < wxx.sets.length) {
+      const w = parseFloat(row.querySelector('.sr-kg').value);
+      const r = parseInt(row.querySelector('.sr-reps').value, 10);
+      if (!isNaN(w)) wxx.sets[i].weight = w;
+      if (r) wxx.sets[i].reps = r;
+    }
   });
 
   overlay.querySelector('#s-playpause').addEventListener('click', (e) => {
@@ -694,15 +785,17 @@ function showSummary(exercises, closeSession) {
       {
         label: 'Valider', variant: 'btn-primary',
         onClick: () => {
-          store.addWorkout({
-            id: crypto.randomUUID(),
+          const payload = {
+            id: session.editingId || crypto.randomUUID(),
             date: session.date,
             notes: session.notes,
             exercises,
             totalVolume: Math.round(totalVolume),
             totalTime: session.elapsed,
-          });
-          toast('Séance enregistrée', 'success');
+          };
+          if (session.editingId) store.updateWorkout(payload);
+          else store.addWorkout(payload);
+          toast(session.editingId ? 'Séance mise à jour' : 'Séance enregistrée', 'success');
           closeSession();
         },
       },
@@ -951,10 +1044,10 @@ function renderVolumeDashboard(host, rerender) {
       <button class="btn btn-secondary btn-sm" id="vol-goals-btn">${icons.edit} Objectifs</button>
     </div>
     ${alerts.slice(0, 3).map((a) => `<div class="alert-banner">${a.m.label} en retard (${a.pct}%)</div>`).join('')}
-    <table class="volume-table">
+    <table class="volume-table" id="vol-table">
       <thead><tr><th>Muscle</th><th>Sets</th><th>Obj.</th><th>%</th></tr></thead>
       <tbody>
-        ${rows.map((r) => `<tr>
+        ${rows.map((r) => `<tr class="vol-row" data-m="${r.m.id}">
           <td>${r.m.label}</td>
           <td class="tnum">${r.done}</td>
           <td class="tnum">${r.goal}</td>
@@ -962,9 +1055,18 @@ function renderVolumeDashboard(host, rerender) {
         </tr>`).join('')}
       </tbody>
     </table>
+    <div class="muted" style="font-size:0.68rem;margin-top:4px">Touchez un muscle pour sa progression</div>
     <div class="chart-wrap" style="margin-top:14px;height:180px"><canvas id="vol-chart"></canvas></div>
+    <h3 style="margin-top:16px;margin-bottom:2px">Amélioration des séances</h3>
+    <div class="muted" style="font-size:0.7rem;margin-bottom:6px">Coefficient d'amélioration (%) au fil du temps</div>
+    <div class="chart-wrap" style="height:170px"><canvas id="imp-chart"></canvas></div>
   </div>`);
   host.appendChild(card);
+
+  card.querySelector('#vol-table').addEventListener('click', (e) => {
+    const tr = e.target.closest('.vol-row');
+    if (tr) openMuscleChart(tr.dataset.m);
+  });
 
   const acc = {};
   for (const w of store.userData.workouts) {
@@ -986,8 +1088,56 @@ function renderVolumeDashboard(host, rerender) {
     data: { labels: MUSCLES.map((m) => m.label), datasets: [{ data: MUSCLES.map((m) => Math.round(acc[m.id] || 0)), backgroundColor: 'rgba(0,217,255,0.55)', borderRadius: 5 }] },
     options: chartOpts,
   });
+
+  // Graphe amélioration des séances au fil du temps
+  const sorted = [...store.userData.workouts].sort((a, b) => a.date.localeCompare(b.date));
+  const impPts = [];
+  for (const w of sorted) {
+    const si = sessionImprovement(w);
+    if (si != null) impPts.push({ date: w.date, v: si });
+  }
+  if (impChart) impChart.destroy();
+  impChart = new Chart(card.querySelector('#imp-chart'), {
+    type: 'line',
+    data: {
+      labels: impPts.map((p) => p.date.slice(5)),
+      datasets: [{ data: impPts.map((p) => p.v), borderColor: '#22D3A6', backgroundColor: 'rgba(34,211,166,0.14)', fill: true, tension: 0.3, pointRadius: 2 }],
+    },
+    options: chartOpts,
+  });
+
   const vgBtn = card.querySelector('#vol-goals-btn');
   if (vgBtn && rerender) vgBtn.addEventListener('click', () => openVolumeGoalsModal(rerender));
+}
+
+// Graphe de progression d'un muscle (volume par séance au fil du temps)
+function openMuscleChart(muscleId) {
+  const ratio = store.userData.settings.secondaryRatio;
+  const sorted = [...store.userData.workouts].sort((a, b) => a.date.localeCompare(b.date));
+  const pts = [];
+  for (const w of sorted) {
+    const bm = workoutMuscleVolume(w, exerciseLookup, ratio);
+    if (bm[muscleId]) pts.push({ date: w.date, v: Math.round(bm[muscleId]) });
+  }
+  const content = el(`<div>
+    ${pts.length ? '' : '<div class="empty-state">Aucune donnée pour ce muscle</div>'}
+    <div class="chart-wrap" style="height:240px"><canvas id="mus-chart"></canvas></div>
+  </div>`);
+  openModal({ title: `Progression – ${muscleLabel(muscleId)}`, content, wide: true, actions: [{ label: 'Fermer', variant: 'btn-primary' }] });
+  if (!pts.length) return;
+  const opts = {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { color: '#9CA3AF', font: { size: 8, family: 'Inter' } }, grid: { color: 'rgba(0,217,255,0.06)' } },
+      y: { ticks: { color: '#9CA3AF', font: { size: 9, family: 'Inter' } }, grid: { color: 'rgba(0,217,255,0.06)' } },
+    },
+  };
+  new Chart(content.querySelector('#mus-chart'), {
+    type: 'line',
+    data: { labels: pts.map((p) => p.date.slice(5)), datasets: [{ data: pts.map((p) => p.v), borderColor: '#00D9FF', backgroundColor: 'rgba(0,217,255,0.15)', fill: true, tension: 0.3, pointRadius: 2 }] },
+    options: opts,
+  });
 }
 
 // ============================================================
@@ -995,6 +1145,7 @@ function renderVolumeDashboard(host, rerender) {
 // ============================================================
 export function render(container) {
   const rerender = () => render(container);
+  pageRerender = rerender;
   const routines = store.userData.routines;
   const recent = [...store.userData.workouts].reverse().slice(0, 5);
   const active = !!session;

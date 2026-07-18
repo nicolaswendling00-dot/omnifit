@@ -4,7 +4,7 @@ import { harrisBenedict } from '../utils/math.js';
 import { EQUIPMENT_TYPES } from '../data/exercises.js';
 import { el, icons, openModal, toast, confirmModal } from '../utils/ui.js';
 
-const VERSION = '3.1';
+const VERSION = '3.2';
 
 function toggleRow(label, key, sub = '') {
   const s = store.userData.settings;
@@ -92,15 +92,11 @@ export function render(container) {
         </select>
       </div>
       <div class="settings-row">
-        <div><div class="row-label">Calories auto</div><div class="row-sub">Harris-Benedict depuis le profil</div></div>
-        <label class="switch"><input type="checkbox" id="cal-auto" ${s.calorieAuto ? 'checked' : ''}><span class="slider"></span></label>
+        <span class="row-label">Objectif de pas / jour</span>
+        <input id="set-steps" type="number" inputmode="numeric" step="500" min="0" value="${s.stepsGoal || 10000}" style="width:110px;min-height:40px">
       </div>
       <div class="settings-row">
-        <span class="row-label">Calories (mode %)</span>
-        <input id="set-cal" type="number" inputmode="numeric" step="10" value="${s.calorieGoal}" ${s.calorieAuto ? 'disabled' : ''} style="width:110px;min-height:40px">
-      </div>
-      <div class="settings-row">
-        <div><div class="row-label">Macros P / G / L</div><div class="row-sub">Dans l'onglet Nutrition</div></div>
+        <div><div class="row-label">Calories & macros</div><div class="row-sub">Gérés dans l'onglet Nutrition</div></div>
       </div>
     </div>
 
@@ -210,16 +206,10 @@ export function render(container) {
   root.querySelector('#btn-edit-profile').addEventListener('click', () => openProfileModal(rerender));
   root.querySelector('#set-goal-type').addEventListener('change', (e) => {
     store.saveUserData({ goal: { type: e.target.value } });
-    applyCalorieAuto();
     rerender();
   });
-  root.querySelector('#cal-auto').addEventListener('change', (e) => {
-    store.saveUserData({ settings: { calorieAuto: e.target.checked } });
-    applyCalorieAuto();
-    rerender();
-  });
-  root.querySelector('#set-cal').addEventListener('change', (e) => {
-    store.saveUserData({ settings: { calorieGoal: parseInt(e.target.value, 10) || s.calorieGoal } });
+  root.querySelector('#set-steps').addEventListener('change', (e) => {
+    store.saveUserData({ settings: { stepsGoal: parseInt(e.target.value, 10) || 10000 } });
   });
 
   const bindRange = (id, valId, key, fmt = (v) => v, parse = parseFloat) => {

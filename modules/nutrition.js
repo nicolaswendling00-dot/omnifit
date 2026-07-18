@@ -227,10 +227,10 @@ function openAddMealSheet(rerender, prefill = null) {
     ${recipes.length ? `<div class="muted" style="margin-bottom:6px">Recettes rapides</div>
       <div class="recipe-chips" id="m-recipes">${recipes.map((r) => `<button class="recipe-chip" data-id="${r.id}">${r.name}</button>`).join('')}</div>` : ''}
     <label class="check-row" style="margin:4px 0 12px"><input type="checkbox" id="m-save-recipe"> <span>Enregistrer comme recette</span></label>
-    <button class="btn btn-primary btn-block" id="m-add">${icons.plus} Ajouter</button>
+    <button class="btn btn-primary btn-block" id="m-add">${pf.editId ? icons.check + ' Enregistrer' : icons.plus + ' Ajouter'}</button>
   </div>`);
 
-  const sheet = openSheet({ title: `Repas — ${fmtDateShort(selectedDate)}`, content: form });
+  const sheet = openSheet({ title: pf.editId ? 'Modifier le repas' : `Repas — ${fmtDateShort(selectedDate)}`, content: form });
 
   const upd = () => {
     const p = parseFloat(form.querySelector('#m-prot').value) || 0;
@@ -271,10 +271,16 @@ function openAddMealSheet(rerender, prefill = null) {
     const fiber = parseFloat(form.querySelector('#m-fiber').value) || 0;
     if (!name) { toast('Nom requis', 'error'); return; }
     if (prot + carbs + fat === 0) { toast('Au moins un macro', 'error'); return; }
-    store.addNutritionLog(selectedDate, { name, meal: cat, prot, carbs, fat, fiber, kcal: calcKcal(prot, carbs, fat) });
+    const payload = { name, meal: cat, prot, carbs, fat, fiber, kcal: calcKcal(prot, carbs, fat) };
+    if (pf.editId) {
+      store.updateMeal(selectedDate, pf.editId, payload);
+      toast('Repas modifié', 'success');
+    } else {
+      store.addNutritionLog(selectedDate, payload);
+    }
     if (form.querySelector('#m-save-recipe').checked) {
       store.saveRecipe({ id: crypto.randomUUID(), name, prot, carbs, fat, fiber });
-      toast('Repas + recette enregistrés', 'success');
+      toast('Recette enregistrée', 'success');
     }
     haptic();
     sheet.close();
@@ -461,10 +467,14 @@ export function render(container) {
         </div>
         <div style="display:flex;align-items:center;gap:2px">
           <span class="meal-kcal">${m.kcal}</span>
-          <button class="icon-btn danger" aria-label="Supprimer">${icons.trash}</button>
+          <button class="icon-btn" data-edit aria-label="Modifier">${icons.edit}</button>
+          <button class="icon-btn danger" data-del aria-label="Supprimer">${icons.trash}</button>
         </div>
       </div>`);
-      item.querySelector('.icon-btn').addEventListener('click', () => {
+      item.querySelector('[data-edit]').addEventListener('click', () => {
+        openAddMealSheet(rerender, { editId: m.id, name: m.name, meal: m.meal, prot: m.prot, carbs: m.carbs, fat: m.fat, fiber: m.fiber });
+      });
+      item.querySelector('[data-del]').addEventListener('click', () => {
         confirmModal('Supprimer', `Supprimer « ${m.name} » ?`, () => {
           store.removeMeal(selectedDate, m.id);
           rerender();

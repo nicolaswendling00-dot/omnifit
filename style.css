@@ -453,6 +453,28 @@ body.theme-amoled .session-top { background: rgba(0,0,0,0.94); }
 .set-line .set-n { color: var(--text-2); font-size: 0.7rem; width: 20px; }
 .set-inputs { display: flex; gap: 8px; align-items: flex-end; margin-top: 8px; }
 .set-inputs .field { flex: 1; margin-bottom: 0; }
+
+/* Table de séries en séance (SÉRIE · PRÉC · KG · RÉPS · ✓) */
+.set-table { margin-top: 8px; }
+.set-thead, .set-row { display: grid; grid-template-columns: 0.55fr 1.25fr 1fr 1fr 0.7fr; gap: 6px; align-items: center; }
+.set-thead { padding: 0 2px 6px; }
+.set-thead span { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em; color: var(--text-2); text-align: center; }
+.set-thead span:first-child { text-align: left; }
+.set-row { margin-bottom: 6px; }
+.set-row .sr-n { font-size: 1.1rem; font-weight: 800; color: var(--text); text-align: center; font-variant-numeric: tabular-nums; }
+.sr-prev { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; color: var(--text-2); font-family: inherit; font-size: 0.8rem; font-variant-numeric: tabular-nums; min-height: 44px; cursor: pointer; }
+.sr-prev:active:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.sr-prev:disabled { opacity: 0.4; cursor: default; }
+.set-row .sr-kg, .set-row .sr-reps { min-height: 44px; text-align: center; font-size: 1.1rem; font-weight: 700; padding: 6px 4px; }
+.sr-check { min-height: 44px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-2); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.sr-check svg { width: 20px; height: 20px; }
+.sr-check.on { background: var(--accent); border-color: var(--accent); color: #04101d; }
+.set-row.done .sr-kg, .set-row.done .sr-reps { color: var(--text); }
+
+/* Lignes muscle cliquables (Volume hebdo) */
+.vol-row { cursor: pointer; }
+.vol-row:active { background: rgba(0, 217, 255, 0.08); }
+.rename-input { min-height: 46px; font-size: 1rem; padding: 10px 12px; }
 .ss-chip { font-size: 0.62rem; font-weight: 700; padding: 2px 7px; border-radius: 10px; background: rgba(124, 58, 237, 0.2); color: #A78BFA; border: 1px solid rgba(124, 58, 237, 0.5); }
 
 /* Liste recherche exo */

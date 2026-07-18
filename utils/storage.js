@@ -28,9 +28,11 @@ function defaultUserData() {
       protMult: 2.2,
       fatMult: 1.0,
       waterGoal: 3,
+      stepsGoal: 10000,
       unitSystem: 'kg',
       restTimerDefault: 120,
       restByExercise: {},
+      exerciseNames: {},
       volumeTrackingEnabled: true,
       showCExo: false,
       secondaryRatio: 1.0,
@@ -136,6 +138,14 @@ class StorageManager {
     this.persist();
   }
 
+  updateMeal(date, mealId, meal) {
+    const day = this.userData.nutrition.byDate[date];
+    if (!day) return;
+    const idx = day.meals.findIndex((m) => m.id === mealId);
+    if (idx >= 0) day.meals[idx] = { ...day.meals[idx], ...meal, id: mealId };
+    this.persist();
+  }
+
   dayTotals(date) {
     const day = this.userData.nutrition.byDate[date];
     const t = { kcal: 0, prot: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0 };
@@ -160,6 +170,14 @@ class StorageManager {
 
   addWorkout(workout) {
     this.userData.workouts.push(workout);
+    this.userData.workouts.sort((a, b) => a.date.localeCompare(b.date));
+    this.persist();
+  }
+
+  updateWorkout(workout) {
+    const idx = this.userData.workouts.findIndex((w) => w.id === workout.id);
+    if (idx >= 0) this.userData.workouts[idx] = workout;
+    else this.userData.workouts.push(workout);
     this.userData.workouts.sort((a, b) => a.date.localeCompare(b.date));
     this.persist();
   }

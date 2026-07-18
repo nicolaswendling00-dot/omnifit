@@ -5,15 +5,15 @@ import { el, icons, openModal, toast, ringSVG, fmtDateShort, haptic } from '../u
 
 let stepsChart = null;
 let viewDays = 7;
-const STEP_GOAL = 10000;
+const stepGoal = () => store.userData.settings.stepsGoal || 10000;
 
-function openLogStepsModal(rerender) {
+function openLogStepsModal(rerender, prefill = null) {
   const form = el(`<div class="field-stack">
-    <label class="field"><span>Nombre de pas</span><input id="st-count" type="number" inputmode="numeric" min="0" placeholder="8500" autofocus></label>
-    <label class="field"><span>Date</span><input id="st-date" type="date" value="${todayISO()}"></label>
+    <label class="field"><span>Nombre de pas</span><input id="st-count" type="number" inputmode="numeric" min="0" placeholder="8500" value="${prefill ? prefill.count : ''}" autofocus></label>
+    <label class="field"><span>Date</span><input id="st-date" type="date" value="${prefill ? prefill.date : todayISO()}"></label>
   </div>`);
   openModal({
-    title: 'Log pas',
+    title: prefill ? 'Modifier les pas' : 'Log pas',
     content: form,
     actions: [
       { label: 'Annuler' },
@@ -48,7 +48,7 @@ function renderChart(canvas) {
       datasets: [{
         label: 'Pas',
         data,
-        backgroundColor: data.map((v) => (v >= STEP_GOAL ? 'rgba(16,185,129,0.65)' : 'rgba(0,217,255,0.55)')),
+        backgroundColor: data.map((v) => (v >= stepGoal() ? 'rgba(16,185,129,0.65)' : 'rgba(0,217,255,0.55)')),
         borderRadius: 4,
       }],
     },
@@ -75,7 +75,7 @@ function monthStats() {
   const weekAvg = Math.round(last7.reduce((a, b) => a + b, 0) / 7);
   let record = { date: '—', v: 0 };
   monthDays.forEach((d) => { const v = byDate[d] || 0; if (v > record.v) record = { date: d, v }; });
-  const activeDays = vals.filter((v) => v >= STEP_GOAL).length;
+  const activeDays = vals.filter((v) => v >= stepGoal()).length;
   const sumCur = vals.reduce((a, b) => a + b, 0);
   const sumPrev = prevVals.reduce((a, b) => a + b, 0);
   const trend = calculateTrend(sumCur, sumPrev);
@@ -99,8 +99,8 @@ export function render(container) {
       </div>
 
       <div class="card card-glow steps-hero">
-        ${ringSVG({ size: 140, stroke: 11, progress: steps / STEP_GOAL, label: '', color: steps >= STEP_GOAL ? 'var(--success)' : 'var(--accent)' })}
-        <div class="big">${steps.toLocaleString('fr-FR')} / ${STEP_GOAL.toLocaleString('fr-FR')}</div>
+        ${ringSVG({ size: 140, stroke: 11, progress: steps / stepGoal(), label: '', color: steps >= stepGoal() ? 'var(--success)' : 'var(--accent)' })}
+        <div class="big">${steps.toLocaleString('fr-FR')} / ${stepGoal().toLocaleString('fr-FR')}</div>
         <div class="sub">pas aujourd'hui</div>
       </div>
 
@@ -137,13 +137,15 @@ export function render(container) {
     hasAny = true;
     const prev = store.userData.steps.byDate[todayISO(-i - 1)];
     const delta = prev != null ? v - prev : null;
-    list.appendChild(el(`<div class="steps-list-item">
+    const item = el(`<div class="steps-list-item" style="cursor:pointer">
       <span>${fmtDateShort(d)}</span>
       <span>
         <span class="num">${v.toLocaleString('fr-FR')}</span>
         ${delta != null ? `<span class="${delta >= 0 ? 'delta-up' : 'delta-down'}"> ${delta >= 0 ? '+' : ''}${delta.toLocaleString('fr-FR')}</span>` : ''}
       </span>
-    </div>`));
+    </div>`);
+    item.addEventListener('click', () => openLogStepsModal(rerender, { date: d, count: v }));
+    list.appendChild(item);
   });
   if (!hasAny) list.innerHTML = '<div class="empty-state">Aucun log de pas.</div>';
 
