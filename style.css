@@ -379,7 +379,7 @@ canvas { max-width: 100%; }
 .fab-wrap {
   position: fixed; right: 16px;
   bottom: calc(var(--nav-h) + 16px + var(--safe-b));
-  display: none; flex-direction: column-reverse; align-items: center; gap: 14px;
+  display: none; flex-direction: column; align-items: center; gap: 14px;
   z-index: 40;
 }
 body[data-page="1"] #fab-nutrition-wrap { display: flex; }
@@ -407,8 +407,10 @@ body[data-page="1"] #fab-nutrition-wrap { display: flex; }
 .fab-wrap.fab-open #fab-nutrition { transform: rotate(45deg); }
 
 /* Scan code-barre */
-.bc-reader { width: 100%; border-radius: 14px; overflow: hidden; background: #000; min-height: 260px; }
-.bc-reader video { width: 100% !important; border-radius: 14px; display: block; }
+.bc-reader { width: 100%; border-radius: 14px; overflow: hidden; background: #000; min-height: 260px; display: flex; align-items: center; justify-content: center; }
+.bc-reader video { border-radius: 14px; display: block; max-width: 100%; }
+.bc-manual-row { display: flex; gap: 8px; margin-top: 14px; }
+.bc-manual-row input { flex: 1; min-height: 44px; }
 .bc-product-card { background: var(--surface-2); border-radius: 12px; padding: 12px 14px; }
 .bc-product-name { font-weight: 700; font-size: 1rem; }
 .bc-final-card { text-align: center; margin-top: 14px; padding: 12px; background: rgba(0, 217, 255, 0.06); border-radius: 12px; }

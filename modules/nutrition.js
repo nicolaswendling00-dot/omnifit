@@ -425,6 +425,10 @@ function openBarcodeSheet(rerender) {
     <div id="bc-camera-step">
       <div id="bc-reader" class="bc-reader"></div>
       <div class="muted" id="bc-status" style="text-align:center;margin-top:10px">Vise le code-barre du produit…</div>
+      <div class="bc-manual-row">
+        <input type="text" inputmode="numeric" id="bc-manual-code" placeholder="Ou saisis le code-barre (ex: 3017620422003)">
+        <button class="btn btn-secondary btn-sm" id="bc-manual-go">Valider</button>
+      </div>
     </div>
     <div id="bc-result-step" style="display:none"></div>
   </div>`);
@@ -439,23 +443,32 @@ function openBarcodeSheet(rerender) {
   const cameraStep = content.querySelector('#bc-camera-step');
   const resultStep = content.querySelector('#bc-result-step');
 
-  startBarcodeScanner('bc-reader', {
-    onDetected: async (code) => {
+  async function handleCode(code) {
+    if (stoppedByUser) return;
+    statusEl.textContent = `Code ${code} — recherche du produit…`;
+    try {
+      const product = await fetchProductByBarcode(code);
       if (stoppedByUser) return;
-      statusEl.textContent = `Code détecté : ${code} — recherche du produit…`;
-      try {
-        const product = await fetchProductByBarcode(code);
-        if (stoppedByUser) return;
-        if (!product) {
-          statusEl.textContent = 'Produit introuvable sur Open Food Facts. Ajoute-le manuellement.';
-          return;
-        }
-        showResultStep(product);
-      } catch (e) {
-        if (!stoppedByUser) statusEl.textContent = e.message || 'Erreur lors de la recherche du produit.';
+      if (!product) {
+        statusEl.textContent = 'Produit introuvable sur Open Food Facts. Vérifie le code ou ajoute-le manuellement (menu Ajout rapide).';
+        return;
       }
-    },
-    onError: (msg) => { statusEl.textContent = msg; },
+      if (scannerHandle) scannerHandle.stop();
+      showResultStep(product);
+    } catch (e) {
+      if (!stoppedByUser) statusEl.textContent = e.message || 'Erreur lors de la recherche du produit.';
+    }
+  }
+
+  content.querySelector('#bc-manual-go').addEventListener('click', () => {
+    const code = content.querySelector('#bc-manual-code').value.trim();
+    if (!code) { toast('Entre un code-barre', 'error'); return; }
+    handleCode(code);
+  });
+
+  startBarcodeScanner('bc-reader', {
+    onDetected: (code) => handleCode(code),
+    onError: (msg) => { statusEl.textContent = `${msg} Tu peux saisir le code-barre manuellement ci-dessous.`; },
   }).then((handle) => { scannerHandle = handle; });
 
   function showResultStep(product) {

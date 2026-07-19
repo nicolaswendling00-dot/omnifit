@@ -46,8 +46,14 @@ export async function startBarcodeScanner(elementId, { onDetected, onError }) {
   };
 
   const config = {
-    fps: 10,
-    qrbox: { width: 260, height: 140 },
+    fps: 15,
+    // Zone de scan large et basse : un EAN-13 est un rectangle large et peu haut,
+    // un cadre trop étroit/carré le coupe et empêche la détection.
+    qrbox: (viewfinderWidth, viewfinderHeight) => {
+      const w = Math.floor(viewfinderWidth * 0.85);
+      const h = Math.floor(Math.min(viewfinderHeight * 0.4, w * 0.5));
+      return { width: w, height: h };
+    },
     // Formats code-barres produits courants (EAN-13, EAN-8, UPC-A, UPC-E) + QR au cas où.
     formatsToSupport: window.Html5QrcodeSupportedFormats ? [
       window.Html5QrcodeSupportedFormats.EAN_13,
@@ -56,6 +62,7 @@ export async function startBarcodeScanner(elementId, { onDetected, onError }) {
       window.Html5QrcodeSupportedFormats.UPC_E,
       window.Html5QrcodeSupportedFormats.CODE_128,
     ] : undefined,
+    experimentalFeatures: { useBarCodeDetectorIfSupported: true },
   };
 
   try {
