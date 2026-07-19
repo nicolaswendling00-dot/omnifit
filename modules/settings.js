@@ -1,10 +1,11 @@
 // OmniFit — PAGE 4 : Réglages (macros déplacées dans Nutrition)
 import { store } from '../utils/storage.js';
 import { harrisBenedict } from '../utils/math.js';
-import { EQUIPMENT_TYPES } from '../data/exercises.js';
+import { EQUIPMENT_TYPES, EXERCISES } from '../data/exercises.js';
 import { el, icons, openModal, toast, confirmModal } from '../utils/ui.js';
+import { RANK_ORDER, RANK_META, DIV_LP, ONYX_LP, rankBadge, rankFromLP, estimateRankFromLift, getStandards } from '../utils/ranks.js';
 
-const VERSION = '3.13';
+const VERSION = '3.14';
 
 function toggleRow(label, key, sub = '') {
   const s = store.userData.settings;
@@ -95,6 +96,7 @@ export function render(container) {
         <div class="row-label" style="margin-bottom:6px">Filtre équipement <span class="muted">(aucun = tout)</span></div>
         <div id="equip-filter" style="display:flex;flex-wrap:wrap;gap:6px"></div>
       </div>
+      <button class="btn btn-secondary btn-block" id="btn-rank-ladder" style="margin-top:10px">${icons.book} Classement des rangs & calculateur</button>
     </div>
 
     <!-- 4. NUTRITION -->
@@ -179,6 +181,7 @@ export function render(container) {
   }
 
   root.querySelector('#btn-edit-profile').addEventListener('click', () => openProfileModal(rerender));
+  root.querySelector('#btn-rank-ladder').addEventListener('click', () => openRankLadderModal());
 
   const bindRange = (id, valId, key, fmt = (v) => v, parse = parseFloat) => {
     const inp = root.querySelector(id);
@@ -201,7 +204,7 @@ export function render(container) {
     rerender();
   });
 
-  root.querySelector('#btn-export').addEventListener('click', () => { store.exportJSON(); toast('Export téléchargé', 'success'); });
+  root.querySelector('#btn-export').addEventListener('click', () => openExportModal());
 
   const fileInput = root.querySelector('#import-file');
   root.querySelector('#btn-import').addEventListener('click', () => fileInput.click());
@@ -251,4 +254,100 @@ export function applyTheme() {
   document.body.classList.remove('density-compact', 'density-spacious');
   if (s.density === 'compact') document.body.classList.add('density-compact');
   if (s.density === 'spacious') document.body.classList.add('density-spacious');
+}
+
+function openExportModal() {
+  const cats = [
+    { key: 'weights', label: 'Poids' },
+    { key: 'steps', label: 'Pas' },
+    { key: 'nutrition', label: 'Nutrition' },
+    { key: 'workouts', label: 'Entraînements' },
+  ];
+  const content = el(`<div>
+    <div class="muted" style="font-size:0.78rem;margin-bottom:10px">Choisis les données à inclure dans l'export. Réglages, profil, routines et recettes sont toujours inclus.</div>
+    <div class="field-stack">
+      ${cats.map((c) => `<label class="settings-row" style="cursor:pointer">
+        <span class="row-label">${c.label}</span>
+        <input type="checkbox" class="exp-check" data-cat="${c.key}" checked style="width:20px;height:20px">
+      </label>`).join('')}
+    </div>
+  </div>`);
+  openModal({
+    title: 'Export JSON',
+    content,
+    actions: [
+      { label: 'Annuler' },
+      {
+        label: 'Exporter', variant: 'btn-primary',
+        onClick: (body) => {
+          const opts = {};
+          body.querySelectorAll('.exp-check').forEach((cb) => { opts[cb.dataset.cat] = cb.checked; });
+          if (!Object.values(opts).some(Boolean)) { toast('Coche au moins une catégorie', 'error'); return 'keep'; }
+          store.exportJSONSelective(opts);
+          toast('Export téléchargé', 'success');
+        },
+      },
+    ],
+  });
+}
+
+function openRankLadderModal() {
+  const nameOverrides = store.userData.settings.exerciseNames || {};
+  const allExos = [...EXERCISES, ...(store.userData.settings.customExercises || [])]
+    .map((e) => ({ id: e.id, name: nameOverrides[e.id] || e.name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const ladderRows = RANK_ORDER.map((id, i) => {
+    const meta = RANK_META[id];
+    const lo = i * DIV_LP * 3;
+    const range = id === 'onyx' ? `${ONYX_LP}+ LP` : `${lo} – ${lo + DIV_LP * 3 - 1} LP`;
+    return `<div class="ladder-row">
+      ${rankBadge(id, 52)}
+      <div><div class="ladder-name" style="color:${meta.color}">${meta.name}</div><div class="muted" style="font-size:0.72rem">${range}${id !== 'onyx' ? ' · 3 divisions (III → I)' : ' · rang unique'}</div></div>
+    </div>`;
+  }).join('');
+
+  const content = el(`<div>
+    <h3 style="margin:0 0 8px">Échelle des rangs</h3>
+    <div class="ladder-list">${ladderRows}</div>
+
+    <h3 style="margin:18px 0 8px">Calculateur de rang</h3>
+    <div class="muted" style="font-size:0.75rem;margin-bottom:10px">
+      Estime le rang qu'un exercice te donnerait avec le poids de corps actuel de ton profil.
+      Basé uniquement sur le poids de corps (l'âge n'entre pas dans le calcul).
+    </div>
+    <div class="field-stack">
+      <label class="field"><span>Exercice</span>
+        <select id="calc-exo">${allExos.map((e) => `<option value="${e.id}">${e.name}</option>`).join('')}</select>
+      </label>
+      <div class="grid-2">
+        <label class="field"><span>Poids (kg)</span><input id="calc-weight" type="number" step="0.5" min="0" placeholder="80"></label>
+        <label class="field"><span>Répétitions</span><input id="calc-reps" type="number" step="1" min="1" placeholder="8"></label>
+      </div>
+    </div>
+    <button class="btn btn-primary btn-block" id="calc-run" style="margin-top:6px">Calculer</button>
+    <div id="calc-result" style="margin-top:12px"></div>
+  </div>`);
+
+  openModal({ title: 'Rangs & calculateur', content, wide: true, actions: [{ label: 'Fermer', variant: 'btn-primary' }] });
+
+  content.querySelector('#calc-run').addEventListener('click', () => {
+    const exoId = content.querySelector('#calc-exo').value;
+    const weight = parseFloat(content.querySelector('#calc-weight').value);
+    const reps = parseInt(content.querySelector('#calc-reps').value, 10);
+    const resultHost = content.querySelector('#calc-result');
+    if (!weight || !reps) { resultHost.innerHTML = '<div class="empty-state">Renseigne un poids et des répétitions</div>'; return; }
+    const bw = store.userData.profile.weight;
+    const r = estimateRankFromLift(exoId, weight, reps, bw, getStandards());
+    const tierLabel = { beginner: 'Débutant', novice: 'Novice', intermediate: 'Intermédiaire', advanced: 'Avancé', elite: 'Élite' };
+    resultHost.innerHTML = `
+      <div class="calc-result-card">
+        <div class="calc-result-row"><span>1RM estimé</span><span class="num" style="color:var(--accent)">${r.orm} kg</span></div>
+        <div class="calc-result-row"><span>Niveau StrengthLevel</span><span>${r.hasStandard ? (r.levelTier ? tierLabel[r.levelTier] : 'En dessous de Débutant') : 'Non disponible pour cet exo'}</span></div>
+        <div class="calc-result-row">
+          <span>Rang obtenu</span>
+          <span style="display:flex;align-items:center;gap:8px;color:${r.rank.color};font-weight:700">${r.rank.division ? `${r.rank.name} ${r.rank.division}` : r.rank.name}</span>
+        </div>
+      </div>`;
+  });
 }

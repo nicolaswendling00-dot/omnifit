@@ -197,6 +197,11 @@ class StorageManager {
     this.persist();
   }
 
+  deleteWorkout(id) {
+    this.userData.workouts = this.userData.workouts.filter((w) => w.id !== id);
+    this.persist();
+  }
+
   saveRoutine(routine) {
     const idx = this.userData.routines.findIndex((r) => r.id === routine.id);
     if (idx >= 0) this.userData.routines[idx] = routine;
@@ -231,6 +236,23 @@ class StorageManager {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `omniffit_backup_${todayISO()}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  // Export sélectif : opts = { weights, steps, nutrition, workouts } (booléens).
+  // Les catégories décochées sont vidées ; réglages/profil/routines/recettes restent
+  // toujours inclus (ce sont des définitions, pas des logs de données).
+  exportJSONSelective(opts = {}) {
+    const data = JSON.parse(JSON.stringify(this.userData));
+    if (!opts.weights) data.weights = [];
+    if (!opts.steps) data.steps = { byDate: {} };
+    if (!opts.nutrition) data.nutrition = { byDate: {} };
+    if (!opts.workouts) data.workouts = [];
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `omniffit_export_${todayISO()}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
   }

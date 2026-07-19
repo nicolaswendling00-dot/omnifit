@@ -33,7 +33,11 @@ function normalizeStr(s) {
 }
 // Map LP de tous les exos (avec poids de corps + standards pour le raccourci Onyx)
 function lpMapAll() {
-  return computeExerciseLP(store.userData.workouts, { bodyweight: store.userData.profile && store.userData.profile.weight, standards: getStandards() });
+  return computeExerciseLP(store.userData.workouts, {
+    bodyweight: store.userData.profile && store.userData.profile.weight,
+    weights: store.userData.weights,
+    standards: getStandards(),
+  });
 }
 // Rang d'un exo. Retourne null si l'exo n'a JAMAIS été réalisé (pas de rang affiché).
 function exerciseRank(exerciseId, lpMap) {
@@ -547,6 +551,15 @@ function openWorkoutDetail(w, highlightId = null) {
     wide: true,
     actions: [
       { label: 'Fermer' },
+      { label: 'Supprimer', onClick: (body, close) => {
+        close();
+        confirmModal('Supprimer la séance', `Supprimer définitivement la séance du ${w.date} ?`, () => {
+          store.deleteWorkout(w.id);
+          toast('Séance supprimée', 'success');
+          if (pageRerender) pageRerender();
+        }, true);
+        return 'keep';
+      } },
       { label: 'Ajouter aux routines', onClick: () => { addSessionToRoutine(w); } },
       { label: 'Modifier', variant: 'btn-primary', onClick: () => { if (pageRerender) openSession(pageRerender, null, w); } },
     ],
@@ -758,7 +771,7 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null) {
         <div class="exo-head">
           <button class="exo-name-btn" data-detail="${idx}">
             <span class="exo-name-group">
-              ${rk ? `<span class="rank-inline rank-inline-session">${rankBadge(rk.id, 56)}</span>` : ''}
+              ${rk ? `<span class="rank-inline rank-inline-session">${rankBadge(rk.id, 76)}</span>` : ''}
               <span>${def.name} ${wx.ss ? `<span class="ss-chip">SS${wx.ss}</span>` : ''} ${impBadge(imp)}</span>
             </span>
             ${icons.chevron}
@@ -934,6 +947,7 @@ function showSummary(exercises, closeSession) {
   const tempWorkout = { id: TEMP_ID, date: session.date, exercises };
   const detail = computeExerciseLPDetailed([...base, tempWorkout], {
     bodyweight: store.userData.profile.weight,
+    weights: store.userData.weights,
     standards: getStandards(),
   });
   const lpRows = (detail.perWorkout[TEMP_ID] || []).map((r) => {

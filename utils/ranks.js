@@ -107,7 +107,7 @@ const ONYX_OVERRIDE_MIN_RATIO = 0.6;
 
 // Résout les 5 niveaux (Débutant→Élite) d'un exo via l'héritage parent-enfant
 // (contrairement à eliteStandard, qui ne renvoie que le niveau Élite).
-function resolveStandardLevels(exerciseId, standards, _seen = {}) {
+export function resolveStandardLevels(exerciseId, standards, _seen = {}) {
   if (!standards || _seen[exerciseId]) return null;
   _seen[exerciseId] = true;
   const d = standards.standards && standards.standards[exerciseId];
@@ -146,7 +146,7 @@ function interpLP(ratio, points) {
 }
 
 // LP "plancher" dérivé du niveau StrengthLevel actuel d'un exo (null si non applicable).
-function standardBasedLP(exerciseId, bestOrm, bodyweight, standards) {
+export function standardBasedLP(exerciseId, bestOrm, bodyweight, standards) {
   if (!bodyweight || !standards) return null;
   const levels = resolveStandardLevels(exerciseId, standards);
   if (!levels || levels.elite < ONYX_OVERRIDE_MIN_RATIO) return null;
@@ -163,9 +163,45 @@ function standardBasedLP(exerciseId, bestOrm, bodyweight, standards) {
   return interpLP(ratio, points);
 }
 
+// Calculateur : à partir d'un exercice + poids + reps + poids de corps, estime
+// le 1RM (Epley), le niveau StrengthLevel atteint (Débutant..Élite, ou null si
+// l'exo n'a pas de standard fiable) et le rang OmniFit correspondant.
+export function estimateRankFromLift(exerciseId, weight, reps, bodyweight, standards = STANDARDS) {
+  const orm = weight > 0 && reps > 0 ? weight * (1 + reps / 30) : 0;
+  const levels = resolveStandardLevels(exerciseId, standards);
+  let levelTier = null;
+  if (levels && bodyweight) {
+    const ratio = orm / bodyweight;
+    const order = ['elite', 'advanced', 'intermediate', 'novice', 'beginner'];
+    for (const lvl of order) { if (ratio >= levels[lvl]) { levelTier = lvl; break; } }
+  }
+  const floor = bodyweight ? standardBasedLP(exerciseId, orm, bodyweight, standards) : null;
+  const lp = floor != null ? floor : 0;
+  return { orm: Math.round(orm), levelTier, rank: rankFromLP(lp), hasStandard: !!(levels && levels.elite >= ONYX_OVERRIDE_MIN_RATIO) };
+}
+
+// Résout le poids de corps EFFECTIF à une date donnée à partir du journal de pesées :
+// la pesée la plus récente à cette date ou avant ; sinon la plus ancienne connue ;
+// sinon le poids statique fourni en repli. Ainsi, mettre à jour son poids actuel
+// NE CHANGE PAS l'interprétation des séances passées (chacune garde "son" poids).
+function bodyweightAt(date, weightsSorted, fallback) {
+  if (!weightsSorted || !weightsSorted.length) return fallback;
+  let best = null;
+  for (const w of weightsSorted) {
+    if (w.date <= date) best = w.value;
+    else break;
+  }
+  return best != null ? best : weightsSorted[0].value;
+}
+
 // Cumul du LP de TOUS les exos en un passage chronologique.
-// opts : { bodyweight, standards } — nécessaires pour ancrer le rang sur le niveau
-// StrengthLevel réel (sinon la progression reste purement basée sur l'historique V/ΔP).
+// opts : { bodyweight, weights, standards }
+//   - weights (recommandé) : journal des pesées [{date, value}] — chaque séance utilise
+//     le poids réel enregistré à SA date, pas le poids actuel. Ainsi, changer son poids
+//     aujourd'hui ne modifie jamais le rang calculé pour les séances passées.
+//   - bodyweight : poids statique de repli, utilisé si `weights` est vide/absent
+//     (comportement plus simple, mais qui peut réinterpréter tout l'historique si le
+//     poids change — à éviter si un journal de pesées existe).
 // Retourne { exerciseId: totalLp }.
 export function computeExerciseLP(workouts, opts = {}) {
   return computeExerciseLPDetailed(workouts, opts).totals;
@@ -175,12 +211,14 @@ export function computeExerciseLP(workouts, opts = {}) {
 // éventuel changement de rang — utilisé pour le récapitulatif de fin de séance.
 // { totals: {id: lp}, perWorkout: { [workoutId]: [{exerciseId, gain, before, after}] } }
 export function computeExerciseLPDetailed(workouts, opts = {}) {
-  const bw = opts.bodyweight;
   const std = opts.standards || STANDARDS;
+  const weightsSorted = opts.weights ? [...opts.weights].sort((a, b) => a.date.localeCompare(b.date)) : null;
+  const staticBw = opts.bodyweight;
   const sorted = [...workouts].sort((a, b) => a.date.localeCompare(b.date));
   const state = {}; // id -> { lp, bestOrm, volSum, volCount }
   const perWorkout = {};
   for (const w of sorted) {
+    const bw = weightsSorted && weightsSorted.length ? bodyweightAt(w.date, weightsSorted, staticBw) : staticBw;
     const rows = [];
     for (const wx of w.exercises) {
       if (!wx.sets || !wx.sets.length) continue;
@@ -253,7 +291,7 @@ export function rankBadge(rankId, size = 120) {
       <filter id="${u}-gl" x="-120%" y="-120%" width="340%" height="340%"><feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
     </defs>
     <ellipse cx="200" cy="206" rx="160" ry="154" fill="url(#${u}-halo)"/>
-    <g filter="url(#${u}-sh)" stroke="${P.holo ? '#000' : P.istroke}" stroke-width="1.6" stroke-linejoin="round">
+    <g filter="url(#${u}-sh)" stroke="${P.holo ? `url(#${u}-holo)` : P.istroke}" stroke-width="${P.holo ? 3 : 1.6}" stroke-linejoin="round">
       <g fill="url(#${u}-wing)">${wingPaths}</g>
       <g fill="url(#${u}-wing)" transform="translate(400,0) scale(-1,1)">${wingPaths}</g>
     </g>
