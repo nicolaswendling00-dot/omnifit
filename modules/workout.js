@@ -2,10 +2,10 @@
 // Séance minimisable, timer sticky, menu ⋯ (suppr/réorg/superset/remplacer),
 // détail exo (muscles, historique, repos perso), coefficients d'amélioration.
 import { store, todayISO } from '../utils/storage.js';
-import { EXERCISES, MUSCLES, muscleLabel } from '../data/exercises.js';
+import { EXERCISES, MUSCLES, muscleLabel, AKA } from '../data/exercises.js';
 import { formatTime, workoutMuscleVolume, weeklySetsByMuscle, muscleAttenuation } from '../utils/math.js';
 import { el, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong } from '../utils/ui.js';
-import { computeExerciseLP, rankFromLP, rankBadge, rankChip, getStandards } from '../utils/ranks.js';
+import { computeExerciseLP, rankFromLP, rankBadge, getStandards } from '../utils/ranks.js';
 
 let volumeChart = null;
 let impChart = null;
@@ -54,7 +54,7 @@ const CAT_SYN = {
   Glutes: 'glutes fessiers', Calves: 'calves mollets', Core: 'core abs', 'Lower Back': 'lower back lombaires', FullBody: 'full body cardio',
 };
 function exoKeywords(e) {
-  const parts = [(exerciseLookup(e.id) || e).name, e.category, CAT_SYN[e.category] || ''];
+  const parts = [(exerciseLookup(e.id) || e).name, e.category, CAT_SYN[e.category] || '', ...(AKA[e.id] || [])];
   for (const m of [...e.primaryMuscles, ...e.secondaryMuscles]) {
     parts.push(m.m, muscleLabel(m.m), MUSCLE_SYN[m.m] || '');
   }
@@ -200,7 +200,7 @@ function openExercisePicker(onPick, title = 'Ajouter un exercice') {
     for (const e of items.slice(0, 80)) {
       const ranked = lpMap[e.id] !== undefined;
       const rk = ranked ? rankFromLP(lpMap[e.id]) : null;
-      const chip = rk ? `<span class="rank-inline" title="${rk.name}${rk.division ? ' ' + rk.division : ''}">${rankChip(rk.id, 28)}</span>` : '<span class="rank-inline muted" style="font-size:0.66rem">—</span>';
+      const chip = rk ? `<span class="rank-inline" title="${rk.name}${rk.division ? ' ' + rk.division : ''}">${rankBadge(rk.id, 46)}</span>` : '<span class="rank-inline muted" style="font-size:0.66rem">—</span>';
       const b = el(`<button class="exo-search-item"><span>${(exerciseLookup(e.id) || e).name}</span>${chip}</button>`);
       b.addEventListener('click', () => { close(); onPick(e); });
       list.appendChild(b);
@@ -757,8 +757,10 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null) {
       const card = el(`<div class="card exo-card">
         <div class="exo-head">
           <button class="exo-name-btn" data-detail="${idx}">
-            ${rk ? `<span class="rank-inline">${rankChip(rk.id, 26)}</span>` : ''}
-            <span>${def.name} ${wx.ss ? `<span class="ss-chip">SS${wx.ss}</span>` : ''} ${impBadge(imp)}</span>
+            <span class="exo-name-group">
+              ${rk ? `<span class="rank-inline rank-inline-session">${rankBadge(rk.id, 38)}</span>` : ''}
+              <span>${def.name} ${wx.ss ? `<span class="ss-chip">SS${wx.ss}</span>` : ''} ${impBadge(imp)}</span>
+            </span>
             ${icons.chevron}
           </button>
           <button class="icon-btn" data-menu="${idx}" aria-label="Options">${icons.dots}</button>
@@ -1346,9 +1348,9 @@ function openExerciseBrowser() {
     list.innerHTML = items.length ? '' : '<div class="empty-state">Aucun résultat</div>';
     for (const { e, name, lp } of items.slice(0, 150)) {
       const rk = lp !== undefined ? rankFromLP(lp) : null;
-      const chip = rk ? `<span class="rank-inline" title="${rk.name}${rk.division ? ' ' + rk.division : ''}">${rankChip(rk.id, 28)}</span>` : '<span class="rank-inline muted" style="font-size:0.66rem">non classé</span>';
+      const chip = rk ? `<span class="rank-inline" title="${rk.name}${rk.division ? ' ' + rk.division : ''}">${rankBadge(rk.id, 46)}</span>` : '<span class="rank-inline muted" style="font-size:0.66rem">non classé</span>';
       const b = el(`<button class="exo-search-item"><span>${name}</span>${chip}</button>`);
-      b.addEventListener('click', () => { close(); openExerciseDetailSheet(e.id); });
+      b.addEventListener('click', () => { openExerciseDetailSheet(e.id); });
       list.appendChild(b);
     }
   };

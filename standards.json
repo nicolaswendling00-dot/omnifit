@@ -201,7 +201,7 @@
     },
     "pecDeck": {
       "parent": "benchPress",
-      "muscle_ratio": 0.55
+      "muscle_ratio": 0.85
     },
     "pushUp": {
       "parent": "benchPress",

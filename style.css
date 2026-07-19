@@ -206,7 +206,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); min-height: 34px
   position: fixed; inset: 0;
   background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
-  z-index: 100;
+  z-index: 150;
   display: flex; align-items: center; justify-content: center; padding: 20px;
   opacity: 0; transition: opacity 250ms var(--ease);
 }
@@ -453,7 +453,7 @@ body.theme-amoled .session-top { background: rgba(0,0,0,0.94); }
   flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 6px;
   background: none; border: none; color: var(--text);
   font-family: inherit; font-size: 1rem; font-weight: 700; text-align: left;
-  padding: 10px 6px 10px 0; min-height: 48px; cursor: pointer;
+  padding: 6px 6px 6px 0; min-height: 52px; cursor: pointer;
 }
 .exo-name-btn svg { width: 17px; height: 17px; color: var(--text-2); flex-shrink: 0; }
 .exo-lastw { display: flex; align-items: baseline; gap: 8px; margin: 2px 0 6px; }
@@ -485,9 +485,11 @@ body.theme-amoled .session-top { background: rgba(0,0,0,0.94); }
 .set-row.done .sr-kg, .set-row.done .sr-reps { color: var(--text); }
 
 /* ===== Rangs ===== */
-.rank-inline { display: inline-flex; align-items: center; vertical-align: middle; }
+.rank-inline { display: inline-flex; align-items: center; vertical-align: middle; flex-shrink: 0; }
 .rank-inline svg { display: block; }
 .exo-search-item .rank-inline { margin-left: auto; flex: none; }
+.exo-name-group { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+.rank-inline-session { margin-right: 2px; }
 
 .rank-flip { perspective: 900px; height: 188px; margin-bottom: 14px; cursor: pointer; }
 .rank-flip-inner { position: relative; width: 100%; height: 100%; transition: transform 0.55s cubic-bezier(0.4, 0, 0.2, 1); transform-style: preserve-3d; }
@@ -542,7 +544,7 @@ body.theme-amoled .session-top { background: rgba(0,0,0,0.94); }
   width: 100%; background: none; border: none;
   border-bottom: 1px solid rgba(0, 217, 255, 0.08);
   color: var(--text); font-family: inherit; font-size: 0.92rem;
-  padding: 13px 4px; min-height: 50px; text-align: left; cursor: pointer;
+  padding: 8px 4px; min-height: 60px; text-align: left; cursor: pointer;
 }
 .exo-search-item .cat { color: var(--text-2); font-size: 0.68rem; white-space: nowrap; }
 

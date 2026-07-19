@@ -96,6 +96,15 @@ export function eliteStandard(exerciseId, standards = STANDARDS, _seen = {}) {
   return null;
 }
 
+// Marge de sécurité du raccourci Onyx : le 1RM doit dépasser l'Élite de 40 % (pas 15 %).
+// "Augmenter la difficulté d'Onyx" : un rang aussi élitiste doit rester rare.
+const ONYX_OVERRIDE_MULT = 1.4;
+// Plancher de fiabilité : sous ce ratio (mouvements d'isolation légers — élévations,
+// oiseau, etc.), le standard "Élite" en % du poids de corps devient minuscule (parfois
+// <25 kg), donc trivialement franchissable et peu significatif. On ignore le raccourci
+// pour ces exercices : seule la progression normale (V/ΔP) s'applique, jamais Onyx direct.
+const ONYX_OVERRIDE_MIN_RATIO = 0.6;
+
 // Cumul du LP de TOUS les exos en un passage chronologique.
 // opts : { bodyweight, standards } — nécessaires pour le raccourci Onyx (sinon ignoré proprement).
 export function computeExerciseLP(workouts, opts = {}) {
@@ -115,11 +124,13 @@ export function computeExerciseLP(workouts, opts = {}) {
       // % de hausse du 1RM vs record perso
       const dPRel = st.bestOrm > 0 ? Math.max(0, ((orm - st.bestOrm) / st.bestOrm) * 100) : 0;
 
-      // Raccourci Onyx : perf ≥ Élite × 1.15 → saut direct à 2100 LP
+      // Raccourci Onyx : perf ≥ Élite × 1.4 (et ratio fiable ≥ 0.6) → saut direct à 2100 LP
       let jumped = false;
       if (bw && std) {
-        const elite = eliteStandard(wx.exerciseId, std);
-        if (elite && orm >= elite * bw * 1.15) { st.lp = Math.max(st.lp, ONYX_LP); jumped = true; }
+        const eliteRatio = eliteStandard(wx.exerciseId, std);
+        if (eliteRatio && eliteRatio >= ONYX_OVERRIDE_MIN_RATIO && orm >= eliteRatio * bw * ONYX_OVERRIDE_MULT) {
+          st.lp = Math.max(st.lp, ONYX_LP); jumped = true;
+        }
       }
       if (!jumped) st.lp += lpGain(vRel, dPRel, rankFromLP(st.lp).id);
 
