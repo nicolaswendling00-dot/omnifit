@@ -5,7 +5,7 @@ import { store, todayISO } from '../utils/storage.js';
 import { EXERCISES, MUSCLES, muscleLabel, AKA } from '../data/exercises.js';
 import { formatTime, workoutMuscleVolume, weeklySetsByMuscle, muscleAttenuation } from '../utils/math.js';
 import { el, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong } from '../utils/ui.js';
-import { computeExerciseLP, rankFromLP, rankBadge, getStandards } from '../utils/ranks.js';
+import { computeExerciseLP, computeExerciseLPDetailed, rankFromLP, rankBadge, getStandards } from '../utils/ranks.js';
 
 let volumeChart = null;
 let impChart = null;
@@ -202,7 +202,7 @@ function openExercisePicker(onPick, title = 'Ajouter un exercice') {
       const rk = ranked ? rankFromLP(lpMap[e.id]) : null;
       const chip = rk ? `<span class="rank-inline" title="${rk.name}${rk.division ? ' ' + rk.division : ''}">${rankBadge(rk.id, 46)}</span>` : '<span class="rank-inline muted" style="font-size:0.66rem">—</span>';
       const b = el(`<button class="exo-search-item"><span>${(exerciseLookup(e.id) || e).name}</span>${chip}</button>`);
-      b.addEventListener('click', () => { close(); onPick(e); });
+      b.addEventListener('click', () => { const picked = exerciseLookup(e.id) || e; close(); onPick(picked); });
       list.appendChild(b);
     }
   };
@@ -758,7 +758,7 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null) {
         <div class="exo-head">
           <button class="exo-name-btn" data-detail="${idx}">
             <span class="exo-name-group">
-              ${rk ? `<span class="rank-inline rank-inline-session">${rankBadge(rk.id, 38)}</span>` : ''}
+              ${rk ? `<span class="rank-inline rank-inline-session">${rankBadge(rk.id, 56)}</span>` : ''}
               <span>${def.name} ${wx.ss ? `<span class="ss-chip">SS${wx.ss}</span>` : ''} ${impBadge(imp)}</span>
             </span>
             ${icons.chevron}
@@ -928,13 +928,38 @@ function showSummary(exercises, closeSession) {
     .filter((p) => p.imp != null && p.imp > 0)
     .sort((a, b) => b.imp - a.imp);
 
+  // Gains de LP par exercice + changements de rang — simulation sans sauvegarder
+  const TEMP_ID = '__pending_summary__';
+  const base = store.userData.workouts.filter((w) => w.id !== (session.editingId || '__never__'));
+  const tempWorkout = { id: TEMP_ID, date: session.date, exercises };
+  const detail = computeExerciseLPDetailed([...base, tempWorkout], {
+    bodyweight: store.userData.profile.weight,
+    standards: getStandards(),
+  });
+  const lpRows = (detail.perWorkout[TEMP_ID] || []).map((r) => {
+    const def = exerciseLookup(r.exerciseId) || { name: r.exerciseId };
+    const beforeRank = rankFromLP(r.before);
+    const afterRank = rankFromLP(r.after);
+    const promoted = afterRank.id !== beforeRank.id || afterRank.division !== beforeRank.division;
+    return { name: def.name, gain: r.gain, afterRank, promoted };
+  });
+  const promotions = lpRows.filter((r) => r.promoted);
+
   const content = el(`<div>
     <div class="grid-2" style="margin-bottom:12px">
       <div class="card" style="margin:0;text-align:center;padding:10px"><div class="muted">Durée</div><div class="num" style="font-size:1.2rem;color:var(--accent)">${formatTime(session.elapsed)}</div></div>
       <div class="card" style="margin:0;text-align:center;padding:10px"><div class="muted">Séries</div><div class="num" style="font-size:1.2rem;color:var(--accent)">${totalSets}</div></div>
     </div>
     ${sessImp != null ? `<div class="wd-sess-imp ${sessImp >= 0 ? 'up' : 'down'}" style="text-align:center;margin-bottom:12px">Amélioration de la séance : ${sessImp >= 0 ? '+' : ''}${sessImp}%</div>` : ''}
-    ${progress.length ? `<h3 style="margin:2px 0 6px">Tu as progressé sur</h3>
+    ${promotions.length ? `<div class="rank-promo-banner">
+      ${promotions.map((p) => `<div class="rank-promo-row">
+        ${rankBadge(p.afterRank.id, 44)}
+        <div><div class="rank-promo-title">Nouveau rang !</div><div class="rank-promo-name" style="color:${p.afterRank.color}">${p.name} → ${p.afterRank.division ? `${p.afterRank.name} ${p.afterRank.division}` : p.afterRank.name}</div></div>
+      </div>`).join('')}
+    </div>` : ''}
+    ${lpRows.length ? `<h3 style="margin:2px 0 6px">Gains de LP</h3>
+      <div class="recap-list">${lpRows.map((r) => `<div class="recap-row"><span>${r.name}</span><span class="lp-gain-badge">+${r.gain} LP</span></div>`).join('')}</div>` : ''}
+    ${progress.length ? `<h3 style="margin:14px 0 6px">Tu as progressé sur</h3>
       <div class="recap-list">${progress.map((p) => `<div class="recap-row"><span>${p.name}</span>${impBadge(p.imp, false)}</div>`).join('')}</div>` : ''}
     <h3 style="margin:14px 0 6px">Coefficients d'atténuation</h3>
     <div class="muted" style="font-size:0.72rem;margin-bottom:8px">Implication moyenne par muscle (1.0 = moteur principal) · Δ vs dernière séance</div>

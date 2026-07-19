@@ -813,6 +813,42 @@
     "sledPush": {
       "parent": "deadlift",
       "muscle_ratio": 0.6
+    },
+    "lo_smithInclinePress": {
+      "parent": "inclineBench",
+      "muscle_ratio": 0.95
+    },
+    "lo_smithBenchPress": {
+      "parent": "benchPress",
+      "muscle_ratio": 1.0
+    },
+    "lo_smithDeclinePress": {
+      "parent": "declineBench",
+      "muscle_ratio": 1.0
+    },
+    "lo_smithShoulderPress": {
+      "parent": "overheadPress",
+      "muscle_ratio": 1.05
+    },
+    "lo_smithRow": {
+      "parent": "barbellRow",
+      "muscle_ratio": 0.95
+    },
+    "lo_smithRDL": {
+      "parent": "romanianDeadlift",
+      "muscle_ratio": 1.0
+    },
+    "lo_beltSquat": {
+      "parent": "squat",
+      "muscle_ratio": 0.85
+    },
+    "lo_yRaiseIncline": {
+      "parent": "rearDeltFly",
+      "muscle_ratio": 1.0
+    },
+    "lo_adduction": {
+      "parent": "abduction",
+      "muscle_ratio": 1.75
     }
   }
 }

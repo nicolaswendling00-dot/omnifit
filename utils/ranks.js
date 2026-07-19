@@ -101,21 +101,91 @@ export function eliteStandard(exerciseId, standards = STANDARDS, _seen = {}) {
 const ONYX_OVERRIDE_MULT = 1.4;
 // Plancher de fiabilité : sous ce ratio (mouvements d'isolation légers — élévations,
 // oiseau, etc.), le standard "Élite" en % du poids de corps devient minuscule (parfois
-// <25 kg), donc trivialement franchissable et peu significatif. On ignore le raccourci
-// pour ces exercices : seule la progression normale (V/ΔP) s'applique, jamais Onyx direct.
+// <25 kg), donc trivialement franchissable et peu significatif. On ignore l'ancrage
+// sur les standards pour ces exercices : seule la progression normale (V/ΔP) s'applique.
 const ONYX_OVERRIDE_MIN_RATIO = 0.6;
 
+// Résout les 5 niveaux (Débutant→Élite) d'un exo via l'héritage parent-enfant
+// (contrairement à eliteStandard, qui ne renvoie que le niveau Élite).
+function resolveStandardLevels(exerciseId, standards, _seen = {}) {
+  if (!standards || _seen[exerciseId]) return null;
+  _seen[exerciseId] = true;
+  const d = standards.standards && standards.standards[exerciseId];
+  if (d) return d;
+  const inh = standards.inheritance && standards.inheritance[exerciseId];
+  if (inh) {
+    const parent = resolveStandardLevels(inh.parent, standards, _seen);
+    if (!parent) return null;
+    const out = {};
+    for (const lvl of Object.keys(parent)) out[lvl] = parent[lvl] * inh.muscle_ratio;
+    return out;
+  }
+  return null;
+}
+
+// ============================================================
+//  CORRESPONDANCE CONTINUE standard StrengthLevel <-> rang de l'app
+//  Le rang doit refléter le niveau ACTUEL (pas seulement l'historique de séances) :
+//  un utilisateur déjà "Avancé" sur un exercice doit voir un rang cohérent dès sa
+//  première séance loggée, pas grimper lentement depuis Bronze. On ancre chaque
+//  palier StrengthLevel sur un jalon de LP, puis on interpole entre les jalons.
+//  Au-delà d'Élite, on rejoint le seuil Onyx existant (Élite × 1.4 → 2100 LP).
+// ============================================================
+const STANDARD_LP_ANCHORS = { beginner: 300, novice: 600, intermediate: 1050, advanced: 1500, elite: 2000 };
+
+function interpLP(ratio, points) {
+  if (ratio <= points[0].ratio) return points[0].lp;
+  for (let i = 1; i < points.length; i++) {
+    if (ratio <= points[i].ratio) {
+      const p0 = points[i - 1]; const p1 = points[i];
+      const t = (ratio - p0.ratio) / ((p1.ratio - p0.ratio) || 1);
+      return p0.lp + t * (p1.lp - p0.lp);
+    }
+  }
+  return points[points.length - 1].lp;
+}
+
+// LP "plancher" dérivé du niveau StrengthLevel actuel d'un exo (null si non applicable).
+function standardBasedLP(exerciseId, bestOrm, bodyweight, standards) {
+  if (!bodyweight || !standards) return null;
+  const levels = resolveStandardLevels(exerciseId, standards);
+  if (!levels || levels.elite < ONYX_OVERRIDE_MIN_RATIO) return null;
+  const ratio = bestOrm / bodyweight;
+  const points = [
+    { ratio: 0, lp: 0 },
+    { ratio: levels.beginner, lp: STANDARD_LP_ANCHORS.beginner },
+    { ratio: levels.novice, lp: STANDARD_LP_ANCHORS.novice },
+    { ratio: levels.intermediate, lp: STANDARD_LP_ANCHORS.intermediate },
+    { ratio: levels.advanced, lp: STANDARD_LP_ANCHORS.advanced },
+    { ratio: levels.elite, lp: STANDARD_LP_ANCHORS.elite },
+    { ratio: levels.elite * ONYX_OVERRIDE_MULT, lp: ONYX_LP },
+  ];
+  return interpLP(ratio, points);
+}
+
 // Cumul du LP de TOUS les exos en un passage chronologique.
-// opts : { bodyweight, standards } — nécessaires pour le raccourci Onyx (sinon ignoré proprement).
+// opts : { bodyweight, standards } — nécessaires pour ancrer le rang sur le niveau
+// StrengthLevel réel (sinon la progression reste purement basée sur l'historique V/ΔP).
+// Retourne { exerciseId: totalLp }.
 export function computeExerciseLP(workouts, opts = {}) {
+  return computeExerciseLPDetailed(workouts, opts).totals;
+}
+
+// Variante détaillée : renvoie aussi, pour CHAQUE (séance, exo), le LP gagné et un
+// éventuel changement de rang — utilisé pour le récapitulatif de fin de séance.
+// { totals: {id: lp}, perWorkout: { [workoutId]: [{exerciseId, gain, before, after}] } }
+export function computeExerciseLPDetailed(workouts, opts = {}) {
   const bw = opts.bodyweight;
   const std = opts.standards || STANDARDS;
   const sorted = [...workouts].sort((a, b) => a.date.localeCompare(b.date));
   const state = {}; // id -> { lp, bestOrm, volSum, volCount }
+  const perWorkout = {};
   for (const w of sorted) {
+    const rows = [];
     for (const wx of w.exercises) {
       if (!wx.sets || !wx.sets.length) continue;
       const st = state[wx.exerciseId] || (state[wx.exerciseId] = { lp: 0, bestOrm: 0, volSum: 0, volCount: 0 });
+      const before = st.lp;
       const V = wx.sets.reduce((acc, s) => acc + (s.weight || 0) * (s.reps || 0), 0);
       const orm = ormOfSets(wx.sets);
       // Volume relatif vs moyenne historique (avant cette séance)
@@ -124,23 +194,25 @@ export function computeExerciseLP(workouts, opts = {}) {
       // % de hausse du 1RM vs record perso
       const dPRel = st.bestOrm > 0 ? Math.max(0, ((orm - st.bestOrm) / st.bestOrm) * 100) : 0;
 
-      // Raccourci Onyx : perf ≥ Élite × 1.4 (et ratio fiable ≥ 0.6) → saut direct à 2100 LP
-      let jumped = false;
-      if (bw && std) {
-        const eliteRatio = eliteStandard(wx.exerciseId, std);
-        if (eliteRatio && eliteRatio >= ONYX_OVERRIDE_MIN_RATIO && orm >= eliteRatio * bw * ONYX_OVERRIDE_MULT) {
-          st.lp = Math.max(st.lp, ONYX_LP); jumped = true;
-        }
-      }
-      if (!jumped) st.lp += lpGain(vRel, dPRel, rankFromLP(st.lp).id);
+      const sessionGain = lpGain(vRel, dPRel, rankFromLP(st.lp).id);
+      st.bestOrm = Math.max(st.bestOrm, orm);
+      let next = Math.max(0, st.lp + sessionGain);
+
+      // Plancher StrengthLevel : le rang reflète aussi le niveau ACTUEL (pas seulement
+      // l'historique de séances) — un exo déjà "Avancé/Élite" n'a pas besoin de des
+      // dizaines de séances pour que le rang le reconnaisse.
+      const floor = bw ? standardBasedLP(wx.exerciseId, st.bestOrm, bw, std) : null;
+      if (floor != null) next = Math.max(next, floor);
 
       st.volSum += V; st.volCount += 1;
-      st.bestOrm = Math.max(st.bestOrm, orm);
+      st.lp = next;
+      rows.push({ exerciseId: wx.exerciseId, gain: Math.round(next - before), before: Math.round(before), after: Math.round(next) });
     }
+    if (rows.length) perWorkout[w.id] = rows;
   }
-  const out = {};
-  for (const [id, st] of Object.entries(state)) out[id] = st.lp;
-  return out;
+  const totals = {};
+  for (const [id, st] of Object.entries(state)) totals[id] = Math.round(st.lp);
+  return { totals, perWorkout };
 }
 
 // ============================================================
