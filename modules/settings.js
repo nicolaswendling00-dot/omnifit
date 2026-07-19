@@ -1,11 +1,12 @@
 // OmniFit — PAGE 4 : Réglages (macros déplacées dans Nutrition)
 import { store } from '../utils/storage.js';
 import { harrisBenedict } from '../utils/math.js';
-import { EQUIPMENT_TYPES, EXERCISES } from '../data/exercises.js';
+import { EQUIPMENT_TYPES } from '../data/exercises.js';
 import { el, icons, openModal, toast, confirmModal } from '../utils/ui.js';
-import { RANK_ORDER, RANK_META, DIV_LP, ONYX_LP, rankBadge, rankFromLP, estimateRankFromLift, getStandards } from '../utils/ranks.js';
+import { RANK_ORDER, RANK_META, DIV_LP, ONYX_LP, rankBadge, estimateRankFromLift, getStandards } from '../utils/ranks.js';
+import { openExercisePicker } from './workout.js';
 
-const VERSION = '3.14';
+const VERSION = '3.15';
 
 function toggleRow(label, key, sub = '') {
   const s = store.userData.settings;
@@ -163,7 +164,6 @@ export function render(container) {
   root.querySelector('#row-vol-tracking').replaceWith(toggleRow('Volume tracking', 'volumeTrackingEnabled'));
   root.querySelector('#row-db-full').replaceWith(toggleRow('Base complète', 'exerciseDbFull', 'Décoché : débutant uniquement'));
   const rowsInt = root.querySelector('#rows-interface');
-  rowsInt.appendChild(toggleRow('Haptique', 'hapticEnabled'));
   rowsInt.appendChild(toggleRow('Notifications', 'notificationsEnabled'));
 
   const eqHost = root.querySelector('#equip-filter');
@@ -293,9 +293,7 @@ function openExportModal() {
 
 function openRankLadderModal() {
   const nameOverrides = store.userData.settings.exerciseNames || {};
-  const allExos = [...EXERCISES, ...(store.userData.settings.customExercises || [])]
-    .map((e) => ({ id: e.id, name: nameOverrides[e.id] || e.name }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  let selected = null; // { id, name }
 
   const ladderRows = RANK_ORDER.map((id, i) => {
     const meta = RANK_META[id];
@@ -318,7 +316,9 @@ function openRankLadderModal() {
     </div>
     <div class="field-stack">
       <label class="field"><span>Exercice</span>
-        <select id="calc-exo">${allExos.map((e) => `<option value="${e.id}">${e.name}</option>`).join('')}</select>
+        <button type="button" class="btn btn-secondary btn-block" id="calc-exo-btn" style="justify-content:space-between">
+          <span id="calc-exo-label">Choisir un exercice…</span>${icons.chevron}
+        </button>
       </label>
       <div class="grid-2">
         <label class="field"><span>Poids (kg)</span><input id="calc-weight" type="number" step="0.5" min="0" placeholder="80"></label>
@@ -329,16 +329,23 @@ function openRankLadderModal() {
     <div id="calc-result" style="margin-top:12px"></div>
   </div>`);
 
-  openModal({ title: 'Rangs & calculateur', content, wide: true, actions: [{ label: 'Fermer', variant: 'btn-primary' }] });
+  openModal({ title: 'Rangs & calculateur', content, wide: true, actions: [] });
+
+  content.querySelector('#calc-exo-btn').addEventListener('click', () => {
+    openExercisePicker((exo) => {
+      selected = { id: exo.id, name: nameOverrides[exo.id] || exo.name };
+      content.querySelector('#calc-exo-label').textContent = selected.name;
+    }, 'Choisir un exercice');
+  });
 
   content.querySelector('#calc-run').addEventListener('click', () => {
-    const exoId = content.querySelector('#calc-exo').value;
     const weight = parseFloat(content.querySelector('#calc-weight').value);
     const reps = parseInt(content.querySelector('#calc-reps').value, 10);
     const resultHost = content.querySelector('#calc-result');
+    if (!selected) { resultHost.innerHTML = '<div class="empty-state">Choisis un exercice</div>'; return; }
     if (!weight || !reps) { resultHost.innerHTML = '<div class="empty-state">Renseigne un poids et des répétitions</div>'; return; }
     const bw = store.userData.profile.weight;
-    const r = estimateRankFromLift(exoId, weight, reps, bw, getStandards());
+    const r = estimateRankFromLift(selected.id, weight, reps, bw, getStandards());
     const tierLabel = { beginner: 'Débutant', novice: 'Novice', intermediate: 'Intermédiaire', advanced: 'Avancé', elite: 'Élite' };
     resultHost.innerHTML = `
       <div class="calc-result-card">

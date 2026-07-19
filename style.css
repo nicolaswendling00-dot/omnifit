@@ -455,7 +455,7 @@ body.theme-amoled .session-top { background: rgba(0,0,0,0.94); }
   font-family: inherit; font-size: 1rem; font-weight: 700; text-align: left;
   padding: 6px 6px 6px 0; min-height: 82px; cursor: pointer;
 }
-.exo-name-btn svg { width: 17px; height: 17px; color: var(--text-2); flex-shrink: 0; }
+.exo-name-btn > svg { width: 17px; height: 17px; color: var(--text-2); flex-shrink: 0; }
 .exo-lastw { display: flex; align-items: baseline; gap: 8px; margin: 2px 0 6px; }
 .exo-lastw .lw-big { font-size: 1.35rem; color: var(--accent); }
 .exo-lastw .lw-sub { color: var(--text-2); font-size: 0.72rem; }

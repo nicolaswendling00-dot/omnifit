@@ -178,7 +178,7 @@ function sessionImprovement(workout) {
 // ============================================================
 // PICKER PLEIN ÉCRAN (recherche en haut → jamais derrière le clavier)
 // ============================================================
-function openExercisePicker(onPick, title = 'Ajouter un exercice') {
+export function openExercisePicker(onPick, title = 'Ajouter un exercice') {
   const overlay = el(`<div class="picker-overlay">
     <div class="picker-topbar">
       <input id="exo-search" type="text" placeholder="Rechercher…" autocomplete="off">
@@ -520,9 +520,12 @@ function openWorkoutDetail(w, highlightId = null) {
   const content = el(`<div>
     <div class="wd-top">
       <span class="muted">${formatTime(w.totalTime || 0)}</span>
-      ${sessImp != null
-        ? `<span class="wd-sess-imp ${sessImp >= 0 ? 'up' : 'down'}">Amélioration ${sessImp >= 0 ? '+' : ''}${sessImp}%</span>`
-        : '<span class="muted">Séance de référence</span>'}
+      <div style="display:flex;align-items:center;gap:8px">
+        ${sessImp != null
+          ? `<span class="wd-sess-imp ${sessImp >= 0 ? 'up' : 'down'}">Amélioration ${sessImp >= 0 ? '+' : ''}${sessImp}%</span>`
+          : '<span class="muted">Séance de référence</span>'}
+        <button class="icon-btn" id="wd-edit" aria-label="Modifier la séance">${icons.edit}</button>
+      </div>
     </div>
     ${w.notes ? `<div class="wd-note">${String(w.notes).replace(/</g, '&lt;')}</div>` : ''}
     ${w.exercises.map((wx, i) => {
@@ -545,14 +548,13 @@ function openWorkoutDetail(w, highlightId = null) {
     const exo = e.target.closest('.wd-exo');
     if (exo) openExerciseDetailSheet(exo.dataset.exo);
   });
-  openModal({
+  const { close } = openModal({
     title: `Séance du ${w.date}`,
     content,
     wide: true,
     actions: [
-      { label: 'Fermer' },
-      { label: 'Supprimer', onClick: (body, close) => {
-        close();
+      { label: 'Supprimer', variant: 'btn-danger', onClick: (body, closeModal) => {
+        closeModal();
         confirmModal('Supprimer la séance', `Supprimer définitivement la séance du ${w.date} ?`, () => {
           store.deleteWorkout(w.id);
           toast('Séance supprimée', 'success');
@@ -561,8 +563,11 @@ function openWorkoutDetail(w, highlightId = null) {
         return 'keep';
       } },
       { label: 'Ajouter aux routines', onClick: () => { addSessionToRoutine(w); } },
-      { label: 'Modifier', variant: 'btn-primary', onClick: () => { if (pageRerender) openSession(pageRerender, null, w); } },
     ],
+  });
+  content.querySelector('#wd-edit').addEventListener('click', () => {
+    close();
+    if (pageRerender) openSession(pageRerender, null, w);
   });
 }
 
