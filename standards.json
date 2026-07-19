@@ -1,8 +1,8 @@
 {
   "_meta": {
-    "source": "StrengthLevel.com (standards population homme)",
+    "source": "Mapping manuel vérifié par l'utilisateur (StrengthLevel.com) + estimations communautaires force/poids de corps",
     "sex": "male",
-    "unit": "1RM / poids_de_corps (ratio)",
+    "unit": "1RM / poids_de_corps (ratio) — dumbbell : poids d'UN SEUL haltère",
     "levels": [
       "beginner",
       "novice",
@@ -10,7 +10,7 @@
       "advanced",
       "elite"
     ],
-    "note": "pull_up/dips : ratio = charge totale (incl. poids de corps) / poids de corps. Les exercices absents dérivent d'un parent via muscle_ratio (child_std = parent_std * muscle_ratio)."
+    "note": "Exercices sans notion fiable de 1RM (gainage, isométrie, cardio, mouvements de skill) volontairement exclus des standards : abWheel, assaultBike, bandWalk, battleRopes, bearCrawl, birdDog, boxJump, burpee, catCow, crunch, deadBug, deadHang, devilPress, dragonFlag, hangingLegRaise, jumpRope, lyingLegRaise, manMaker, mountainClimber, palofPress, plank, rowingErg, russianTwist, sidePlank, superman, vUp, wallSit, wristRoller. Ils gardent une progression LP normale (V/ΔP) mais ne peuvent jamais déclencher le raccourci Onyx."
   },
   "standards": {
     "benchPress": {
@@ -41,12 +41,278 @@
       "advanced": 1.35,
       "elite": 1.8
     },
+    "dbBenchPress": {
+      "beginner": 0.25,
+      "novice": 0.4,
+      "intermediate": 0.55,
+      "advanced": 0.8,
+      "elite": 1.05
+    },
+    "dbInclinePress": {
+      "beginner": 0.2,
+      "novice": 0.35,
+      "intermediate": 0.5,
+      "advanced": 0.7,
+      "elite": 0.95
+    },
+    "dbFly": {
+      "beginner": 0.1,
+      "novice": 0.18,
+      "intermediate": 0.28,
+      "advanced": 0.4,
+      "elite": 0.55
+    },
+    "cableFly": {
+      "beginner": 0.15,
+      "novice": 0.25,
+      "intermediate": 0.38,
+      "advanced": 0.55,
+      "elite": 0.75
+    },
+    "pecDeck": {
+      "beginner": 0.3,
+      "novice": 0.55,
+      "intermediate": 0.85,
+      "advanced": 1.2,
+      "elite": 1.7
+    },
+    "machinePress": {
+      "beginner": 0.45,
+      "novice": 0.7,
+      "intermediate": 1.0,
+      "advanced": 1.45,
+      "elite": 1.9
+    },
+    "pushUp": {
+      "beginner": 0.1,
+      "novice": 0.3,
+      "intermediate": 0.55,
+      "advanced": 0.85,
+      "elite": 1.2
+    },
+    "dips": {
+      "beginner": 0.1,
+      "novice": 0.35,
+      "intermediate": 0.65,
+      "advanced": 1.0,
+      "elite": 1.35
+    },
+    "svendPress": {
+      "beginner": 0.05,
+      "novice": 0.08,
+      "intermediate": 0.12,
+      "advanced": 0.18,
+      "elite": 0.25
+    },
+    "deadlift": {
+      "beginner": 1.0,
+      "novice": 1.35,
+      "intermediate": 1.75,
+      "advanced": 2.5,
+      "elite": 3.15
+    },
+    "sumoDeadlift": {
+      "beginner": 0.95,
+      "novice": 1.3,
+      "intermediate": 1.7,
+      "advanced": 2.4,
+      "elite": 3.05
+    },
+    "romanianDeadlift": {
+      "beginner": 0.65,
+      "novice": 1.05,
+      "intermediate": 1.45,
+      "advanced": 2.0,
+      "elite": 2.5
+    },
+    "stiffLegDeadlift": {
+      "beginner": 0.55,
+      "novice": 0.9,
+      "intermediate": 1.25,
+      "advanced": 1.75,
+      "elite": 2.2
+    },
+    "rackPull": {
+      "beginner": 1.2,
+      "novice": 1.6,
+      "intermediate": 2.1,
+      "advanced": 2.9,
+      "elite": 3.7
+    },
+    "barbellRow": {
+      "beginner": 0.5,
+      "novice": 0.75,
+      "intermediate": 1.0,
+      "advanced": 1.4,
+      "elite": 1.8
+    },
+    "pendlayRow": {
+      "beginner": 0.5,
+      "novice": 0.75,
+      "intermediate": 1.0,
+      "advanced": 1.4,
+      "elite": 1.8
+    },
+    "tBarRow": {
+      "beginner": 0.55,
+      "novice": 0.85,
+      "intermediate": 1.15,
+      "advanced": 1.6,
+      "elite": 2.05
+    },
+    "seatedCableRow": {
+      "beginner": 0.5,
+      "novice": 0.8,
+      "intermediate": 1.1,
+      "advanced": 1.55,
+      "elite": 2.0
+    },
+    "machineRow": {
+      "beginner": 0.55,
+      "novice": 0.85,
+      "intermediate": 1.2,
+      "advanced": 1.65,
+      "elite": 2.1
+    },
+    "latPulldown": {
+      "beginner": 0.6,
+      "novice": 0.9,
+      "intermediate": 1.2,
+      "advanced": 1.6,
+      "elite": 2.05
+    },
+    "pullUp": {
+      "beginner": 0.9,
+      "novice": 1.1,
+      "intermediate": 1.35,
+      "advanced": 1.65,
+      "elite": 2.05
+    },
+    "chinUp": {
+      "beginner": 0.95,
+      "novice": 1.15,
+      "intermediate": 1.4,
+      "advanced": 1.7,
+      "elite": 2.1
+    },
+    "facePull": {
+      "beginner": 0.1,
+      "novice": 0.18,
+      "intermediate": 0.28,
+      "advanced": 0.4,
+      "elite": 0.55
+    },
+    "straightArmPulldown": {
+      "beginner": 0.25,
+      "novice": 0.4,
+      "intermediate": 0.6,
+      "advanced": 0.85,
+      "elite": 1.15
+    },
+    "shrugs": {
+      "beginner": 0.75,
+      "novice": 1.25,
+      "intermediate": 1.8,
+      "advanced": 2.5,
+      "elite": 3.3
+    },
+    "invertedRow": {
+      "beginner": 0.5,
+      "novice": 0.7,
+      "intermediate": 0.95,
+      "advanced": 1.25,
+      "elite": 1.6
+    },
+    "goodMorning": {
+      "beginner": 0.3,
+      "novice": 0.55,
+      "intermediate": 0.85,
+      "advanced": 1.2,
+      "elite": 1.6
+    },
     "overheadPress": {
       "beginner": 0.35,
       "novice": 0.55,
       "intermediate": 0.8,
       "advanced": 1.1,
       "elite": 1.45
+    },
+    "dbShoulderPress": {
+      "beginner": 0.2,
+      "novice": 0.35,
+      "intermediate": 0.5,
+      "advanced": 0.7,
+      "elite": 0.95
+    },
+    "arnoldPress": {
+      "beginner": 0.18,
+      "novice": 0.32,
+      "intermediate": 0.48,
+      "advanced": 0.68,
+      "elite": 0.9
+    },
+    "pushPress": {
+      "beginner": 0.45,
+      "novice": 0.7,
+      "intermediate": 1.0,
+      "advanced": 1.35,
+      "elite": 1.75
+    },
+    "lateralRaise": {
+      "beginner": 0.09,
+      "novice": 0.15,
+      "intermediate": 0.22,
+      "advanced": 0.32,
+      "elite": 0.45
+    },
+    "cableLateralRaise": {
+      "beginner": 0.08,
+      "novice": 0.14,
+      "intermediate": 0.2,
+      "advanced": 0.3,
+      "elite": 0.42
+    },
+    "frontRaise": {
+      "beginner": 0.08,
+      "novice": 0.14,
+      "intermediate": 0.2,
+      "advanced": 0.3,
+      "elite": 0.42
+    },
+    "rearDeltFly": {
+      "beginner": 0.07,
+      "novice": 0.12,
+      "intermediate": 0.18,
+      "advanced": 0.26,
+      "elite": 0.36
+    },
+    "reversePecDeck": {
+      "beginner": 0.1,
+      "novice": 0.18,
+      "intermediate": 0.28,
+      "advanced": 0.42,
+      "elite": 0.58
+    },
+    "uprightRow": {
+      "beginner": 0.25,
+      "novice": 0.4,
+      "intermediate": 0.58,
+      "advanced": 0.82,
+      "elite": 1.1
+    },
+    "machineShoulderPress": {
+      "beginner": 0.35,
+      "novice": 0.58,
+      "intermediate": 0.85,
+      "advanced": 1.2,
+      "elite": 1.6
+    },
+    "landminePress": {
+      "beginner": 0.3,
+      "novice": 0.5,
+      "intermediate": 0.75,
+      "advanced": 1.05,
+      "elite": 1.4
     },
     "squat": {
       "beginner": 0.75,
@@ -69,82 +335,68 @@
       "advanced": 2.9,
       "elite": 3.7
     },
+    "pauseSquat": {
+      "beginner": 0.65,
+      "novice": 1.1,
+      "intermediate": 1.4,
+      "advanced": 1.95,
+      "elite": 2.55
+    },
+    "smithSquat": {
+      "beginner": 0.8,
+      "novice": 1.3,
+      "intermediate": 1.6,
+      "advanced": 2.2,
+      "elite": 2.9
+    },
+    "gobletSquat": {
+      "beginner": 0.3,
+      "novice": 0.5,
+      "intermediate": 0.7,
+      "advanced": 1.0,
+      "elite": 1.3
+    },
+    "bulgarianSplitSquat": {
+      "beginner": 0.3,
+      "novice": 0.55,
+      "intermediate": 0.8,
+      "advanced": 1.15,
+      "elite": 1.5
+    },
+    "walkingLunge": {
+      "beginner": 0.3,
+      "novice": 0.55,
+      "intermediate": 0.8,
+      "advanced": 1.15,
+      "elite": 1.5
+    },
+    "stepUp": {
+      "beginner": 0.25,
+      "novice": 0.45,
+      "intermediate": 0.7,
+      "advanced": 1.0,
+      "elite": 1.3
+    },
+    "pistolSquat": {
+      "beginner": 0.05,
+      "novice": 0.15,
+      "intermediate": 0.3,
+      "advanced": 0.5,
+      "elite": 0.75
+    },
+    "sissySquat": {
+      "beginner": 0.05,
+      "novice": 0.12,
+      "intermediate": 0.22,
+      "advanced": 0.35,
+      "elite": 0.5
+    },
     "legPress": {
       "beginner": 1.75,
       "novice": 2.75,
       "intermediate": 3.75,
       "advanced": 5.0,
       "elite": 6.5
-    },
-    "deadlift": {
-      "beginner": 1.0,
-      "novice": 1.35,
-      "intermediate": 1.75,
-      "advanced": 2.5,
-      "elite": 3.15
-    },
-    "romanianDeadlift": {
-      "beginner": 0.65,
-      "novice": 1.05,
-      "intermediate": 1.45,
-      "advanced": 2.0,
-      "elite": 2.5
-    },
-    "barbellRow": {
-      "beginner": 0.5,
-      "novice": 0.75,
-      "intermediate": 1.0,
-      "advanced": 1.4,
-      "elite": 1.8
-    },
-    "hipThrust": {
-      "beginner": 1.0,
-      "novice": 1.5,
-      "intermediate": 2.25,
-      "advanced": 3.0,
-      "elite": 4.0
-    },
-    "latPulldown": {
-      "beginner": 0.6,
-      "novice": 0.9,
-      "intermediate": 1.2,
-      "advanced": 1.6,
-      "elite": 2.05
-    },
-    "seatedCableRow": {
-      "beginner": 0.55,
-      "novice": 0.85,
-      "intermediate": 1.15,
-      "advanced": 1.55,
-      "elite": 2.0
-    },
-    "pullUp": {
-      "beginner": 0.9,
-      "novice": 1.1,
-      "intermediate": 1.35,
-      "advanced": 1.65,
-      "elite": 2.05
-    },
-    "dips": {
-      "beginner": 1.0,
-      "novice": 1.2,
-      "intermediate": 1.45,
-      "advanced": 1.8,
-      "elite": 2.25
-    },
-    "barbellCurl": {
-      "beginner": 0.3,
-      "novice": 0.5,
-      "intermediate": 0.7,
-      "advanced": 0.95,
-      "elite": 1.25
-    },
-    "skullCrusher": {
-      "beginner": 0.3,
-      "novice": 0.5,
-      "intermediate": 0.7,
-      "advanced": 0.95,
-      "elite": 1.25
     },
     "legExtension": {
       "beginner": 0.5,
@@ -160,6 +412,27 @@
       "advanced": 1.2,
       "elite": 1.6
     },
+    "seatedLegCurl": {
+      "beginner": 0.35,
+      "novice": 0.6,
+      "intermediate": 0.9,
+      "advanced": 1.25,
+      "elite": 1.65
+    },
+    "nordicCurl": {
+      "beginner": 0.05,
+      "novice": 0.15,
+      "intermediate": 0.3,
+      "advanced": 0.5,
+      "elite": 0.7
+    },
+    "gluteHamRaise": {
+      "beginner": 0.05,
+      "novice": 0.15,
+      "intermediate": 0.3,
+      "advanced": 0.5,
+      "elite": 0.7
+    },
     "standingCalfRaise": {
       "beginner": 0.75,
       "novice": 1.5,
@@ -167,257 +440,379 @@
       "advanced": 3.75,
       "elite": 5.0
     },
-    "shrugs": {
-      "beginner": 0.75,
-      "novice": 1.25,
-      "intermediate": 1.8,
-      "advanced": 2.5,
-      "elite": 3.3
+    "seatedCalfRaise": {
+      "beginner": 0.5,
+      "novice": 1.0,
+      "intermediate": 1.7,
+      "advanced": 2.6,
+      "elite": 3.5
     },
-    "lateralRaise": {
-      "beginner": 0.09,
-      "novice": 0.15,
-      "intermediate": 0.22,
-      "advanced": 0.32,
-      "elite": 0.45
+    "donkeyCalfRaise": {
+      "beginner": 0.7,
+      "novice": 1.4,
+      "intermediate": 2.3,
+      "advanced": 3.5,
+      "elite": 4.7
+    },
+    "hipThrust": {
+      "beginner": 1.0,
+      "novice": 1.5,
+      "intermediate": 2.25,
+      "advanced": 3.0,
+      "elite": 4.0
+    },
+    "gluteBridge": {
+      "beginner": 0.85,
+      "novice": 1.3,
+      "intermediate": 1.9,
+      "advanced": 2.6,
+      "elite": 3.4
+    },
+    "cableKickback": {
+      "beginner": 0.1,
+      "novice": 0.18,
+      "intermediate": 0.28,
+      "advanced": 0.4,
+      "elite": 0.55
+    },
+    "weightedBackExtension": {
+      "beginner": 0.4,
+      "novice": 0.7,
+      "intermediate": 1.05,
+      "advanced": 1.5,
+      "elite": 2.0
+    },
+    "frogPump": {
+      "beginner": 0.2,
+      "novice": 0.4,
+      "intermediate": 0.65,
+      "advanced": 0.95,
+      "elite": 1.3
+    },
+    "curtsyLunge": {
+      "beginner": 0.15,
+      "novice": 0.3,
+      "intermediate": 0.5,
+      "advanced": 0.75,
+      "elite": 1.0
+    },
+    "abduction": {
+      "beginner": 0.3,
+      "novice": 0.55,
+      "intermediate": 0.85,
+      "advanced": 1.2,
+      "elite": 1.6
+    },
+    "barbellCurl": {
+      "beginner": 0.3,
+      "novice": 0.5,
+      "intermediate": 0.7,
+      "advanced": 0.95,
+      "elite": 1.25
+    },
+    "ezBarCurl": {
+      "beginner": 0.3,
+      "novice": 0.5,
+      "intermediate": 0.7,
+      "advanced": 0.95,
+      "elite": 1.25
+    },
+    "dbCurl": {
+      "beginner": 0.15,
+      "novice": 0.25,
+      "intermediate": 0.35,
+      "advanced": 0.48,
+      "elite": 0.65
+    },
+    "hammerCurl": {
+      "beginner": 0.15,
+      "novice": 0.28,
+      "intermediate": 0.4,
+      "advanced": 0.55,
+      "elite": 0.72
+    },
+    "inclineCurl": {
+      "beginner": 0.12,
+      "novice": 0.2,
+      "intermediate": 0.3,
+      "advanced": 0.42,
+      "elite": 0.58
+    },
+    "preacherCurl": {
+      "beginner": 0.22,
+      "novice": 0.38,
+      "intermediate": 0.55,
+      "advanced": 0.75,
+      "elite": 1.0
+    },
+    "concentrationCurl": {
+      "beginner": 0.12,
+      "novice": 0.2,
+      "intermediate": 0.3,
+      "advanced": 0.42,
+      "elite": 0.55
+    },
+    "cableCurl": {
+      "beginner": 0.25,
+      "novice": 0.42,
+      "intermediate": 0.62,
+      "advanced": 0.88,
+      "elite": 1.15
+    },
+    "spiderCurl": {
+      "beginner": 0.2,
+      "novice": 0.35,
+      "intermediate": 0.5,
+      "advanced": 0.7,
+      "elite": 0.92
+    },
+    "dragCurl": {
+      "beginner": 0.22,
+      "novice": 0.38,
+      "intermediate": 0.55,
+      "advanced": 0.75,
+      "elite": 1.0
+    },
+    "zottmanCurl": {
+      "beginner": 0.14,
+      "novice": 0.24,
+      "intermediate": 0.35,
+      "advanced": 0.48,
+      "elite": 0.65
+    },
+    "reverseCurl": {
+      "beginner": 0.18,
+      "novice": 0.3,
+      "intermediate": 0.45,
+      "advanced": 0.62,
+      "elite": 0.82
+    },
+    "skullCrusher": {
+      "beginner": 0.3,
+      "novice": 0.5,
+      "intermediate": 0.7,
+      "advanced": 0.95,
+      "elite": 1.25
+    },
+    "cablePushdown": {
+      "beginner": 0.35,
+      "novice": 0.58,
+      "intermediate": 0.85,
+      "advanced": 1.15,
+      "elite": 1.5
+    },
+    "ropePushdown": {
+      "beginner": 0.3,
+      "novice": 0.52,
+      "intermediate": 0.75,
+      "advanced": 1.05,
+      "elite": 1.38
+    },
+    "kickback": {
+      "beginner": 0.06,
+      "novice": 0.1,
+      "intermediate": 0.16,
+      "advanced": 0.24,
+      "elite": 0.34
+    },
+    "diamondPushUp": {
+      "beginner": 0.1,
+      "novice": 0.3,
+      "intermediate": 0.55,
+      "advanced": 0.85,
+      "elite": 1.2
+    },
+    "jmPress": {
+      "beginner": 0.35,
+      "novice": 0.58,
+      "intermediate": 0.82,
+      "advanced": 1.1,
+      "elite": 1.45
+    },
+    "tatePress": {
+      "beginner": 0.2,
+      "novice": 0.35,
+      "intermediate": 0.52,
+      "advanced": 0.72,
+      "elite": 0.95
+    },
+    "tricepsDips": {
+      "beginner": 0.1,
+      "novice": 0.3,
+      "intermediate": 0.55,
+      "advanced": 0.85,
+      "elite": 1.15
+    },
+    "wristCurl": {
+      "beginner": 0.2,
+      "novice": 0.35,
+      "intermediate": 0.55,
+      "advanced": 0.8,
+      "elite": 1.05
+    },
+    "reverseWristCurl": {
+      "beginner": 0.12,
+      "novice": 0.22,
+      "intermediate": 0.35,
+      "advanced": 0.5,
+      "elite": 0.68
+    },
+    "farmersWalk": {
+      "beginner": 0.8,
+      "novice": 1.3,
+      "intermediate": 1.9,
+      "advanced": 2.6,
+      "elite": 3.4
+    },
+    "platePinch": {
+      "beginner": 0.08,
+      "novice": 0.14,
+      "intermediate": 0.2,
+      "advanced": 0.28,
+      "elite": 0.38
+    },
+    "cableCrunch": {
+      "beginner": 0.25,
+      "novice": 0.45,
+      "intermediate": 0.7,
+      "advanced": 1.0,
+      "elite": 1.35
+    },
+    "backExtension": {
+      "beginner": 0.1,
+      "novice": 0.25,
+      "intermediate": 0.45,
+      "advanced": 0.7,
+      "elite": 1.0
+    },
+    "jeffersonCurl": {
+      "beginner": 0.15,
+      "novice": 0.28,
+      "intermediate": 0.42,
+      "advanced": 0.6,
+      "elite": 0.8
+    },
+    "kbClean": {
+      "beginner": 0.35,
+      "novice": 0.55,
+      "intermediate": 0.8,
+      "advanced": 1.1,
+      "elite": 1.45
+    },
+    "kbSnatch": {
+      "beginner": 0.3,
+      "novice": 0.48,
+      "intermediate": 0.7,
+      "advanced": 0.95,
+      "elite": 1.25
+    },
+    "turkishGetUp": {
+      "beginner": 0.25,
+      "novice": 0.42,
+      "intermediate": 0.62,
+      "advanced": 0.88,
+      "elite": 1.15
+    },
+    "jumpSquat": {
+      "beginner": 0.15,
+      "novice": 0.28,
+      "intermediate": 0.42,
+      "advanced": 0.6,
+      "elite": 0.8
     }
   },
   "inheritance": {
-    "dbBenchPress": {
-      "parent": "benchPress",
+    "pullover": {
+      "parent": "straightArmPulldown",
       "muscle_ratio": 0.9
-    },
-    "dbInclinePress": {
-      "parent": "inclineBench",
-      "muscle_ratio": 0.85
-    },
-    "dbFly": {
-      "parent": "benchPress",
-      "muscle_ratio": 0.45
-    },
-    "cableFly": {
-      "parent": "benchPress",
-      "muscle_ratio": 0.4
-    },
-    "pecDeck": {
-      "parent": "benchPress",
-      "muscle_ratio": 0.85
-    },
-    "pushUp": {
-      "parent": "benchPress",
-      "muscle_ratio": 0.6
-    },
-    "machinePress": {
-      "parent": "benchPress",
-      "muscle_ratio": 0.95
-    },
-    "machineShoulderPress": {
-      "parent": "overheadPress",
-      "muscle_ratio": 1.1
-    },
-    "dbShoulderPress": {
-      "parent": "overheadPress",
-      "muscle_ratio": 0.85
-    },
-    "arnoldPress": {
-      "parent": "overheadPress",
-      "muscle_ratio": 0.8
-    },
-    "uprightRow": {
-      "parent": "overheadPress",
-      "muscle_ratio": 0.5
-    },
-    "frontRaise": {
-      "parent": "overheadPress",
-      "muscle_ratio": 0.28
-    },
-    "rearDeltFly": {
-      "parent": "overheadPress",
-      "muscle_ratio": 0.22
-    },
-    "cableLateralRaise": {
-      "parent": "lateralRaise",
-      "muscle_ratio": 0.9
-    },
-    "chinUp": {
-      "parent": "pullUp",
-      "muscle_ratio": 1.02
-    },
-    "pendlayRow": {
-      "parent": "barbellRow",
-      "muscle_ratio": 0.95
     },
     "dbRow": {
       "parent": "barbellRow",
-      "muscle_ratio": 0.52
-    },
-    "tBarRow": {
-      "parent": "barbellRow",
-      "muscle_ratio": 0.9
-    },
-    "machineRow": {
-      "parent": "barbellRow",
-      "muscle_ratio": 0.85
-    },
-    "straightArmPulldown": {
-      "parent": "latPulldown",
       "muscle_ratio": 0.55
     },
-    "rackPull": {
-      "parent": "deadlift",
-      "muscle_ratio": 1.15
+    "cubanRotation": {
+      "parent": "lateralRaise",
+      "muscle_ratio": 0.35
     },
-    "sumoDeadlift": {
-      "parent": "deadlift",
-      "muscle_ratio": 1.0
+    "plateFrontRaise": {
+      "parent": "frontRaise",
+      "muscle_ratio": 0.9
     },
-    "stiffLegDeadlift": {
-      "parent": "romanianDeadlift",
-      "muscle_ratio": 0.95
+    "bayesianCurl": {
+      "parent": "cableCurl",
+      "muscle_ratio": 0.85
+    },
+    "overheadExtension": {
+      "parent": "skullCrusher",
+      "muscle_ratio": 0.55
+    },
+    "overheadCableExt": {
+      "parent": "cablePushdown",
+      "muscle_ratio": 0.85
+    },
+    "machineDips": {
+      "parent": "dips",
+      "muscle_ratio": 0.9
+    },
+    "gripper": {
+      "parent": "platePinch",
+      "muscle_ratio": 0.6
     },
     "dbRDL": {
       "parent": "romanianDeadlift",
       "muscle_ratio": 0.85
     },
-    "ezBarCurl": {
-      "parent": "barbellCurl",
-      "muscle_ratio": 1.0
-    },
-    "dbCurl": {
-      "parent": "barbellCurl",
-      "muscle_ratio": 0.48
-    },
-    "hammerCurl": {
-      "parent": "barbellCurl",
-      "muscle_ratio": 0.55
-    },
-    "inclineCurl": {
-      "parent": "barbellCurl",
-      "muscle_ratio": 0.42
-    },
-    "preacherCurl": {
-      "parent": "barbellCurl",
-      "muscle_ratio": 0.6
-    },
-    "concentrationCurl": {
-      "parent": "barbellCurl",
-      "muscle_ratio": 0.4
-    },
-    "cableCurl": {
-      "parent": "barbellCurl",
-      "muscle_ratio": 0.7
-    },
-    "spiderCurl": {
-      "parent": "barbellCurl",
-      "muscle_ratio": 0.45
-    },
-    "bayesianCurl": {
-      "parent": "barbellCurl",
-      "muscle_ratio": 0.55
-    },
-    "tricepsDips": {
-      "parent": "dips",
-      "muscle_ratio": 1.0
-    },
-    "overheadExtension": {
-      "parent": "skullCrusher",
-      "muscle_ratio": 0.9
-    },
-    "cablePushdown": {
-      "parent": "skullCrusher",
-      "muscle_ratio": 1.1
-    },
-    "ropePushdown": {
-      "parent": "skullCrusher",
-      "muscle_ratio": 0.95
-    },
-    "kickback": {
-      "parent": "skullCrusher",
+    "singleLegRDL": {
+      "parent": "romanianDeadlift",
       "muscle_ratio": 0.35
     },
-    "gobletSquat": {
-      "parent": "squat",
-      "muscle_ratio": 0.45
-    },
-    "bulgarianSplitSquat": {
-      "parent": "squat",
+    "swissBallCurl": {
+      "parent": "lyingLegCurl",
       "muscle_ratio": 0.5
     },
-    "walkingLunge": {
-      "parent": "squat",
-      "muscle_ratio": 0.5
-    },
-    "smithSquat": {
-      "parent": "squat",
-      "muscle_ratio": 1.05
-    },
-    "pauseSquat": {
-      "parent": "squat",
-      "muscle_ratio": 0.9
-    },
-    "seatedLegCurl": {
-      "parent": "lyingLegCurl",
-      "muscle_ratio": 1.05
-    },
-    "nordicCurl": {
-      "parent": "lyingLegCurl",
-      "muscle_ratio": 1.3
-    },
-    "gluteBridge": {
-      "parent": "hipThrust",
-      "muscle_ratio": 0.85
+    "reverseHyper": {
+      "parent": "weightedBackExtension",
+      "muscle_ratio": 0.95
     },
     "smithHipThrust": {
       "parent": "hipThrust",
       "muscle_ratio": 1.0
     },
-    "seatedCalfRaise": {
-      "parent": "standingCalfRaise",
-      "muscle_ratio": 0.7
-    },
     "legPressCalfRaise": {
       "parent": "legPress",
       "muscle_ratio": 0.9
     },
-    "pullover": {
-      "parent": "latPulldown",
+    "singleLegCalfRaise": {
+      "parent": "standingCalfRaise",
       "muscle_ratio": 0.55
     },
-    "reversePecDeck": {
-      "parent": "rearDeltFly",
-      "muscle_ratio": 1.1
+    "dbCalfRaise": {
+      "parent": "standingCalfRaise",
+      "muscle_ratio": 0.5
     },
-    "facePull": {
-      "parent": "rearDeltFly",
-      "muscle_ratio": 1.2
+    "tibialisRaise": {
+      "parent": "standingCalfRaise",
+      "muscle_ratio": 0.15
     },
-    "lo_smithInclinePress": {
-      "parent": "inclineBench",
-      "muscle_ratio": 0.95
+    "machineBackExtension": {
+      "parent": "backExtension",
+      "muscle_ratio": 2.5
     },
-    "lo_smithBenchPress": {
-      "parent": "benchPress",
-      "muscle_ratio": 1.0
+    "kettlebellSwing": {
+      "parent": "hipThrust",
+      "muscle_ratio": 0.35
     },
-    "lo_smithDeclinePress": {
-      "parent": "declineBench",
-      "muscle_ratio": 1.0
+    "thruster": {
+      "parent": "frontSquat",
+      "muscle_ratio": 0.5
     },
-    "lo_smithShoulderPress": {
+    "cleanAndPress": {
       "parent": "overheadPress",
-      "muscle_ratio": 1.05
-    },
-    "lo_smithRow": {
-      "parent": "barbellRow",
       "muscle_ratio": 0.95
     },
-    "lo_smithRDL": {
-      "parent": "romanianDeadlift",
-      "muscle_ratio": 1.0
-    },
-    "lo_beltSquat": {
-      "parent": "squat",
-      "muscle_ratio": 0.85
+    "sledPush": {
+      "parent": "deadlift",
+      "muscle_ratio": 0.6
     }
   }
 }
