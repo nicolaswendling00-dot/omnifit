@@ -68,6 +68,19 @@ export function macroGoalsFor(date) {
   return live;
 }
 
+// À appeler juste après un import : fige l'objectif calories/macros pour tous les
+// jours importés qui n'en ont pas déjà un (import externe, sans champ `goal`),
+// au moment de l'import — plutôt que de le figer plus tard avec l'objectif du jour
+// où l'utilisateur consulte cette date par hasard (ce qui serait incorrect/trompeur).
+export function backfillNutritionGoals() {
+  const live = macroGoals();
+  let changed = false;
+  for (const day of Object.values(store.userData.nutrition.byDate)) {
+    if (!day.goal) { day.goal = live; changed = true; }
+  }
+  if (changed) store.persist();
+}
+
 // ============================================================
 // OBJECTIFS MACROS — sheet (Grammes / Auto / Pourcentages)
 // ============================================================

@@ -5,8 +5,9 @@ import { EQUIPMENT_TYPES } from '../data/exercises.js';
 import { el, icons, openModal, toast, confirmModal } from '../utils/ui.js';
 import { RANK_ORDER, RANK_META, DIV_LP, ONYX_LP, rankBadge, estimateRankFromLift, getStandards } from '../utils/ranks.js';
 import { openExercisePicker } from './workout.js';
+import { backfillNutritionGoals } from './nutrition.js';
 
-const VERSION = '3.16';
+const VERSION = '3.17';
 
 function toggleRow(label, key, sub = '') {
   const s = store.userData.settings;
@@ -219,8 +220,8 @@ export function render(container) {
           title: 'Importer',
           content: '<p class="confirm-text">Fusionner avec les données existantes, ou tout écraser ?</p>',
           actions: [
-            { label: 'Fusionner', variant: 'btn-secondary', onClick: () => { store.importJSON(data, 'merge'); rerender(); } },
-            { label: 'Écraser', variant: 'btn-danger', onClick: () => { store.importJSON(data, 'overwrite'); applyTheme(); rerender(); } },
+            { label: 'Fusionner', variant: 'btn-secondary', onClick: () => { store.importJSON(data, 'merge'); backfillNutritionGoals(); rerender(); } },
+            { label: 'Écraser', variant: 'btn-danger', onClick: () => { store.importJSON(data, 'overwrite'); backfillNutritionGoals(); applyTheme(); rerender(); } },
           ],
         });
       } catch (e) {

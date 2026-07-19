@@ -79,7 +79,7 @@ function openChartModal(rerender) {
     <h3 style="margin:14px 0 4px">Entrées récentes</h3>
     <div id="w-recent">${recent.length ? '' : '<div class="empty-state">Aucune pesée</div>'}</div>
   </div>`);
-  openModal({ title: 'Poids — 14 jours', content, wide: true, actions: [{ label: 'Fermer', variant: 'btn-primary' }] });
+  openModal({ title: 'Poids — 14 jours', content, wide: true, actions: [] });
   const draw = () => renderWeightChart(content.querySelector('#weight-chart'));
   content.querySelector('#btn-toggle-sma').addEventListener('click', (e) => {
     smaVisible = !smaVisible;

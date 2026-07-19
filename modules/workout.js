@@ -1258,7 +1258,6 @@ function openFullCalendar() {
   scroll.addEventListener('click', (e) => {
     const b = e.target.closest('.cal-day'); if (!b || b.disabled) return;
     const ws = byDate[b.dataset.date]; if (!ws) return;
-    close();
     openWorkoutDetail(ws[ws.length - 1]);
   });
   overlay.querySelector('#cal-close').addEventListener('click', close);
