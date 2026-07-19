@@ -5,7 +5,7 @@ import { store, todayISO } from '../utils/storage.js';
 import { EXERCISES, MUSCLES, muscleLabel } from '../data/exercises.js';
 import { formatTime, workoutMuscleVolume, weeklySetsByMuscle, muscleAttenuation } from '../utils/math.js';
 import { el, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong } from '../utils/ui.js';
-import { computeExerciseLP, rankFromLP, rankBadge, rankChip } from '../utils/ranks.js';
+import { computeExerciseLP, rankFromLP, rankBadge, rankChip, getStandards } from '../utils/ranks.js';
 
 let volumeChart = null;
 let impChart = null;
@@ -31,10 +31,15 @@ export function exerciseLookup(id) {
 function normalizeStr(s) {
   return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
-// Rang d'un exo (dérivé du LP cumulé). lpMap optionnel pour éviter de recalculer en boucle.
+// Map LP de tous les exos (avec poids de corps + standards pour le raccourci Onyx)
+function lpMapAll() {
+  return computeExerciseLP(store.userData.workouts, { bodyweight: store.userData.profile && store.userData.profile.weight, standards: getStandards() });
+}
+// Rang d'un exo. Retourne null si l'exo n'a JAMAIS été réalisé (pas de rang affiché).
 function exerciseRank(exerciseId, lpMap) {
-  const map = lpMap || computeExerciseLP(store.userData.workouts);
-  return rankFromLP(map[exerciseId] || 0);
+  const map = lpMap || lpMapAll();
+  if (map[exerciseId] === undefined) return null;
+  return rankFromLP(map[exerciseId]);
 }
 // Synonymes anglais/familiers par muscle et catégorie (recherche inclusive)
 const MUSCLE_SYN = {
@@ -191,10 +196,12 @@ function openExercisePicker(onPick, title = 'Ajouter un exercice') {
     const nq = normalizeStr(q);
     const items = filteredExercises().filter((e) => exoMatches(e, nq));
     list.innerHTML = items.length ? '' : '<div class="empty-state">Aucun résultat</div>';
-    const lpMap = computeExerciseLP(store.userData.workouts);
+    const lpMap = lpMapAll();
     for (const e of items.slice(0, 80)) {
-      const rk = rankFromLP(lpMap[e.id] || 0);
-      const b = el(`<button class="exo-search-item"><span>${(exerciseLookup(e.id) || e).name}</span><span class="rank-inline" title="${rk.name}${rk.division ? ' ' + rk.division : ''}">${rankChip(rk.id, 28)}</span></button>`);
+      const ranked = lpMap[e.id] !== undefined;
+      const rk = ranked ? rankFromLP(lpMap[e.id]) : null;
+      const chip = rk ? `<span class="rank-inline" title="${rk.name}${rk.division ? ' ' + rk.division : ''}">${rankChip(rk.id, 28)}</span>` : '<span class="rank-inline muted" style="font-size:0.66rem">—</span>';
+      const b = el(`<button class="exo-search-item"><span>${(exerciseLookup(e.id) || e).name}</span>${chip}</button>`);
       b.addEventListener('click', () => { close(); onPick(e); });
       list.appendChild(b);
     }
@@ -410,23 +417,24 @@ function openExerciseDetailSheet(exerciseId) {
   }
 
   const rk = exerciseRank(exerciseId);
-  const lpTxt = rk.division ? `${rk.lp} / ${rk.lpNeeded} LP` : `${rk.lp} LP`;
-  const rkFull = rk.division ? `${rk.name} ${rk.division}` : rk.name;
+  const rankBlock = rk
+    ? `<div class="rank-flip" id="ed-rank" title="Toucher pour voir les LP">
+        <div class="rank-flip-inner">
+          <div class="rank-face rank-front">
+            ${rankBadge(rk.id, 132)}
+            <div class="rank-name" style="color:${rk.color}">${rk.division ? `${rk.name} ${rk.division}` : rk.name}</div>
+          </div>
+          <div class="rank-face rank-back" style="border-color:${rk.color}">
+            <div class="rank-back-rank" style="color:${rk.color}">${rk.division ? `${rk.name} ${rk.division}` : rk.name}</div>
+            <div class="rank-back-lp">${rk.division ? `${rk.lp} / ${rk.lpNeeded} LP` : `${rk.lp} LP`}</div>
+            ${rk.division ? `<div class="rank-back-bar"><div style="width:${rk.lp}%;background:${rk.color}"></div></div>` : '<div class="rank-back-sub">Rang ultime atteint</div>'}
+          </div>
+        </div>
+      </div>`
+    : '<div class="rank-unranked">Non classé — réalise cet exercice pour obtenir un rang</div>';
 
   const form = el(`<div>
-    <div class="rank-flip" id="ed-rank" title="Toucher pour voir les LP">
-      <div class="rank-flip-inner">
-        <div class="rank-face rank-front">
-          ${rankBadge(rk.id, 132)}
-          <div class="rank-name" style="color:${rk.color}">${rkFull}</div>
-        </div>
-        <div class="rank-face rank-back" style="border-color:${rk.color}">
-          <div class="rank-back-rank" style="color:${rk.color}">${rkFull}</div>
-          <div class="rank-back-lp">${lpTxt}</div>
-          ${rk.division ? `<div class="rank-back-bar"><div style="width:${rk.lp}%;background:${rk.color}"></div></div>` : '<div class="rank-back-sub">Rang ultime atteint</div>'}
-        </div>
-      </div>
-    </div>
+    ${rankBlock}
     <button class="btn btn-secondary btn-sm btn-block" id="ed-rename" style="margin-bottom:12px">${icons.edit} Modifier le nom</button>
     ${best1rm ? `<div class="orm-card">
       <div class="orm-head">Meilleure série</div>
@@ -718,7 +726,7 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null) {
   const renderExos = () => {
     const exosHost = overlay.querySelector('#s-exos');
     exosHost.innerHTML = session.exercises.length ? '' : '<div class="empty-state">Ajoute un premier exercice</div>';
-    const lpMap = computeExerciseLP(store.userData.workouts);
+    const lpMap = lpMapAll();
     session.exercises.forEach((wx, idx) => {
       const def = exerciseLookup(wx.exerciseId);
       if (!def) return;
@@ -726,6 +734,7 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null) {
       const prevSets = last ? last.wx.sets : [];
       const curVol = exoVolume(wx);
       const imp = exoImprovement(wx.exerciseId, curVol);
+      const rk = exerciseRank(wx.exerciseId, lpMap);
 
       const rowCount = Math.max(wx.sets.length + 1, prevSets.length);
       let rowsHtml = '';
@@ -748,7 +757,7 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null) {
       const card = el(`<div class="card exo-card">
         <div class="exo-head">
           <button class="exo-name-btn" data-detail="${idx}">
-            <span class="rank-inline">${rankChip(exerciseRank(wx.exerciseId, lpMap).id, 26)}</span>
+            ${rk ? `<span class="rank-inline">${rankChip(rk.id, 26)}</span>` : ''}
             <span>${def.name} ${wx.ss ? `<span class="ss-chip">SS${wx.ss}</span>` : ''} ${impBadge(imp)}</span>
             ${icons.chevron}
           </button>
@@ -1304,12 +1313,17 @@ function renderVolumeDashboard(host, rerender) {
   if (vgBtn && rerender) vgBtn.addEventListener('click', () => openVolumeGoalsModal(rerender));
 }
 
-// Navigateur d'exercices : liste + recherche (sans accents) → statistiques
+// Navigateur d'exercices : liste + recherche (sans accents) + tri → statistiques
 function openExerciseBrowser() {
+  let sortMode = 'alpha'; // 'alpha' | 'rank'
   const overlay = el(`<div class="picker-overlay">
     <div class="picker-topbar">
       <input id="xb-search" type="text" placeholder="Rechercher un exercice…" autocomplete="off">
       <button class="icon-btn" id="xb-close" aria-label="Fermer">${icons.close}</button>
+    </div>
+    <div class="segment" id="xb-sort" style="margin:0 0 8px">
+      <button data-s="alpha" class="active">A → Z</button>
+      <button data-s="rank">Par rang</button>
     </div>
     <div class="picker-list" id="xb-list"></div>
   </div>`);
@@ -1320,23 +1334,36 @@ function openExerciseBrowser() {
   const list = overlay.querySelector('#xb-list');
   const draw = (q = '') => {
     const nq = normalizeStr(q);
+    const lpMap = lpMapAll();
     const items = allExercises()
-      .map((e) => ({ e, name: (exerciseLookup(e.id) || e).name }))
-      .filter((x) => exoMatches(x.e, nq))
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .map((e) => ({ e, name: (exerciseLookup(e.id) || e).name, lp: lpMap[e.id] }))
+      .filter((x) => exoMatches(x.e, nq));
+    if (sortMode === 'rank') {
+      items.sort((a, b) => (b.lp ?? -1) - (a.lp ?? -1) || a.name.localeCompare(b.name));
+    } else {
+      items.sort((a, b) => a.name.localeCompare(b.name));
+    }
     list.innerHTML = items.length ? '' : '<div class="empty-state">Aucun résultat</div>';
-    const lpMap = computeExerciseLP(store.userData.workouts);
-    for (const { e, name } of items.slice(0, 150)) {
-      const rk = rankFromLP(lpMap[e.id] || 0);
-      const b = el(`<button class="exo-search-item"><span>${name}</span><span class="rank-inline" title="${rk.name}${rk.division ? ' ' + rk.division : ''}">${rankChip(rk.id, 28)}</span></button>`);
+    for (const { e, name, lp } of items.slice(0, 150)) {
+      const rk = lp !== undefined ? rankFromLP(lp) : null;
+      const chip = rk ? `<span class="rank-inline" title="${rk.name}${rk.division ? ' ' + rk.division : ''}">${rankChip(rk.id, 28)}</span>` : '<span class="rank-inline muted" style="font-size:0.66rem">non classé</span>';
+      const b = el(`<button class="exo-search-item"><span>${name}</span>${chip}</button>`);
       b.addEventListener('click', () => { close(); openExerciseDetailSheet(e.id); });
       list.appendChild(b);
     }
   };
   draw();
-  overlay.querySelector('#xb-search').addEventListener('input', (e) => draw(e.target.value));
+  const searchInput = overlay.querySelector('#xb-search');
+  searchInput.addEventListener('input', (e) => draw(e.target.value));
+  overlay.querySelector('#xb-sort').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-s]');
+    if (!btn) return;
+    sortMode = btn.dataset.s;
+    overlay.querySelectorAll('#xb-sort button').forEach((b) => b.classList.toggle('active', b === btn));
+    draw(searchInput.value);
+  });
   overlay.querySelector('#xb-close').addEventListener('click', close);
-  setTimeout(() => overlay.querySelector('#xb-search').focus(), 250);
+  setTimeout(() => searchInput.focus(), 250);
 }
 
 // Clic sur un muscle : exercices de la semaine qui l'ont travaillé + amélioration dans le temps

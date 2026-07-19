@@ -16,36 +16,34 @@ export const RANK_META = {
 
 // ============================================================
 //  ALGORITHME DE GAIN DE LP
-//  Gain = α · (V/100) + β · ΔP
-//   V  : volume de la séance sur l'exo (Σ poids×reps). Récompense la CONSTANCE.
-//   ΔP : gain de perf = hausse du 1RM estimé vs le record précédent (kg). Récompense la PERFORMANCE.
-//   α, β : coefficients qui évoluent avec le rang.
+//  Gain = α · V_relatif + β · ΔP_relatif
+//   V_relatif  = (volume de la séance / volume moyen historique) × 100  (100 = séance "normale")
+//   ΔP_relatif = % d'augmentation du 1RM estimé vs record perso (ex : +5 % → 5 ; 0 si pas de record)
+//   α, β évoluent avec le rang.
 //
-//  Courbe de difficulté (choix des valeurs) :
-//   - Bas niveau (Bronze→Diamant) : α élevé, β faible. Faire du volume suffit à monter vite :
-//     un débutant régulier atteint Diamant sans forcément battre des records.
-//   - Haut niveau (Émeraude→Rubis) : α chute fortement, β grimpe. Le volume ne rapporte presque
-//     plus rien ; il faut battre ses 1RM pour continuer à gagner du LP.
-//   - Onyx : α = 0. La régularité ne rapporte STRICTEMENT rien. Seule la performance pure
-//     (nouveaux records) fait gagner du LP → rang réservé à l'élite.
+//  Cibles de calibrage (volume normal = V_relatif 100, record = ΔP_relatif 5) :
+//   - Bronze/Or        : ~25 LP en volume normal (α·100 = 25 → α = 0.25).
+//   - Platine/Diamant  : ~15 normal, ~25 avec record  → α = 0.15 ; 15 + β·5 = 25 → β = 2.0.
+//   - Émeraude/Saphir  : ~8 normal, ~20 avec record   → α = 0.08 ; 8 + β·5 = 20 → β = 2.4.
+//   - Rubis            : ~3 normal, ~15 avec record    → α = 0.03 ; 3 + β·5 = 15 → β = 2.4.
+//   - Onyx             : α = 0 (le volume ne rapporte plus rien) ; seule la perf compte, β = 2.6.
+//  Conséquence : plus on monte, plus il faut battre ses records ; l'assiduité seule plafonne.
 // ============================================================
 export const COEFFS = {
-  //          α (volume)   β (perf)
-  bronze: { a: 1.00, b: 0.30 },
-  gold: { a: 0.85, b: 0.55 },
-  plat: { a: 0.62, b: 0.85 },
-  diam: { a: 0.42, b: 1.20 },
-  emer: { a: 0.24, b: 1.70 }, // bascule : la perf prend le dessus
-  saph: { a: 0.12, b: 2.30 },
-  ruby: { a: 0.05, b: 3.00 },
-  onyx: { a: 0.00, b: 3.60 }, // volume inutile, seule la perf compte
+  bronze: { a: 0.25, b: 1.5 },
+  gold: { a: 0.25, b: 1.5 },
+  plat: { a: 0.15, b: 2.0 },
+  diam: { a: 0.15, b: 2.0 },
+  emer: { a: 0.08, b: 2.4 },
+  saph: { a: 0.08, b: 2.4 },
+  ruby: { a: 0.03, b: 2.4 },
+  onyx: { a: 0.00, b: 2.6 },
 };
 
-// Gain de LP d'une séance pour un exo donné, selon le rang actuel de l'exo.
-// V en kg (volume total), dP en kg (hausse de 1RM ; 0 si pas de record battu).
-export function lpGain(V, dP, rankId) {
+// Gain de LP d'une séance. vRel = volume relatif (100 = normal), dPRel = % de hausse du 1RM.
+export function lpGain(vRel, dPRel, rankId) {
   const c = COEFFS[rankId] || COEFFS.bronze;
-  const gain = c.a * (Math.max(0, V) / 100) + c.b * Math.max(0, dP);
+  const gain = c.a * Math.max(0, vRel) + c.b * Math.max(0, dPRel);
   return Math.max(0, Math.round(gain));
 }
 
@@ -76,21 +74,57 @@ function ormOfSets(sets) {
   return orm;
 }
 
-// Cumul du LP de TOUS les exos en un seul passage chronologique sur l'historique.
-// Retourne { exerciseId: totalLp }. Le rang utilisé à chaque étape dépend du LP déjà cumulé
-// sur cet exo (la difficulté augmente au fur et à mesure qu'on monte).
-export function computeExerciseLP(workouts) {
+// ============================================================
+//  STANDARDS StrengthLevel (chargés depuis standards.json au boot)
+//  Sert au "raccourci Onyx" : 1RM séance ≥ Élite × 1.15 × poids_de_corps → Onyx direct.
+// ============================================================
+let STANDARDS = null;
+export function setStandards(obj) { STANDARDS = obj || null; }
+export function getStandards() { return STANDARDS; }
+
+// Standard "Élite" (ratio 1RM/poids) d'un exo, résolu via l'héritage parent-enfant.
+export function eliteStandard(exerciseId, standards = STANDARDS, _seen = {}) {
+  if (!standards || _seen[exerciseId]) return null;
+  _seen[exerciseId] = true;
+  const d = standards.standards && standards.standards[exerciseId];
+  if (d && d.elite != null) return d.elite;
+  const inh = standards.inheritance && standards.inheritance[exerciseId];
+  if (inh) {
+    const parent = eliteStandard(inh.parent, standards, _seen);
+    return parent != null ? parent * inh.muscle_ratio : null;
+  }
+  return null;
+}
+
+// Cumul du LP de TOUS les exos en un passage chronologique.
+// opts : { bodyweight, standards } — nécessaires pour le raccourci Onyx (sinon ignoré proprement).
+export function computeExerciseLP(workouts, opts = {}) {
+  const bw = opts.bodyweight;
+  const std = opts.standards || STANDARDS;
   const sorted = [...workouts].sort((a, b) => a.date.localeCompare(b.date));
-  const state = {}; // id -> { lp, bestOrm }
+  const state = {}; // id -> { lp, bestOrm, volSum, volCount }
   for (const w of sorted) {
     for (const wx of w.exercises) {
       if (!wx.sets || !wx.sets.length) continue;
-      const st = state[wx.exerciseId] || (state[wx.exerciseId] = { lp: 0, bestOrm: 0 });
+      const st = state[wx.exerciseId] || (state[wx.exerciseId] = { lp: 0, bestOrm: 0, volSum: 0, volCount: 0 });
       const V = wx.sets.reduce((acc, s) => acc + (s.weight || 0) * (s.reps || 0), 0);
       const orm = ormOfSets(wx.sets);
-      const dP = Math.max(0, orm - st.bestOrm);
+      // Volume relatif vs moyenne historique (avant cette séance)
+      const avg = st.volCount > 0 ? st.volSum / st.volCount : V;
+      const vRel = avg > 0 ? (V / avg) * 100 : 100;
+      // % de hausse du 1RM vs record perso
+      const dPRel = st.bestOrm > 0 ? Math.max(0, ((orm - st.bestOrm) / st.bestOrm) * 100) : 0;
+
+      // Raccourci Onyx : perf ≥ Élite × 1.15 → saut direct à 2100 LP
+      let jumped = false;
+      if (bw && std) {
+        const elite = eliteStandard(wx.exerciseId, std);
+        if (elite && orm >= elite * bw * 1.15) { st.lp = Math.max(st.lp, ONYX_LP); jumped = true; }
+      }
+      if (!jumped) st.lp += lpGain(vRel, dPRel, rankFromLP(st.lp).id);
+
+      st.volSum += V; st.volCount += 1;
       st.bestOrm = Math.max(st.bestOrm, orm);
-      st.lp += lpGain(V, dP, rankFromLP(st.lp).id);
     }
   }
   const out = {};

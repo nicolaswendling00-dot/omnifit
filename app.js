@@ -4,6 +4,7 @@ import { render as renderNutrition } from './modules/nutrition.js';
 import { render as renderWorkout } from './modules/workout.js';
 import { render as renderActivity } from './modules/activity.js';
 import { render as renderSettings, applyTheme } from './modules/settings.js';
+import { setStandards } from './utils/ranks.js';
 
 const PAGES = [
   { id: 'page-home', render: renderHome },
@@ -57,6 +58,12 @@ appContainer.addEventListener('touchend', (e) => {
 // ---------- Boot ----------
 applyTheme();
 goTo(0);
+
+// Standards StrengthLevel (pour le raccourci Onyx). Chargement non bloquant.
+fetch('./standards.json')
+  .then((r) => (r.ok ? r.json() : null))
+  .then((data) => { if (data) { setStandards(data); const p = PAGES[currentPage]; p.render(document.getElementById(p.id)); } })
+  .catch(() => {});
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
