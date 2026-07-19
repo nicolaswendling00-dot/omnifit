@@ -35,8 +35,8 @@ export function calcKcal(prot, carbs, fat) {
   return Math.round(prot * 4 + carbs * 4 + fat * 9);
 }
 
-// Objectif fibres : g de fibres pour 1000 kcal d'objectif (défaut 10, réglable)
-export function fiberGoalFromKcal(kcal, per1000 = 10) {
+// Objectif fibres : g de fibres pour 1000 kcal d'objectif (défaut 15, réglable)
+export function fiberGoalFromKcal(kcal, per1000 = 15) {
   return Math.round((kcal / 1000) * per1000);
 }
 
