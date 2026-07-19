@@ -6,7 +6,7 @@ import { el, icons, openModal, toast, confirmModal } from '../utils/ui.js';
 import { RANK_ORDER, RANK_META, DIV_LP, ONYX_LP, rankBadge, estimateRankFromLift, getStandards } from '../utils/ranks.js';
 import { openExercisePicker } from './workout.js';
 
-const VERSION = '3.15';
+const VERSION = '3.16';
 
 function toggleRow(label, key, sub = '') {
   const s = store.userData.settings;
