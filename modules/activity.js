@@ -7,6 +7,19 @@ let stepsChart = null;
 let viewDays = 7;
 const stepGoal = () => store.userData.settings.stepsGoal || 10000;
 
+// Objectif de pas figé par jour : augmenter l'objectif aujourd'hui ne dévalide pas
+// les jours passés qui avaient déjà atteint l'ancien objectif (même principe que
+// macroGoalsFor pour la nutrition).
+function stepGoalFor(date) {
+  const live = stepGoal();
+  const gbd = store.userData.steps.goalByDate;
+  if (date === todayISO()) { gbd[date] = live; store.persist(); return live; }
+  if (gbd[date] != null) return gbd[date];
+  gbd[date] = live;
+  store.persist();
+  return live;
+}
+
 function openStepGoalModal(rerender) {
   const form = el(`<div class="field-stack">
     <label class="field"><span>Objectif de pas / jour</span><input id="sg-value" type="number" inputmode="numeric" step="500" min="0" value="${stepGoal()}" autofocus></label>
@@ -71,7 +84,7 @@ function renderChart(canvas) {
       datasets: [{
         label: 'Pas',
         data,
-        backgroundColor: data.map((v) => (v >= stepGoal() ? 'rgba(16,185,129,0.65)' : 'rgba(0,217,255,0.55)')),
+        backgroundColor: data.map((v, i) => (v >= stepGoalFor(days[i]) ? 'rgba(16,185,129,0.65)' : 'rgba(0,217,255,0.55)')),
         borderRadius: 4,
       }],
     },
@@ -98,7 +111,7 @@ function monthStats() {
   const weekAvg = Math.round(last7.reduce((a, b) => a + b, 0) / 7);
   let record = { date: '—', v: 0 };
   monthDays.forEach((d) => { const v = byDate[d] || 0; if (v > record.v) record = { date: d, v }; });
-  const activeDays = vals.filter((v) => v >= stepGoal()).length;
+  const activeDays = monthDays.filter((d) => (byDate[d] || 0) >= stepGoalFor(d)).length;
   const sumCur = vals.reduce((a, b) => a + b, 0);
   const sumPrev = prevVals.reduce((a, b) => a + b, 0);
   const trend = calculateTrend(sumCur, sumPrev);

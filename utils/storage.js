@@ -59,7 +59,7 @@ function defaultUserData() {
     workouts: [],
     routines: [],
     recipes: [],
-    steps: { byDate: {} },
+    steps: { byDate: {}, goalByDate: {} },
   };
 }
 
