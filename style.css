@@ -407,8 +407,10 @@ body[data-page="1"] #fab-nutrition-wrap { display: flex; }
 .fab-wrap.fab-open #fab-nutrition { transform: rotate(45deg); }
 
 /* Scan code-barre */
-.bc-reader { width: 100%; border-radius: 14px; overflow: hidden; background: #000; min-height: 260px; display: flex; align-items: center; justify-content: center; }
-.bc-reader video { border-radius: 14px; display: block; max-width: 100%; }
+.bc-photo-zone { width: 100%; min-height: 200px; border-radius: 14px; overflow: hidden; background: var(--surface-2); border: 1.5px dashed var(--border); display: flex; align-items: center; justify-content: center; }
+.bc-photo-zone img { width: 100%; max-height: 320px; object-fit: contain; display: block; }
+.bc-photo-placeholder { display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--text-2); padding: 24px; text-align: center; font-size: 0.85rem; }
+.bc-photo-placeholder svg { width: 40px; height: 40px; opacity: 0.6; }
 .bc-manual-row { display: flex; gap: 8px; margin-top: 14px; }
 .bc-manual-row input { flex: 1; min-height: 44px; }
 .bc-product-card { background: var(--surface-2); border-radius: 12px; padding: 12px 14px; }

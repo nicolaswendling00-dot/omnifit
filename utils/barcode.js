@@ -1,6 +1,14 @@
 // OmniFit — utils/barcode.js
 // Scan de codes-barres (EAN-13, etc.) via html5-qrcode (CDN), en Vanilla JS pur.
-// Module séparé de l'appel API et de l'UI : ne s'occupe QUE de la caméra/détection.
+// Module séparé de l'appel API et de l'UI : ne s'occupe QUE de la capture/détection.
+//
+// Choix technique : PHOTO UNIQUE (appareil photo natif) plutôt que scan vidéo en direct.
+// Safari iOS n'a aucun support natif de la Barcode Detection API : html5-qrcode retombe
+// alors sur son moteur de secours (ZXing-js), qui doit décoder un flux vidéo web basse
+// résolution, sans mise au point ni stabilisation — peu fiable pour un EAN-13 (barres
+// fines). L'appareil photo natif (déclenché via <input capture>) capture en pleine
+// résolution avec mise au point automatique : la détection est bien plus fiable.
+// On utilise donc Html5Qrcode.scanFile(), fait pour décoder une image statique.
 
 const CDN_URL = 'https://unpkg.com/html5-qrcode';
 
@@ -21,77 +29,53 @@ function loadHtml5Qrcode() {
   return loadPromise;
 }
 
-// Démarre le scan dans l'élément DOM #elementId (doit déjà être dans le document).
-// callbacks : { onDetected(code), onError(message) }
-// Retourne une promesse résolue avec un objet { stop() } pour couper la caméra manuellement.
-export async function startBarcodeScanner(elementId, { onDetected, onError }) {
+// Déclenche l'appareil photo natif du téléphone (capture="environment") et retourne
+// le File capturé (ou null si l'utilisateur annule).
+export function captureBarcodePhoto() {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.capture = 'environment';
+    input.style.cssText = 'position:fixed;opacity:0;pointer-events:none;left:-9999px';
+    document.body.appendChild(input);
+    const cleanup = () => setTimeout(() => input.remove(), 0);
+    input.addEventListener('change', () => {
+      const file = input.files && input.files[0] ? input.files[0] : null;
+      cleanup();
+      resolve(file);
+    });
+    // Si l'utilisateur annule la capture (pas d'event 'change' fiable sur tous les
+    // navigateurs) : on retombe sur le focus de la fenêtre pour détecter l'annulation.
+    window.addEventListener('focus', function onFocus() {
+      window.removeEventListener('focus', onFocus);
+      setTimeout(() => { if (!input.files || !input.files.length) { cleanup(); resolve(null); } }, 400);
+    }, { once: true });
+    input.click();
+  });
+}
+
+// Décode un code-barre à partir d'une image (File/Blob) déjà capturée.
+// Retourne le texte décodé, ou lève une erreur explicite si rien n'est détecté.
+export async function decodeBarcodeFromFile(file) {
   try {
     await loadHtml5Qrcode();
   } catch (e) {
-    onError(e.message || 'Chargement de la librairie de scan impossible');
-    return { stop: async () => {} };
+    throw new Error(e.message || 'Chargement de la librairie de scan impossible');
   }
-
-  const html5QrCode = new window.Html5Qrcode(elementId, { verbose: false });
-  let stopped = false;
-  let detected = false;
-
-  const stop = async () => {
-    if (stopped) return;
-    stopped = true;
-    try {
-      await html5QrCode.stop();
-      html5QrCode.clear();
-    } catch (_) { /* déjà arrêté / jamais démarré : sans conséquence */ }
-  };
-
-  const config = {
-    fps: 15,
-    // Zone de scan large et basse : un EAN-13 est un rectangle large et peu haut,
-    // un cadre trop étroit/carré le coupe et empêche la détection.
-    qrbox: (viewfinderWidth, viewfinderHeight) => {
-      const w = Math.floor(viewfinderWidth * 0.85);
-      const h = Math.floor(Math.min(viewfinderHeight * 0.4, w * 0.5));
-      return { width: w, height: h };
-    },
-    // Formats code-barres produits courants (EAN-13, EAN-8, UPC-A, UPC-E) + QR au cas où.
-    formatsToSupport: window.Html5QrcodeSupportedFormats ? [
-      window.Html5QrcodeSupportedFormats.EAN_13,
-      window.Html5QrcodeSupportedFormats.EAN_8,
-      window.Html5QrcodeSupportedFormats.UPC_A,
-      window.Html5QrcodeSupportedFormats.UPC_E,
-      window.Html5QrcodeSupportedFormats.CODE_128,
-    ] : undefined,
-    experimentalFeatures: { useBarCodeDetectorIfSupported: true },
-  };
-
+  // Élément technique requis par la lib (non affiché : on ne veut pas son aperçu par défaut).
+  let host = document.getElementById('bc-scanfile-host');
+  if (!host) {
+    host = document.createElement('div');
+    host.id = 'bc-scanfile-host';
+    host.style.cssText = 'position:fixed;width:0;height:0;overflow:hidden;opacity:0;pointer-events:none';
+    document.body.appendChild(host);
+  }
+  const html5QrCode = new window.Html5Qrcode('bc-scanfile-host', { verbose: false });
   try {
-    await html5QrCode.start(
-      { facingMode: 'environment' },
-      config,
-      (decodedText) => {
-        if (detected) return; // ignore toute détection après la première (le temps que stop() agisse)
-        detected = true;
-        stop().finally(() => onDetected(decodedText));
-      },
-      () => { /* échecs de détection frame par frame : normal, on ignore */ },
-    );
+    const result = await html5QrCode.scanFile(file, false);
+    return result;
   } catch (e) {
-    stopped = true;
-    const msg = (e && e.toString && e.toString().includes('Permission'))
-      ? 'Accès à la caméra refusé. Autorise la caméra dans les réglages de Safari pour ce site.'
-      : 'Impossible d\'accéder à la caméra sur cet appareil.';
-    onError(msg);
-    return { stop: async () => {} };
+    throw new Error('Aucun code-barre détecté sur la photo. Réessaie avec un meilleur cadrage/éclairage, ou saisis le code manuellement.');
   }
-
-  // Contrainte iOS Safari : forcer le rendu inline (sinon la vidéo s'ouvre en plein écran natif).
-  const videoEl = document.querySelector(`#${elementId} video`);
-  if (videoEl) {
-    videoEl.setAttribute('playsinline', 'true');
-    videoEl.setAttribute('webkit-playsinline', 'true');
-    videoEl.muted = true;
-  }
-
-  return { stop };
 }

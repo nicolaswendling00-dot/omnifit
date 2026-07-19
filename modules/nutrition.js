@@ -2,7 +2,7 @@
 import { store, todayISO } from '../utils/storage.js';
 import { calcKcal, fiberGoalFromKcal } from '../utils/math.js';
 import { el, icons, openSheet, openModal, toast, ringSVG, confirmModal, fmtDateShort, haptic } from '../utils/ui.js';
-import { startBarcodeScanner } from '../utils/barcode.js';
+import { captureBarcodePhoto, decodeBarcodeFromFile } from '../utils/barcode.js';
 import { fetchProductByBarcode } from '../utils/openfoodfacts.js';
 
 let selectedDate = todayISO();
@@ -415,16 +415,18 @@ function openRecipeEditor(onSaved) {
 }
 
 // ============================================================
-// SCAN CODE-BARRE — caméra -> Open Food Facts -> saisie du poids -> ajout
+// SCAN CODE-BARRE — photo (appareil natif) -> Open Food Facts -> saisie du poids -> ajout
 // ============================================================
 function openBarcodeSheet(rerender) {
-  let scannerHandle = null; // { stop() } tant que la caméra tourne
   let stoppedByUser = false;
 
   const content = el(`<div>
     <div id="bc-camera-step">
-      <div id="bc-reader" class="bc-reader"></div>
-      <div class="muted" id="bc-status" style="text-align:center;margin-top:10px">Vise le code-barre du produit…</div>
+      <div class="bc-photo-zone" id="bc-photo-zone">
+        <div class="bc-photo-placeholder">${icons.barcode}<span>Prends une photo nette du code-barre</span></div>
+      </div>
+      <button class="btn btn-primary btn-block" id="bc-take-photo" style="margin-top:12px">${icons.barcode} Prendre une photo</button>
+      <div class="muted" id="bc-status" style="text-align:center;margin-top:10px">L'appareil photo natif offre une bien meilleure netteté qu'un scan en direct.</div>
       <div class="bc-manual-row">
         <input type="text" inputmode="numeric" id="bc-manual-code" placeholder="Ou saisis le code-barre (ex: 3017620422003)">
         <button class="btn btn-secondary btn-sm" id="bc-manual-go">Valider</button>
@@ -436,12 +438,14 @@ function openBarcodeSheet(rerender) {
   const sheet = openSheet({
     title: 'Scanner un produit',
     content,
-    onClose: () => { stoppedByUser = true; if (scannerHandle) scannerHandle.stop(); },
+    onClose: () => { stoppedByUser = true; },
   });
 
   const statusEl = content.querySelector('#bc-status');
   const cameraStep = content.querySelector('#bc-camera-step');
   const resultStep = content.querySelector('#bc-result-step');
+  const photoZone = content.querySelector('#bc-photo-zone');
+  const takePhotoBtn = content.querySelector('#bc-take-photo');
 
   async function handleCode(code) {
     if (stoppedByUser) return;
@@ -453,23 +457,40 @@ function openBarcodeSheet(rerender) {
         statusEl.textContent = 'Produit introuvable sur Open Food Facts. Vérifie le code ou ajoute-le manuellement (menu Ajout rapide).';
         return;
       }
-      if (scannerHandle) scannerHandle.stop();
       showResultStep(product);
     } catch (e) {
       if (!stoppedByUser) statusEl.textContent = e.message || 'Erreur lors de la recherche du produit.';
     }
   }
 
+  takePhotoBtn.addEventListener('click', async () => {
+    takePhotoBtn.disabled = true;
+    const file = await captureBarcodePhoto();
+    if (stoppedByUser) return;
+    if (!file) { takePhotoBtn.disabled = false; return; } // annulé par l'utilisateur
+
+    const previewUrl = URL.createObjectURL(file);
+    photoZone.innerHTML = `<img src="${previewUrl}" alt="Photo du code-barre">`;
+    statusEl.textContent = 'Analyse de la photo…';
+    takePhotoBtn.innerHTML = `${icons.barcode} Reprendre une photo`;
+
+    try {
+      const code = await decodeBarcodeFromFile(file);
+      if (stoppedByUser) return;
+      await handleCode(code);
+    } catch (e) {
+      if (!stoppedByUser) statusEl.textContent = `${e.message} `;
+    } finally {
+      takePhotoBtn.disabled = false;
+      URL.revokeObjectURL(previewUrl);
+    }
+  });
+
   content.querySelector('#bc-manual-go').addEventListener('click', () => {
     const code = content.querySelector('#bc-manual-code').value.trim();
     if (!code) { toast('Entre un code-barre', 'error'); return; }
     handleCode(code);
   });
-
-  startBarcodeScanner('bc-reader', {
-    onDetected: (code) => handleCode(code),
-    onError: (msg) => { statusEl.textContent = `${msg} Tu peux saisir le code-barre manuellement ci-dessous.`; },
-  }).then((handle) => { scannerHandle = handle; });
 
   function showResultStep(product) {
     cameraStep.style.display = 'none';
