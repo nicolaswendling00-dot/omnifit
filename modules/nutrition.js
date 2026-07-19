@@ -2,6 +2,8 @@
 import { store, todayISO } from '../utils/storage.js';
 import { calcKcal, fiberGoalFromKcal } from '../utils/math.js';
 import { el, icons, openSheet, openModal, toast, ringSVG, confirmModal, fmtDateShort, haptic } from '../utils/ui.js';
+import { startBarcodeScanner } from '../utils/barcode.js';
+import { fetchProductByBarcode } from '../utils/openfoodfacts.js';
 
 let selectedDate = todayISO();
 let currentRerender = null;
@@ -412,14 +414,130 @@ function openRecipeEditor(onSaved) {
   });
 }
 
-// FAB global dans body (hors du conteneur transformé, sinon invisible sur iOS)
-function ensureFab() {
-  let fab = document.getElementById('fab-nutrition');
-  if (!fab) {
-    fab = el(`<button class="fab" id="fab-nutrition" aria-label="Ajouter un repas">${icons.plus}</button>`);
-    document.body.appendChild(fab);
+// ============================================================
+// SCAN CODE-BARRE — caméra -> Open Food Facts -> saisie du poids -> ajout
+// ============================================================
+function openBarcodeSheet(rerender) {
+  let scannerHandle = null; // { stop() } tant que la caméra tourne
+  let stoppedByUser = false;
+
+  const content = el(`<div>
+    <div id="bc-camera-step">
+      <div id="bc-reader" class="bc-reader"></div>
+      <div class="muted" id="bc-status" style="text-align:center;margin-top:10px">Vise le code-barre du produit…</div>
+    </div>
+    <div id="bc-result-step" style="display:none"></div>
+  </div>`);
+
+  const sheet = openSheet({
+    title: 'Scanner un produit',
+    content,
+    onClose: () => { stoppedByUser = true; if (scannerHandle) scannerHandle.stop(); },
+  });
+
+  const statusEl = content.querySelector('#bc-status');
+  const cameraStep = content.querySelector('#bc-camera-step');
+  const resultStep = content.querySelector('#bc-result-step');
+
+  startBarcodeScanner('bc-reader', {
+    onDetected: async (code) => {
+      if (stoppedByUser) return;
+      statusEl.textContent = `Code détecté : ${code} — recherche du produit…`;
+      try {
+        const product = await fetchProductByBarcode(code);
+        if (stoppedByUser) return;
+        if (!product) {
+          statusEl.textContent = 'Produit introuvable sur Open Food Facts. Ajoute-le manuellement.';
+          return;
+        }
+        showResultStep(product);
+      } catch (e) {
+        if (!stoppedByUser) statusEl.textContent = e.message || 'Erreur lors de la recherche du produit.';
+      }
+    },
+    onError: (msg) => { statusEl.textContent = msg; },
+  }).then((handle) => { scannerHandle = handle; });
+
+  function showResultStep(product) {
+    cameraStep.style.display = 'none';
+    resultStep.style.display = '';
+    resultStep.innerHTML = `
+      <div class="bc-product-card">
+        <div class="bc-product-name">${product.name}</div>
+        ${product.brand ? `<div class="muted" style="font-size:0.78rem">${product.brand}</div>` : ''}
+        <div class="muted" style="font-size:0.72rem;margin-top:6px">Pour 100 g : ${product.kcal} kcal · P ${product.prot} · G ${product.carbs} · L ${product.fat}${product.fiber ? ` · Fibres ${product.fiber}` : ''}</div>
+      </div>
+      <div class="field-stack" style="margin-top:12px">
+        <label class="field"><span>Type de repas</span>
+          <select id="bc-meal-type">${MEAL_TYPES.map((t) => `<option ${t === defaultMealType() ? 'selected' : ''}>${t}</option>`).join('')}</select>
+        </label>
+        <label class="field"><span>Poids consommé (g)</span><input id="bc-weight" type="number" inputmode="decimal" min="0" step="1" value="100" autofocus></label>
+      </div>
+      <div class="bc-final-card" id="bc-final"></div>
+      <button class="btn btn-primary btn-block" id="bc-add" style="margin-top:12px">${icons.plus} Ajouter au journal</button>
+    `;
+
+    const weightInput = resultStep.querySelector('#bc-weight');
+    const finalHost = resultStep.querySelector('#bc-final');
+    const recompute = () => {
+      const g = parseFloat(weightInput.value) || 0;
+      const ratio = g / 100;
+      const kcal = Math.round(product.kcal * ratio);
+      const prot = Math.round(product.prot * ratio * 10) / 10;
+      const carbs = Math.round(product.carbs * ratio * 10) / 10;
+      const fat = Math.round(product.fat * ratio * 10) / 10;
+      const fiber = Math.round(product.fiber * ratio * 10) / 10;
+      finalHost.innerHTML = `
+        <div class="bc-final-kcal">${kcal} <span>kcal</span></div>
+        <div class="bc-final-macros">P ${prot} g · G ${carbs} g · L ${fat} g${fiber ? ` · Fibres ${fiber} g` : ''}</div>`;
+      return { kcal, prot, carbs, fat, fiber };
+    };
+    let current = recompute();
+    weightInput.addEventListener('input', () => { current = recompute(); });
+
+    resultStep.querySelector('#bc-add').addEventListener('click', () => {
+      const g = parseFloat(weightInput.value);
+      if (!g || g <= 0) { toast('Poids invalide', 'error'); return; }
+      const mealType = resultStep.querySelector('#bc-meal-type').value;
+      store.addNutritionLog(selectedDate, {
+        name: `${product.name} (${g} g)`,
+        meal: mealType,
+        prot: current.prot, carbs: current.carbs, fat: current.fat, fiber: current.fiber,
+        kcal: current.kcal,
+      });
+      haptic();
+      toast('Repas ajouté', 'success');
+      sheet.close();
+      if (rerender) rerender();
+    });
   }
-  fab.onclick = () => openAddMealSheet(currentRerender);
+}
+
+// FAB global dans body (hors du conteneur transformé, sinon invisible sur iOS)
+// Menu déroulant : "+" principal déploie 2 mini-FAB (ajout rapide / scan code-barre).
+function ensureFab() {
+  let wrap = document.getElementById('fab-nutrition-wrap');
+  if (!wrap) {
+    wrap = el(`<div class="fab-wrap" id="fab-nutrition-wrap">
+      <button class="fab fab-mini" id="fab-scan" aria-label="Scanner un code-barre" style="transition-delay:0ms">${icons.barcode}</button>
+      <button class="fab fab-mini" id="fab-quick" aria-label="Ajout rapide" style="transition-delay:40ms">${icons.flame}</button>
+      <button class="fab" id="fab-nutrition" aria-label="Ajouter">${icons.plus}</button>
+    </div>`);
+    document.body.appendChild(wrap);
+    // Clic en dehors du menu déployé -> referme (attaché une seule fois, à la création)
+    document.addEventListener('click', (e) => {
+      if (wrap.classList.contains('fab-open') && !wrap.contains(e.target)) wrap.classList.remove('fab-open');
+    });
+  }
+  const main = wrap.querySelector('#fab-nutrition');
+  const quick = wrap.querySelector('#fab-quick');
+  const scan = wrap.querySelector('#fab-scan');
+
+  const setOpen = (open) => wrap.classList.toggle('fab-open', open);
+
+  main.onclick = () => setOpen(!wrap.classList.contains('fab-open'));
+  quick.onclick = () => { setOpen(false); openAddMealSheet(currentRerender); };
+  scan.onclick = () => { setOpen(false); openBarcodeSheet(currentRerender); };
 }
 
 export function render(container) {

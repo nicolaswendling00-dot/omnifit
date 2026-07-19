@@ -376,18 +376,45 @@ canvas { max-width: 100%; }
 .cal-month-title { font-weight: 700; font-size: 0.95rem; text-transform: capitalize; margin-bottom: 8px; color: var(--text); }
 
 /* FAB global (dans body, hors du conteneur transformé) */
-.fab {
+.fab-wrap {
   position: fixed; right: 16px;
   bottom: calc(var(--nav-h) + 16px + var(--safe-b));
+  display: none; flex-direction: column-reverse; align-items: center; gap: 14px;
+  z-index: 40;
+}
+body[data-page="1"] #fab-nutrition-wrap { display: flex; }
+.fab {
   width: 58px; height: 58px; border-radius: 50%;
   background: var(--accent); color: #04101d; border: none;
   box-shadow: 0 8px 24px rgba(0, 217, 255, 0.4);
-  display: none; align-items: center; justify-content: center;
-  cursor: pointer; z-index: 40;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
 }
 .fab svg { width: 28px; height: 28px; }
 .fab:active { transform: scale3d(0.94, 0.94, 1); }
-body[data-page="1"] #fab-nutrition { display: flex; }
+.fab-mini {
+  width: 48px; height: 48px;
+  background: var(--surface-2); color: var(--accent);
+  border: 1.5px solid var(--accent);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  opacity: 0; transform: translateY(14px) scale(0.7);
+  pointer-events: none;
+  transition: opacity 0.22s var(--ease), transform 0.22s var(--ease);
+}
+.fab-mini svg { width: 22px; height: 22px; }
+.fab-wrap.fab-open .fab-mini { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
+#fab-nutrition { transition: transform 0.22s var(--ease); }
+.fab-wrap.fab-open #fab-nutrition { transform: rotate(45deg); }
+
+/* Scan code-barre */
+.bc-reader { width: 100%; border-radius: 14px; overflow: hidden; background: #000; min-height: 260px; }
+.bc-reader video { width: 100% !important; border-radius: 14px; display: block; }
+.bc-product-card { background: var(--surface-2); border-radius: 12px; padding: 12px 14px; }
+.bc-product-name { font-weight: 700; font-size: 1rem; }
+.bc-final-card { text-align: center; margin-top: 14px; padding: 12px; background: rgba(0, 217, 255, 0.06); border-radius: 12px; }
+.bc-final-kcal { font-size: 1.7rem; font-weight: 800; color: var(--accent); }
+.bc-final-kcal span { font-size: 0.9rem; font-weight: 600; color: var(--text-2); }
+.bc-final-macros { font-size: 0.82rem; color: var(--text-2); margin-top: 2px; }
 
 /* ---------- Entraînement / séance ---------- */
 .session-overlay {

@@ -16,6 +16,7 @@ export const icons = {
   steps: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3c2 0 3 1.7 3 4s-1 4-2.5 4S6 9.3 6 7s.5-4 2-4ZM7 14.5c1.5 0 2.5 1 2.5 2.5S8.5 20 7.5 20 5 19 5 17.5 5.5 14.5 7 14.5ZM16 6c1.5 0 2 1.7 2 4s-1 4-2.5 4-2.5-1.7-2.5-4 1-4 3-4ZM16.5 17.5c1.5 0 2.5 1 2.5 2.5" transform="translate(0,-1)"/></svg>',
   water: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5S5.5 10 5.5 14.5a6.5 6.5 0 0 0 13 0C18.5 10 12 2.5 12 2.5Z"/></svg>',
   flame: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c4.4 0 7-2.8 7-6.5 0-4-3-6.5-4.5-9C13 4 13 2 13 2s-6 4-6 9c-1-1-1.5-2.5-1.5-2.5C4 10.5 5 22 12 22Z"/></svg>',
+  barcode: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 5v14M8 5v14M11 5v14M14 5v14M16.5 5v14M20 5v14" stroke-width="1.6"/><path d="M8 5v14" stroke-width="2.6"/><path d="M14 5v14" stroke-width="2.6"/></svg>',
   protein: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="13.5" rx="7.5" ry="6"/><path d="M12 7.5C12 5 14 3 16.5 3 15 4.5 15 7 15 7"/></svg>',
   download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v3h16v-3"/></svg>',
   upload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3m0 0L8 7m4-4 4 4M4 17v3h16v-3"/></svg>',
@@ -122,7 +123,7 @@ export function confirmModal(title, message, onConfirm, danger = false) {
 }
 
 // ---------- Bottom Sheet ----------
-export function openSheet({ title, content }) {
+export function openSheet({ title, content, onClose = null }) {
   document.body.classList.add('overlay-open');
   const scrim = el(`
     <div class="scrim sheet-scrim">
@@ -141,6 +142,7 @@ export function openSheet({ title, content }) {
     scrim.classList.remove('visible');
     document.body.classList.remove('overlay-open');
     setTimeout(() => scrim.remove(), 320);
+    if (onClose) onClose();
   };
   scrim.addEventListener('click', (e) => { if (e.target === scrim) close(); });
 
