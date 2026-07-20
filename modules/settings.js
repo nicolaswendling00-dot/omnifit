@@ -232,12 +232,7 @@ export function render(container) {
     reader.readAsText(f);
   });
 
-  root.querySelector('#btn-clear-history').addEventListener('click', () => {
-    confirmModal('Effacer l\'historique', 'Poids, nutrition, pas et séances seront supprimés.', () => {
-      store.clearHistory();
-      rerender();
-    }, true);
-  });
+  root.querySelector('#btn-clear-history').addEventListener('click', () => openClearHistoryModal(rerender));
   root.querySelector('#btn-reset').addEventListener('click', () => {
     confirmModal('Reset complet', 'Toutes les données seront perdues.', () => {
       confirmModal('Dernière confirmation', 'Vraiment tout supprimer ?', () => {
@@ -286,6 +281,45 @@ function openExportModal() {
           if (!Object.values(opts).some(Boolean)) { toast('Coche au moins une catégorie', 'error'); return 'keep'; }
           store.exportJSONSelective(opts);
           toast('Export téléchargé', 'success');
+        },
+      },
+    ],
+  });
+}
+
+function openClearHistoryModal(rerender) {
+  const cats = [
+    { key: 'workouts', label: 'Entraînement', sub: 'Séances enregistrées' },
+    { key: 'nutrition', label: 'Nutrition', sub: 'Repas, eau et objectifs figés' },
+    { key: 'weights', label: 'Poids', sub: 'Historique de pesée' },
+    { key: 'steps', label: 'Pas', sub: 'Compteur de pas quotidien' },
+  ];
+  const content = el(`<div>
+    <div class="muted" style="font-size:0.78rem;margin-bottom:10px">Choisis les données à effacer. Les réglages, le profil, les routines et les recettes sont conservés.</div>
+    <div class="field-stack">
+      ${cats.map((c) => `<label class="settings-row" style="cursor:pointer">
+        <div><div class="row-label">${c.label}</div><div class="row-sub">${c.sub}</div></div>
+        <input type="checkbox" class="clr-check" data-cat="${c.key}" style="width:20px;height:20px">
+      </label>`).join('')}
+    </div>
+  </div>`);
+  openModal({
+    title: 'Effacer l\'historique',
+    content,
+    actions: [
+      { label: 'Annuler' },
+      {
+        label: 'Effacer', variant: 'btn-danger',
+        onClick: (body) => {
+          const opts = {};
+          body.querySelectorAll('.clr-check').forEach((cb) => { if (cb.checked) opts[cb.dataset.cat] = true; });
+          if (!Object.keys(opts).length) { toast('Coche au moins une catégorie', 'error'); return 'keep'; }
+          const labels = cats.filter((c) => opts[c.key]).map((c) => c.label).join(', ');
+          confirmModal('Confirmer', `Effacer définitivement : ${labels} ?`, () => {
+            store.clearHistory(opts);
+            toast('Historique effacé', 'success');
+            rerender();
+          }, true);
         },
       },
     ],

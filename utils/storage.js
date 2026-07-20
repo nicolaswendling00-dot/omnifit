@@ -103,6 +103,11 @@ class StorageManager {
         data.settings.soundEnabled = false;
         data.settings._v37 = true;
       }
+      // Migration v3.8 : objectif fibres à 15 g / 1000 kcal par défaut
+      if (!data.settings._v38) {
+        data.settings.fiberPer1000 = 15;
+        data.settings._v38 = true;
+      }
       return data;
     } catch (e) {
       console.error('Erreur chargement userData', e);
@@ -271,13 +276,61 @@ class StorageManager {
     this.persist();
   }
 
-  clearHistory() {
-    this.userData.weights = [];
-    this.userData.nutrition = { byDate: {} };
-    this.userData.water = { byDate: {} };
-    this.userData.workouts = [];
-    this.userData.steps = { byDate: {} };
+  // Effacement sélectif de l'historique.
+  // opts = { workouts, nutrition, weights, steps } (booléens). Une catégorie à
+  // true est vidée ; les réglages/profil/routines/recettes restent intacts.
+  // Sans opts (ou objet vide) → efface tout (compatibilité ascendante).
+  clearHistory(opts = null) {
+    const o = opts && Object.keys(opts).length ? opts : { workouts: true, nutrition: true, weights: true, steps: true };
+    if (o.weights) this.userData.weights = [];
+    if (o.nutrition) this.userData.nutrition = { byDate: {} };
+    if (o.workouts) this.userData.workouts = [];
+    if (o.steps) this.userData.steps = { byDate: {}, goalByDate: {} };
+    // L'eau suit la nutrition (même onglet, même logique de journal quotidien)
+    if (o.nutrition) this.userData.water = { byDate: {} };
     this.persist();
+  }
+
+  // ---------- Séance en cours (persistance inter-sessions) ----------
+  // Sauvegarde l'état d'une séance active pour la retrouver même après avoir
+  // quitté l'app (l'iPhone décharge la PWA de la mémoire quand on la quitte).
+  saveActiveSession(sessionState) {
+    this.userData.activeSession = sessionState;
+    this.persist();
+  }
+
+  loadActiveSession() {
+    return this.userData.activeSession || null;
+  }
+
+  clearActiveSession() {
+    if (this.userData.activeSession) {
+      delete this.userData.activeSession;
+      this.persist();
+    }
+  }
+
+  // ---------- Historique des aliments saisis (pour ré-ajout rapide) ----------
+  // Parcourt tous les repas de tous les jours et renvoie une liste dédupliquée
+  // par macros/100g, triée du plus récent au plus ancien. Chaque entrée garde
+  // les valeurs pour 100 g (per100) si disponibles, sinon les macros absolues.
+  nutritionEntryHistory() {
+    const byDate = this.userData.nutrition.byDate || {};
+    const dates = Object.keys(byDate).sort((a, b) => b.localeCompare(a)); // récent d'abord
+    const seen = new Set();
+    const out = [];
+    for (const date of dates) {
+      const meals = byDate[date].meals || [];
+      // Parcours en ordre inverse d'ajout → le plus récent du jour en premier
+      for (let i = meals.length - 1; i >= 0; i--) {
+        const m = meals[i];
+        const key = `${(m.baseName || m.name || '').toLowerCase()}|${m.per100 ? `${m.per100.prot}|${m.per100.carbs}|${m.per100.fat}|${m.per100.fiber || 0}` : `${m.prot}|${m.carbs}|${m.fat}`}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({ ...m, date });
+      }
+    }
+    return out;
   }
 }
 

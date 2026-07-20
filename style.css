@@ -406,11 +406,25 @@ body[data-page="1"] #fab-nutrition-wrap { display: flex; }
 #fab-nutrition { transition: transform 0.22s var(--ease); }
 .fab-wrap.fab-open #fab-nutrition { transform: rotate(45deg); }
 
-/* Scan code-barre */
-.bc-photo-zone { width: 100%; min-height: 200px; border-radius: 14px; overflow: hidden; background: var(--surface-2); border: 1.5px dashed var(--border); display: flex; align-items: center; justify-content: center; }
-.bc-photo-zone img { width: 100%; max-height: 320px; object-fit: contain; display: block; }
-.bc-photo-placeholder { display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--text-2); padding: 24px; text-align: center; font-size: 0.85rem; }
-.bc-photo-placeholder svg { width: 40px; height: 40px; opacity: 0.6; }
+/* Scan code-barre — caméra live in-app */
+.bc-cam-zone {
+  position: relative; width: 100%; aspect-ratio: 4 / 3;
+  border-radius: 14px; overflow: hidden; background: #000;
+  border: 1.5px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+}
+.bc-cam-zone video, .bc-cam-zone img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
+.bc-cam-reticle {
+  position: absolute; left: 10%; right: 10%; top: 50%;
+  height: 32%; transform: translateY(-50%);
+  border: 2px solid rgba(0, 217, 255, 0.85);
+  border-radius: 10px;
+  box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.28);
+  pointer-events: none;
+}
+.bc-cam-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
 .bc-manual-row { display: flex; gap: 8px; margin-top: 14px; }
 .bc-manual-row input { flex: 1; min-height: 44px; }
 .bc-product-card { background: var(--surface-2); border-radius: 12px; padding: 12px 14px; }
@@ -419,6 +433,37 @@ body[data-page="1"] #fab-nutrition-wrap { display: flex; }
 .bc-final-kcal { font-size: 1.7rem; font-weight: 800; color: var(--accent); }
 .bc-final-kcal span { font-size: 0.9rem; font-weight: 600; color: var(--text-2); }
 .bc-final-macros { font-size: 0.82rem; color: var(--text-2); margin-top: 2px; }
+
+/* Ajout repas — case POIDS mise en valeur (bas du formulaire) */
+.m-weight-box {
+  margin-top: 14px; padding: 12px 14px;
+  background: rgba(0, 217, 255, 0.08);
+  border: 1.5px solid var(--accent);
+  border-radius: 14px;
+  display: flex; align-items: center; gap: 14px;
+}
+.m-weight-field { flex: 1; margin: 0; }
+.m-weight-field input { font-size: 1.15rem; font-weight: 700; }
+.m-weight-result { text-align: right; min-width: 92px; }
+.m-weight-result .num { display: block; font-size: 1.25rem; font-weight: 800; color: var(--accent); }
+.m-weight-macros { font-size: 0.68rem; color: var(--text-2); }
+
+/* Historique des aliments (livre) */
+.hist-item {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px;
+  padding: 10px 12px; margin-bottom: 8px; text-align: left; cursor: pointer; color: var(--text);
+}
+.hist-item:active { transform: scale3d(0.99, 0.99, 1); }
+.hist-info { min-width: 0; flex: 1; }
+.hist-name { font-weight: 600; font-size: 0.92rem; margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hist-add {
+  flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%;
+  background: rgba(0, 217, 255, 0.15); color: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+}
+.hist-add svg { width: 18px; height: 18px; }
+
 
 /* ---------- Entraînement / séance ---------- */
 .session-overlay {

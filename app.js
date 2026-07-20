@@ -1,7 +1,7 @@
 // OmniFit — app.js : orchestrateur (navigation, swipe, boot)
 import { render as renderHome } from './modules/home.js';
 import { render as renderNutrition } from './modules/nutrition.js';
-import { render as renderWorkout } from './modules/workout.js';
+import { render as renderWorkout, resumeActiveSession } from './modules/workout.js';
 import { render as renderActivity } from './modules/activity.js';
 import { render as renderSettings, applyTheme } from './modules/settings.js';
 import { setStandards } from './utils/ranks.js';
@@ -58,6 +58,12 @@ appContainer.addEventListener('touchend', (e) => {
 // ---------- Boot ----------
 applyTheme();
 goTo(0);
+
+// Restaure une éventuelle séance en cours (l'app a pu être quittée en pleine séance)
+resumeActiveSession(() => {
+  const p = PAGES[currentPage];
+  p.render(document.getElementById(p.id));
+});
 
 // Standards StrengthLevel (pour le raccourci Onyx). Chargement non bloquant.
 fetch('./standards.json')

@@ -17,6 +17,20 @@ let chronoInterval = null;
 let restInterval = null;
 let restRemaining = 0;
 
+// Temps écoulé de la séance en secondes, calculé sur l'horloge murale : le
+// chrono continue donc d'avancer même si l'app est mise en arrière-plan / gelée
+// par iOS (aucun setInterval fiable pendant ce temps).
+function elapsedSeconds() {
+  if (!session) return 0;
+  let s = session.accumulated || 0;
+  if (session.running && session.startedAt) s += Math.floor((Date.now() - session.startedAt) / 1000);
+  return s;
+}
+// Persiste l'état de la séance pour la retrouver après avoir quitté l'app.
+function persistSession() {
+  if (session) store.saveActiveSession(session);
+}
+
 // ---------- Lookup ----------
 export function allExercises() {
   return [...EXERCISES, ...(store.userData.settings.customExercises || [])];
@@ -374,7 +388,7 @@ function showMiniBar() {
   removeMiniBar();
   const bar = el(`<div id="mini-session">
     <span class="ms-label">${icons.play} Séance en cours <span class="ms-rest" id="ms-rest"></span></span>
-    <span class="num ms-time" id="ms-time">${formatTime(session.elapsed)}</span>
+    <span class="num ms-time" id="ms-time">${formatTime(elapsedSeconds())}</span>
   </div>`);
   bar.addEventListener('click', () => restoreSession());
   document.body.appendChild(bar);
@@ -681,19 +695,26 @@ function openSupersetSheet(idx) {
 // ============================================================
 // MODE SÉANCE
 // ============================================================
-function openSession(rerenderPage, fromRoutine = null, editWorkout = null) {
+function openSession(rerenderPage, fromRoutine = null, editWorkout = null, resumeState = null) {
   if (session && sessionUI) { restoreSession(); return; }
 
-  session = {
-    elapsed: editWorkout ? (editWorkout.totalTime || 0) : 0,
-    running: !editWorkout,
-    date: editWorkout ? editWorkout.date : todayISO(),
-    notes: editWorkout ? (editWorkout.notes || '') : '',
-    editingId: editWorkout ? editWorkout.id : null,
-    exercises: editWorkout
-      ? editWorkout.exercises.map((wx) => ({ exerciseId: wx.exerciseId, ss: wx.ss, sets: wx.sets.map((s) => ({ ...s })) }))
-      : (fromRoutine ? fromRoutine.exercises.map((id) => ({ exerciseId: id, sets: [] })) : []),
-  };
+  if (resumeState) {
+    // Reprise d'une séance persistée (retour dans l'app après l'avoir quittée)
+    session = resumeState;
+  } else {
+    session = {
+      accumulated: editWorkout ? (editWorkout.totalTime || 0) : 0, // secondes déjà écoulées (hors période active en cours)
+      startedAt: editWorkout ? null : Date.now(),                  // instant (epoch ms) du début de la période active en cours, ou null si en pause
+      running: !editWorkout,
+      date: editWorkout ? editWorkout.date : todayISO(),
+      notes: editWorkout ? (editWorkout.notes || '') : '',
+      editingId: editWorkout ? editWorkout.id : null,
+      exercises: editWorkout
+        ? editWorkout.exercises.map((wx) => ({ exerciseId: wx.exerciseId, ss: wx.ss, sets: wx.sets.map((s) => ({ ...s })) }))
+        : (fromRoutine ? fromRoutine.exercises.map((id) => ({ exerciseId: id, sets: [] })) : []),
+    };
+  }
+  persistSession();
 
   const overlay = el(`<div class="session-overlay">
     <div class="session-top">
@@ -720,19 +741,24 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null) {
   document.body.classList.add('overlay-open');
 
   const chronoEl = overlay.querySelector('#s-chrono');
-  chronoInterval = setInterval(() => {
+  const tick = () => {
     if (!session) return;
-    if (session.running) session.elapsed++;
-    chronoEl.textContent = formatTime(session.elapsed);
+    const secs = elapsedSeconds();
+    chronoEl.textContent = formatTime(secs);
     const msTime = document.getElementById('ms-time');
-    if (msTime) msTime.textContent = formatTime(session.elapsed);
+    if (msTime) msTime.textContent = formatTime(secs);
     const msRest = document.getElementById('ms-rest');
     if (msRest) msRest.textContent = restInterval ? `· Repos ${formatTime(restRemaining)}` : '';
-  }, 1000);
+  };
+  tick(); // affichage immédiat (utile à la reprise)
+  chronoInterval = setInterval(tick, 1000);
+  // À la reprise (retour dans l'app), recale l'affichage tout de suite
+  overlay.querySelector('#s-playpause').innerHTML = session.running ? icons.pause : icons.play;
 
   const closeSession = () => {
     clearInterval(chronoInterval);
     stopRestTimer();
+    store.clearActiveSession();
     session = null;
     sessionUI = null;
     removeMiniBar();
@@ -790,6 +816,7 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null) {
       </div>`);
       exosHost.appendChild(card);
     });
+    persistSession();
   };
 
   sessionUI = { overlay, renderExos, close: closeSession };
@@ -865,6 +892,7 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null) {
       const r = parseInt(row.querySelector('.sr-reps').value, 10);
       if (!isNaN(w)) wxx.sets[i].weight = w;
       if (r) wxx.sets[i].reps = r;
+      persistSession();
     }
   });
 
@@ -908,8 +936,19 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null) {
   })();
 
   overlay.querySelector('#s-playpause').addEventListener('click', (e) => {
-    session.running = !session.running;
+    if (session.running) {
+      // On met en pause : on banque le temps couru dans accumulated
+      session.accumulated = elapsedSeconds();
+      session.startedAt = null;
+      session.running = false;
+    } else {
+      // On reprend : nouvelle période active
+      session.startedAt = Date.now();
+      session.running = true;
+    }
     e.currentTarget.innerHTML = session.running ? icons.pause : icons.play;
+    persistSession();
+    tick();
   });
   overlay.querySelector('#s-minimize').addEventListener('click', minimizeSession);
   overlay.querySelector('#s-quit').addEventListener('click', () => {
@@ -966,7 +1005,7 @@ function showSummary(exercises, closeSession) {
 
   const content = el(`<div>
     <div class="grid-2" style="margin-bottom:12px">
-      <div class="card" style="margin:0;text-align:center;padding:10px"><div class="muted">Durée</div><div class="num" style="font-size:1.2rem;color:var(--accent)">${formatTime(session.elapsed)}</div></div>
+      <div class="card" style="margin:0;text-align:center;padding:10px"><div class="muted">Durée</div><div class="num" style="font-size:1.2rem;color:var(--accent)">${formatTime(elapsedSeconds())}</div></div>
       <div class="card" style="margin:0;text-align:center;padding:10px"><div class="muted">Séries</div><div class="num" style="font-size:1.2rem;color:var(--accent)">${totalSets}</div></div>
     </div>
     ${sessImp != null ? `<div class="wd-sess-imp ${sessImp >= 0 ? 'up' : 'down'}" style="text-align:center;margin-bottom:12px">Amélioration de la séance : ${sessImp >= 0 ? '+' : ''}${sessImp}%</div>` : ''}
@@ -1006,6 +1045,7 @@ function showSummary(exercises, closeSession) {
           label: 'Enregistrer', variant: 'btn-primary',
           onClick: (body) => {
             session.notes = body.querySelector('.note-input').value.trim();
+            persistSession();
             content.querySelector('#sum-note-lbl').textContent = session.notes ? 'Modifier la note' : 'Note de séance';
             content.querySelector('#sum-note-preview').outerHTML = session.notes
               ? `<div class="wd-note" id="sum-note-preview" style="margin-top:8px">${session.notes.replace(/</g, '&lt;')}</div>`
@@ -1031,7 +1071,7 @@ function showSummary(exercises, closeSession) {
             notes: session.notes,
             exercises,
             totalVolume: Math.round(totalVolume),
-            totalTime: session.elapsed,
+            totalTime: elapsedSeconds(),
           };
           if (session.editingId) store.updateWorkout(payload);
           else store.addWorkout(payload);
@@ -1371,6 +1411,7 @@ function openExerciseBrowser() {
       <button data-s="rank">Par rang</button>
     </div>
     <div class="picker-list" id="xb-list"></div>
+    <button class="btn btn-secondary btn-block" id="xb-custom" style="margin:8px 0 calc(10px + var(--safe-b))">${icons.plus} Ajouter un exercice custom</button>
   </div>`);
   document.body.appendChild(overlay);
   const wasOpen = document.body.classList.contains('overlay-open');
@@ -1406,6 +1447,12 @@ function openExerciseBrowser() {
     sortMode = btn.dataset.s;
     overlay.querySelectorAll('#xb-sort button').forEach((b) => b.classList.toggle('active', b === btn));
     draw(searchInput.value);
+  });
+  overlay.querySelector('#xb-custom').addEventListener('click', () => {
+    openCustomExerciseModal((exo) => {
+      toast(`« ${exo.name} » créé`, 'success');
+      draw(searchInput.value); // rafraîchit la liste avec le nouvel exo
+    });
   });
   overlay.querySelector('#xb-close').addEventListener('click', close);
   setTimeout(() => searchInput.focus(), 250);
@@ -1551,4 +1598,15 @@ export function render(container) {
   renderVolumeDashboard(root.querySelector('#volume-host'), rerender);
   renderTwoWeekCalendar(root.querySelector('#calendar-host'));
   root.querySelector('#btn-exo-browser').addEventListener('click', openExerciseBrowser);
+}
+
+// Restaure une séance en cours persistée (retour dans l'app après l'avoir
+// quittée). Rouvre l'overlay puis le minimise : l'utilisateur voit la mini-barre
+// « Séance en cours » et n'a qu'à la toucher pour reprendre. Appelée au boot.
+export function resumeActiveSession(rerenderPage) {
+  if (session) return; // déjà une séance en mémoire
+  const saved = store.loadActiveSession();
+  if (!saved || !saved.exercises) return;
+  openSession(rerenderPage || (() => {}), null, null, saved);
+  minimizeSession();
 }
