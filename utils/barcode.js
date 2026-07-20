@@ -1,30 +1,30 @@
 // OmniFit — utils/barcode.js
-// Scan de codes-barres (EAN-13, etc.) via html5-qrcode (CDN), en Vanilla JS pur.
-// Module séparé de l'appel API et de l'UI : ne s'occupe QUE de la capture/détection.
+// Scan de codes-barres (EAN-13, EAN-8, UPC, CODE-128/39/93, QR…) via zbar-wasm.
 //
-// Choix technique : CAMÉRA EN DIRECT DANS L'APPLICATION (getUserMedia), avec un
-// bouton « pause » qui fige une image (comme prendre une photo), qu'on analyse
-// ensuite. On ne quitte jamais l'app vers l'appareil photo natif. Le décodage
-// tente plusieurs orientations (0/90/180/270°) pour lire le code quel que soit
-// le sens de la photo.
+// Historique : on utilisait html5-qrcode (moteur ZXing). ZXing est bon pour les
+// QR codes mais faible sur les codes-barres 1D (EAN) dans une photo réelle : il
+// binarise l'image entière d'un coup et rate une fine bande de code-barres au
+// milieu d'un fond chargé. zbar, lui, LOCALISE la zone du code — beaucoup plus
+// robuste. On utilise donc zbar compilé en WebAssembly (build « inlined », le
+// .wasm est embarqué en base64 → aucun fetch séparé, fonctionne hors-ligne une
+// fois mis en cache par le service worker).
+//
+// Flux d'utilisation (UI dans nutrition.js) : caméra live in-app (getUserMedia)
+// → bouton « pause » qui fige une image → décodage de cette image. On ne quitte
+// jamais l'app. zbar gère nativement l'orientation, pas besoin de faire pivoter.
 
-const CDN_URL = 'https://unpkg.com/html5-qrcode';
+const ZBAR_URL = 'https://cdn.jsdelivr.net/npm/@undecaf/zbar-wasm@0.11.0/dist/inlined/index.mjs';
 
-let loadPromise = null;
+let zbarPromise = null;
 
-// Charge html5-qrcode depuis le CDN une seule fois (mis en cache ensuite).
-function loadHtml5Qrcode() {
-  if (window.Html5Qrcode) return Promise.resolve();
-  if (loadPromise) return loadPromise;
-  loadPromise = new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = CDN_URL;
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Impossible de charger la librairie de scan (pas de connexion ?)'));
-    document.head.appendChild(script);
+// Charge zbar-wasm une seule fois (module ESM importé dynamiquement depuis le CDN).
+function loadZbar() {
+  if (zbarPromise) return zbarPromise;
+  zbarPromise = import(/* @vite-ignore */ ZBAR_URL).catch((e) => {
+    zbarPromise = null; // permet un nouvel essai plus tard
+    throw new Error('Impossible de charger le moteur de scan (pas de connexion ?)');
   });
-  return loadPromise;
+  return zbarPromise;
 }
 
 // ------------------------------------------------------------------
@@ -73,63 +73,62 @@ export function captureFrame(videoEl) {
     canvas.toBlob((blob) => {
       if (blob) resolve(blob);
       else reject(new Error("Capture de l'image impossible."));
-    }, 'image/jpeg', 0.92);
+    }, 'image/jpeg', 0.95);
   });
 }
 
-// Fait pivoter un Blob image de `deg` degrés → nouveau Blob (pour tenter
-// plusieurs orientations de lecture).
-function rotateBlob(blob, deg) {
+// Charge un Blob/File dans une <img> puis renvoie l'élément image chargé.
+function loadImage(blob) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(blob);
     const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const swap = deg === 90 || deg === 270;
-      canvas.width = swap ? img.height : img.width;
-      canvas.height = swap ? img.width : img.height;
-      const ctx = canvas.getContext('2d');
-      ctx.translate(canvas.width / 2, canvas.height / 2);
-      ctx.rotate((deg * Math.PI) / 180);
-      ctx.drawImage(img, -img.width / 2, -img.height / 2);
-      URL.revokeObjectURL(url);
-      canvas.toBlob((out) => { out ? resolve(out) : reject(new Error('Rotation impossible')); }, 'image/jpeg', 0.92);
-    };
+    img.onload = () => { resolve({ img, url }); };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image illisible')); };
     img.src = url;
   });
 }
 
-// Décode via html5-qrcode une image (File/Blob) statique. Renvoie le code ou lève.
-async function scanOnce(fileOrBlob) {
-  let host = document.getElementById('bc-scanfile-host');
-  if (!host) {
-    host = document.createElement('div');
-    host.id = 'bc-scanfile-host';
-    host.style.cssText = 'position:fixed;width:0;height:0;overflow:hidden;opacity:0;pointer-events:none';
-    document.body.appendChild(host);
-  }
-  const html5QrCode = new window.Html5Qrcode('bc-scanfile-host', { verbose: false });
-  return html5QrCode.scanFile(fileOrBlob, false);
+// Dessine une image dans un canvas à une échelle donnée et renvoie l'ImageData.
+function imageDataFrom(img, scale = 1) {
+  const w = Math.max(1, Math.round(img.naturalWidth * scale));
+  const h = Math.max(1, Math.round(img.naturalHeight * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0, w, h);
+  return ctx.getImageData(0, 0, w, h);
 }
 
 // Décode un code-barre à partir d'une image (File/Blob) déjà capturée.
-// Essaie l'image telle quelle puis pivotée (90/180/270°) pour être robuste au
-// sens de la photo. Retourne le texte décodé, ou lève une erreur explicite.
+// zbar localise et lit le code quel que soit son sens. On tente d'abord en
+// pleine résolution ; si rien n'est trouvé, on retente une version réduite
+// (utile quand l'image est très grande/bruitée). Retourne le texte décodé.
 export async function decodeBarcodeFromFile(file) {
+  const mod = await loadZbar();
+  const { img, url } = await loadImage(file);
   try {
-    await loadHtml5Qrcode();
-  } catch (e) {
-    throw new Error(e.message || 'Chargement de la librairie de scan impossible');
+    // Échelles à essayer : pleine résolution, puis réduites si besoin.
+    const longSide = Math.max(img.naturalWidth, img.naturalHeight);
+    const scales = [1];
+    if (longSide > 1600) scales.push(1600 / longSide); // réduit les très grandes images
+    scales.push(0.6);                                   // dernier recours
+
+    for (const scale of scales) {
+      let symbols;
+      try {
+        const imageData = imageDataFrom(img, scale);
+        symbols = await mod.scanImageData(imageData);
+      } catch (_) { symbols = []; }
+      if (symbols && symbols.length) {
+        // Priorité aux symboles 1D produits (EAN/UPC) puis n'importe lequel
+        const best = symbols.find((s) => /EAN|UPC|CODE/.test(s.typeName)) || symbols[0];
+        const code = best.decode();
+        if (code) return code;
+      }
+    }
+  } finally {
+    URL.revokeObjectURL(url);
   }
-  // 1) tentative directe
-  try { return await scanOnce(file); } catch (_) { /* on tente les rotations */ }
-  // 2) rotations successives
-  for (const deg of [90, 180, 270]) {
-    try {
-      const rotated = await rotateBlob(file, deg);
-      return await scanOnce(rotated);
-    } catch (_) { /* suivant */ }
-  }
-  throw new Error("Aucun code-barre détecté sur la photo. Recadre le code bien à plat, remplis l'écran, puis reprends une photo — ou saisis les chiffres manuellement.");
+  throw new Error("Aucun code-barre détecté sur la photo. Recadre le code bien à plat en remplissant le viseur, puis reprends une photo — ou saisis les chiffres manuellement.");
 }
