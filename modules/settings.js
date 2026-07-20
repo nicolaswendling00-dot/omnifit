@@ -7,7 +7,7 @@ import { RANK_ORDER, RANK_META, DIV_LP, ONYX_LP, rankBadge, estimateRankFromLift
 import { openExercisePicker } from './workout.js';
 import { backfillNutritionGoals } from './nutrition.js';
 
-const VERSION = '3.23';
+const VERSION = '3.24';
 
 function toggleRow(label, key, sub = '') {
   const s = store.userData.settings;
@@ -107,6 +107,15 @@ export function render(container) {
       <div class="settings-row" style="flex-direction:column;align-items:stretch">
         <div class="card-row"><span class="row-label">Objectif eau</span><span class="num" id="water-val" style="color:var(--accent)">${s.waterGoal}L</span></div>
         <input id="set-water" type="range" min="2" max="5" step="0.25" value="${s.waterGoal}">
+      </div>
+    </div>
+
+    <!-- 4b. SANTÉ (APPLE) -->
+    <div class="card settings-section">
+      <h3>Santé (Apple)</h3>
+      <div class="settings-row">
+        <div><div class="row-label">Synchroniser les pas</div><div class="row-sub">Import automatique via un raccourci iOS</div></div>
+        <button class="btn btn-secondary btn-sm" id="btn-health-sync">Configurer</button>
       </div>
     </div>
 
@@ -233,6 +242,7 @@ export function render(container) {
   });
 
   root.querySelector('#btn-clear-history').addEventListener('click', () => openClearHistoryModal(rerender));
+  root.querySelector('#btn-health-sync').addEventListener('click', () => openHealthSyncModal());
   root.querySelector('#btn-reset').addEventListener('click', () => {
     confirmModal('Reset complet', 'Toutes les données seront perdues.', () => {
       confirmModal('Dernière confirmation', 'Vraiment tout supprimer ?', () => {
@@ -284,6 +294,73 @@ function openExportModal() {
         },
       },
     ],
+  });
+}
+
+function openHealthSyncModal() {
+  // URL de base de l'app (sans query ni hash).
+  const base = window.location.origin + window.location.pathname;
+
+  const content = el(`<div>
+    <div class="muted" style="font-size:0.82rem;line-height:1.5;margin-bottom:14px">
+      iOS n'autorise pas une app web à lire l'app Santé directement. On passe donc par un <b>raccourci iOS</b> qui lit tes pas du jour. Deux méthodes selon ta façon d'utiliser OmniFit :
+    </div>
+
+    <div class="hs-method">
+      <div class="hs-method-h">Méthode A — App installée (écran d'accueil)</div>
+      <div class="muted" style="font-size:0.8rem;line-height:1.5;margin-bottom:10px">Recommandée si tu ouvres OmniFit depuis l'icône. Le raccourci copie le nombre de pas, tu le colles ici.</div>
+      <button class="btn btn-primary btn-block" id="hs-paste">${icons.copy} Coller les pas depuis le presse-papier</button>
+      <div class="hs-steps" style="margin-top:12px">
+        <div class="hs-step"><span class="hs-num">1</span><div>Raccourcis → <b>+</b> → action <b>« Rechercher des échantillons de Santé »</b> : <b>Pas</b>, <b>Aujourd'hui</b>, <b>Calculer la somme</b>.</div></div>
+        <div class="hs-step"><span class="hs-num">2</span><div>Ajoute <b>« Copier vers le presse-papiers »</b> (la somme de l'étape 1).</div></div>
+        <div class="hs-step"><span class="hs-num">3</span><div>Lance le raccourci, ouvre OmniFit, puis touche le bouton ci-dessus.</div></div>
+      </div>
+    </div>
+
+    <div class="hs-method">
+      <div class="hs-method-h">Méthode B — Dans Safari (automatique)</div>
+      <div class="muted" style="font-size:0.8rem;line-height:1.5;margin-bottom:10px">Entièrement automatisable si tu ouvres OmniFit dans Safari. Le raccourci ouvre l'app avec le total en paramètre.</div>
+      <div class="hs-url">
+        <div class="hs-url-label">Adresse à composer dans le raccourci</div>
+        <code id="hs-url-code">${base}?steps=</code><span style="color:var(--text-2)">‹variable Pas›</span>
+        <button class="btn btn-secondary btn-sm" id="hs-copy" style="margin-top:8px">${icons.copy} Copier l'adresse</button>
+      </div>
+      <div class="hs-steps">
+        <div class="hs-step"><span class="hs-num">1</span><div>Mêmes étapes Santé (Pas · Aujourd'hui · Somme).</div></div>
+        <div class="hs-step"><span class="hs-num">2</span><div>Action <b>« Ouvrir les URL »</b> : colle l'adresse ci-dessus puis ajoute la <b>variable</b> résultat.</div></div>
+        <div class="hs-step"><span class="hs-num">3</span><div><b>Automatisation</b> → <b>Heure de la journée</b> (ex. 22 h) → ce raccourci, « Exécuter immédiatement ».</div></div>
+      </div>
+    </div>
+
+    <div class="muted" style="font-size:0.76rem;margin-top:4px;line-height:1.5">
+      Chaque envoi <b>remplace</b> le total du jour (pas d'addition) — cohérent avec le cumul de Santé. Option : <code>&stepsDate=AAAA-MM-JJ</code> pour un autre jour (méthode B).
+    </div>
+  </div>`);
+
+  openModal({ title: 'Synchro des pas — Santé', content, actions: [{ label: 'Fermer' }] });
+
+  // Méthode A : lecture du presse-papier → enregistrement des pas du jour
+  content.querySelector('#hs-paste').addEventListener('click', async () => {
+    let text = '';
+    try { text = await navigator.clipboard.readText(); }
+    catch (_) { toast('Presse-papier inaccessible. Autorise le collage ou utilise la méthode B.', 'error'); return; }
+    const m = String(text).replace(/[\s\u00A0]/g, '').match(/\d[\d.,]*/);
+    const count = m ? Math.round(parseFloat(m[0].replace(/,/g, ''))) : NaN;
+    if (isNaN(count) || count <= 0) { toast('Aucun nombre de pas trouvé dans le presse-papier', 'error'); return; }
+    const today = new Date().toISOString().slice(0, 10);
+    store.addStepsLog(today, count);
+    toast(`${count.toLocaleString('fr-FR')} pas enregistrés aujourd'hui`, 'success');
+  });
+
+  content.querySelector('#hs-copy').addEventListener('click', async () => {
+    const url = `${base}?steps=`;
+    try { await navigator.clipboard.writeText(url); toast('Adresse copiée', 'success'); }
+    catch (_) {
+      const code = content.querySelector('#hs-url-code');
+      const range = document.createRange(); range.selectNodeContents(code);
+      const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+      toast('Copie manuelle : texte sélectionné', 'info');
+    }
   });
 }
 
