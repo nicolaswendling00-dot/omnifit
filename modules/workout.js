@@ -11,6 +11,7 @@ let volumeChart = null;
 let impChart = null;
 let pageRerender = null;
 let routinesOpen = false;
+let volumeOpen = true; // section « Volume hebdo » dépliée par défaut
 let session = null; // { elapsed, running, date, notes, exercises:[{exerciseId, sets:[{weight,reps}], ss}] }
 let sessionUI = null; // { overlay, renderExos, close }
 let chronoInterval = null;
@@ -1305,7 +1306,6 @@ function openFullCalendar() {
 
 function renderVolumeDashboard(host, rerender) {
   const s = store.userData.settings;
-  if (!s.volumeTrackingEnabled) return;
   const end = todayISO();
   const start = todayISO(-6);
   const sets = weeklySetsByMuscle(store.userData.workouts, exerciseLookup, start, end, s.secondaryRatio);
@@ -1318,30 +1318,38 @@ function renderVolumeDashboard(host, rerender) {
     return { m, done, goal, pct };
   });
 
-  const card = el(`<div class="card">
-    <div class="card-row" style="margin-bottom:6px">
-      <h3 style="margin:0">Volume hebdo</h3>
+  const card = el(`<div class="card${volumeOpen ? '' : ' collapsed'}">
+    <div class="card-row collapse-head" id="vol-toggle" style="margin-bottom:6px;cursor:pointer">
+      <h3 style="margin:0;display:flex;align-items:center;gap:6px"><span class="collapse-caret">${icons.chevron}</span> Volume hebdo</h3>
       <button class="btn btn-secondary btn-sm" id="vol-goals-btn">${icons.edit} Objectifs</button>
     </div>
 
-    <table class="volume-table" id="vol-table">
-      <thead><tr><th>Muscle</th><th>Sets</th><th>Obj.</th><th>%</th></tr></thead>
-      <tbody>
-        ${rows.map((r) => `<tr class="vol-row" data-m="${r.m.id}">
-          <td>${r.m.label}</td>
-          <td class="tnum">${r.done}</td>
-          <td class="tnum">${r.goal}</td>
-          <td class="tnum ${r.pct >= 100 ? 'pct-ok' : r.pct >= 50 ? '' : 'pct-warn'}">${r.goal ? r.pct + '%' : '—'}</td>
-        </tr>`).join('')}
-      </tbody>
-    </table>
-    <div class="muted" style="font-size:0.68rem;margin-top:4px">Touchez un muscle pour sa progression</div>
-    <div class="chart-wrap" style="margin-top:14px;height:180px"><canvas id="vol-chart"></canvas></div>
-    <h3 style="margin-top:16px;margin-bottom:2px">Amélioration des séances</h3>
-    <div class="muted" style="font-size:0.7rem;margin-bottom:6px">Coefficient d'amélioration (%) au fil du temps</div>
-    <div class="chart-wrap" style="height:170px"><canvas id="imp-chart"></canvas></div>
+    <div class="collapse-body" style="max-height:2400px">
+      <table class="volume-table" id="vol-table">
+        <thead><tr><th>Muscle</th><th>Sets</th><th>Obj.</th><th>%</th></tr></thead>
+        <tbody>
+          ${rows.map((r) => `<tr class="vol-row" data-m="${r.m.id}">
+            <td>${r.m.label}</td>
+            <td class="tnum">${r.done}</td>
+            <td class="tnum">${r.goal}</td>
+            <td class="tnum ${r.pct >= 100 ? 'pct-ok' : r.pct >= 50 ? '' : 'pct-warn'}">${r.goal ? r.pct + '%' : '—'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      <div class="muted" style="font-size:0.68rem;margin-top:4px">Touchez un muscle pour sa progression</div>
+      <div class="chart-wrap" style="margin-top:14px;height:180px"><canvas id="vol-chart"></canvas></div>
+      <h3 style="margin-top:16px;margin-bottom:2px">Amélioration des séances</h3>
+      <div class="muted" style="font-size:0.7rem;margin-bottom:6px">Coefficient d'amélioration (%) au fil du temps</div>
+      <div class="chart-wrap" style="height:170px"><canvas id="imp-chart"></canvas></div>
+    </div>
   </div>`);
   host.appendChild(card);
+
+  card.querySelector('#vol-toggle').addEventListener('click', (e) => {
+    if (e.target.closest('#vol-goals-btn')) return;
+    volumeOpen = !volumeOpen;
+    card.classList.toggle('collapsed', !volumeOpen);
+  });
 
   card.querySelector('#vol-table').addEventListener('click', (e) => {
     const tr = e.target.closest('.vol-row');

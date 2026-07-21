@@ -67,6 +67,23 @@ function isObj(v) {
   return v && typeof v === 'object' && !Array.isArray(v);
 }
 
+// Concatène deux listes en dédupliquant par clé ; les entrées `incoming`
+// (importées) l'emportent sur les existantes de même clé. Les entrées sans clé
+// exploitable sont toujours conservées (jamais fusionnées par erreur).
+function concatDedup(existing = [], incoming = [], key) {
+  const out = [];
+  const idx = new Map();
+  const add = (item) => {
+    const k = item && item[key] != null ? item[key] : undefined;
+    if (k === undefined) { out.push(item); return; }
+    if (idx.has(k)) out[idx.get(k)] = item;
+    else idx.set(k, out.push(item) - 1);
+  };
+  for (const item of (existing || [])) add(item);
+  for (const item of (incoming || [])) add(item);
+  return out;
+}
+
 export function deepMerge(target, source) {
   const out = { ...target };
   for (const key of Object.keys(source)) {
@@ -266,7 +283,23 @@ class StorageManager {
     if (mode === 'overwrite') {
       this.userData = deepMerge(defaultUserData(), data);
     } else {
-      this.userData = deepMerge(this.userData, data);
+      // Fusion. deepMerge REMPLACE les tableaux ; on recompose donc ensuite les
+      // collections cumulatives (historique, routines, recettes, exos custom)
+      // pour ne rien écraser. Idempotent : ré-importer le même fichier ne crée
+      // pas de doublons (déduplication par clé, l'import l'emportant).
+      const prev = this.userData;
+      const merged = deepMerge(prev, data);
+      if (Array.isArray(data.workouts)) merged.workouts = concatDedup(prev.workouts, data.workouts, 'id');
+      if (Array.isArray(data.weights)) merged.weights = concatDedup(prev.weights, data.weights, 'date');
+      if (Array.isArray(data.routines)) merged.routines = concatDedup(prev.routines, data.routines, 'id');
+      if (Array.isArray(data.recipes)) merged.recipes = concatDedup(prev.recipes, data.recipes, 'id');
+      if (data.settings && Array.isArray(data.settings.customExercises)) {
+        const prevCx = (prev.settings && prev.settings.customExercises) || [];
+        merged.settings.customExercises = concatDedup(prevCx, data.settings.customExercises, 'id');
+      }
+      merged.workouts.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      merged.weights.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      this.userData = merged;
     }
     this.persist();
   }
