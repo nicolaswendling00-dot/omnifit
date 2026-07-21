@@ -79,7 +79,25 @@ function ormOfSets(sets) {
 //  Sert au "raccourci Onyx" : 1RM séance ≥ Élite × 1.15 × poids_de_corps → Onyx direct.
 // ============================================================
 let STANDARDS = null;
-export function setStandards(obj) { STANDARDS = obj || null; }
+const STANDARDS_LS_KEY = 'omnifit_standards_v1';
+// Au chargement du module, on tente de récupérer les standards mis en cache lors
+// d'un précédent lancement. Ainsi ils sont disponibles SYNCHRONEMENT dès le boot
+// (avant tout rendu), ce qui évite que les rangs soient calculés sans référence
+// tant que standards.json n'est pas re-téléchargé (source du « rang qui change »
+// à la reprise d'une séance).
+try {
+  const cached = (typeof localStorage !== 'undefined') && localStorage.getItem(STANDARDS_LS_KEY);
+  if (cached) STANDARDS = JSON.parse(cached);
+} catch (_) { /* cache illisible : on ignore */ }
+
+export function setStandards(obj) {
+  STANDARDS = obj || null;
+  try {
+    if (typeof localStorage !== 'undefined') {
+      if (obj) localStorage.setItem(STANDARDS_LS_KEY, JSON.stringify(obj));
+    }
+  } catch (_) { /* quota/permissions : on ignore, le fetch refera le travail */ }
+}
 export function getStandards() { return STANDARDS; }
 
 // Standard "Élite" (ratio 1RM/poids) d'un exo, résolu via l'héritage parent-enfant.

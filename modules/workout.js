@@ -1324,7 +1324,7 @@ function renderVolumeDashboard(host, rerender) {
       <button class="btn btn-secondary btn-sm" id="vol-goals-btn">${icons.edit} Objectifs</button>
     </div>
 
-    <div class="collapse-body" style="max-height:2400px">
+    <div class="collapse-body collapse-body-tall">
       <table class="volume-table" id="vol-table">
         <thead><tr><th>Muscle</th><th>Sets</th><th>Obj.</th><th>%</th></tr></thead>
         <tbody>
@@ -1617,4 +1617,10 @@ export function resumeActiveSession(rerenderPage) {
   if (!saved || !saved.exercises) return;
   openSession(rerenderPage || (() => {}), null, null, saved);
   minimizeSession();
+}
+
+// Rafraîchit l'affichage d'une séance en cours (ex. quand les standards de rang
+// finissent de charger après la reprise) sans rien perdre de l'état.
+export function refreshActiveSession() {
+  if (session && sessionUI) sessionUI.renderExos();
 }

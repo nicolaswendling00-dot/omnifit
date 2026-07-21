@@ -84,6 +84,33 @@ function concatDedup(existing = [], incoming = [], key) {
   return out;
 }
 
+// Analyse une charge « pas » venant d'un raccourci iOS (URL ?steps=… ou
+// presse-papier). Accepte :
+//   - un nombre seul  → attribué à `today`  (ex : "8532")
+//   - des paires date:count séparées par saut de ligne ou point-virgule
+//     (ex : "2026-07-15:8000\n2026-07-16:9500" ou "…;…")
+//     séparateurs date/nombre tolérés : ':' , '=' , espace
+// Les séparateurs de milliers (virgule/espace) dans le nombre sont tolérés.
+// Retourne un tableau [{date, count}] dédupliqué par date (dernière valeur gagne).
+export function parseStepsPayload(text, today) {
+  const day = today || new Date().toISOString().slice(0, 10);
+  const map = new Map();
+  if (text == null) return [];
+  const raw = String(text).trim();
+  if (!raw) return [];
+  for (const part of raw.split(/[\n;]+/).map((s) => s.trim()).filter(Boolean)) {
+    const dm = part.match(/(\d{4}-\d{2}-\d{2})/);
+    const stripped = part.replace(/[\s\u00A0]/g, '');
+    const numSrc = dm ? stripped.replace(dm[1], '') : stripped;
+    const nm = numSrc.match(/\d[\d.,]*/);
+    if (!nm) continue;
+    const count = Math.round(parseFloat(nm[0].replace(/,/g, '')));
+    if (isNaN(count) || count < 0) continue;
+    map.set(dm ? dm[1] : day, count);
+  }
+  return [...map.entries()].map(([date, count]) => ({ date, count }));
+}
+
 export function deepMerge(target, source) {
   const out = { ...target };
   for (const key of Object.keys(source)) {

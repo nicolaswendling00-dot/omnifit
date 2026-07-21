@@ -1,5 +1,5 @@
 // OmniFit — PAGE 4 : Réglages (macros déplacées dans Nutrition)
-import { store } from '../utils/storage.js';
+import { store, parseStepsPayload } from '../utils/storage.js';
 import { harrisBenedict } from '../utils/math.js';
 import { EQUIPMENT_TYPES } from '../data/exercises.js';
 import { el, icons, openModal, toast, confirmModal } from '../utils/ui.js';
@@ -7,7 +7,7 @@ import { RANK_ORDER, RANK_META, DIV_LP, ONYX_LP, rankBadge, estimateRankFromLift
 import { openExercisePicker } from './workout.js';
 import { backfillNutritionGoals } from './nutrition.js';
 
-const VERSION = '3.25';
+const VERSION = '3.26';
 
 function toggleRow(label, key, sub = '') {
   const s = store.userData.settings;
@@ -301,53 +301,49 @@ function openHealthSyncModal() {
 
   const content = el(`<div>
     <div class="muted" style="font-size:0.82rem;line-height:1.5;margin-bottom:14px">
-      iOS n'autorise pas une app web à lire l'app Santé directement. On passe donc par un <b>raccourci iOS</b> qui lit tes pas du jour. Deux méthodes selon ta façon d'utiliser OmniFit :
+      iOS n'autorise pas une app web à lire l'app Santé directement. On passe par un <b>raccourci iOS</b> qui lit tes pas des <b>7 derniers jours</b> et les transmet à OmniFit. Lancé une fois, il remplit la semaine ; via une automatisation quotidienne, il garde tout à jour.
     </div>
 
     <div class="hs-method">
-      <div class="hs-method-h">Méthode A — App installée (écran d'accueil)</div>
-      <div class="muted" style="font-size:0.8rem;line-height:1.5;margin-bottom:10px">Recommandée si tu ouvres OmniFit depuis l'icône. Le raccourci copie le nombre de pas, tu le colles ici.</div>
+      <div class="hs-method-h">Méthode A — App installée (recommandé)</div>
+      <div class="muted" style="font-size:0.8rem;line-height:1.5;margin-bottom:10px">Le raccourci <b>copie</b> les 7 jours, tu les colles ici. C'est la méthode fiable pour l'app installée sur l'écran d'accueil.</div>
       <button class="btn btn-primary btn-block" id="hs-paste">${icons.copy} Coller les pas depuis le presse-papier</button>
       <div class="hs-steps" style="margin-top:12px">
-        <div class="hs-step"><span class="hs-num">1</span><div>Raccourcis → <b>+</b> → action <b>« Rechercher des échantillons de Santé »</b> : <b>Pas</b>, <b>Aujourd'hui</b>, <b>Calculer la somme</b>.</div></div>
-        <div class="hs-step"><span class="hs-num">2</span><div>Ajoute <b>« Copier vers le presse-papiers »</b> (la somme de l'étape 1).</div></div>
-        <div class="hs-step"><span class="hs-num">3</span><div>Lance le raccourci, ouvre OmniFit, puis touche le bouton ci-dessus.</div></div>
+        <div class="hs-step"><span class="hs-num">1</span><div>Raccourcis → <b>+</b>. Ajoute une action <b>Texte</b> vide (variable « Lignes »).</div></div>
+        <div class="hs-step"><span class="hs-num">2</span><div><b>Répéter 7 fois</b> : calcule <b>Date = aujourd'hui − (Index−1) jours</b>, formate-la en <code>aaaa-MM-jj</code>, puis <b>« Rechercher des échantillons de Santé »</b> (Pas, <b>Somme</b>, filtré sur ce jour). Ajoute à « Lignes » le texte <code>[date]:[somme]</code>.</div></div>
+        <div class="hs-step"><span class="hs-num">3</span><div>Après la boucle : <b>« Combiner le texte »</b> (Lignes, avec <b>nouvelles lignes</b>) → <b>« Copier dans le presse-papiers »</b>.</div></div>
+        <div class="hs-step"><span class="hs-num">4</span><div>Lance-le, ouvre OmniFit, touche le bouton ci-dessus. Automatise-le ensuite (Automatisation → Heure de la journée).</div></div>
       </div>
     </div>
 
     <div class="hs-method">
       <div class="hs-method-h">Méthode B — Dans Safari (automatique)</div>
-      <div class="muted" style="font-size:0.8rem;line-height:1.5;margin-bottom:10px">Entièrement automatisable si tu ouvres OmniFit dans Safari. Le raccourci ouvre l'app avec le total en paramètre.</div>
+      <div class="muted" style="font-size:0.8rem;line-height:1.5;margin-bottom:10px">Si tu ouvres OmniFit dans Safari. Le raccourci ouvre cette adresse avec les 7 jours en paramètre (paires séparées par <code>;</code>).</div>
       <div class="hs-url">
-        <div class="hs-url-label">Adresse à composer dans le raccourci</div>
-        <code id="hs-url-code">${base}?steps=</code><span style="color:var(--text-2)">‹variable Pas›</span>
+        <div class="hs-url-label">Adresse à composer</div>
+        <code id="hs-url-code">${base}?steps=</code><span style="color:var(--text-2)">‹Lignes, avec ; ›</span>
         <button class="btn btn-secondary btn-sm" id="hs-copy" style="margin-top:8px">${icons.copy} Copier l'adresse</button>
       </div>
-      <div class="hs-steps">
-        <div class="hs-step"><span class="hs-num">1</span><div>Mêmes étapes Santé (Pas · Aujourd'hui · Somme).</div></div>
-        <div class="hs-step"><span class="hs-num">2</span><div>Action <b>« Ouvrir les URL »</b> : colle l'adresse ci-dessus puis ajoute la <b>variable</b> résultat.</div></div>
-        <div class="hs-step"><span class="hs-num">3</span><div><b>Automatisation</b> → <b>Heure de la journée</b> (ex. 22 h) → ce raccourci, « Exécuter immédiatement ».</div></div>
-      </div>
+      <div class="muted" style="font-size:0.76rem;margin-top:8px">Même boucle qu'en A, mais combine les paires avec <code>;</code> puis <b>« Ouvrir les URL »</b> sur <code>${base}?steps=</code>+‹Lignes›.</div>
     </div>
 
     <div class="muted" style="font-size:0.76rem;margin-top:4px;line-height:1.5">
-      Chaque envoi <b>remplace</b> le total du jour (pas d'addition) — cohérent avec le cumul de Santé. Option : <code>&stepsDate=AAAA-MM-JJ</code> pour un autre jour (méthode B).
+      Format attendu : un <code>aaaa-MM-jj:pas</code> par ligne (méthode A) ou séparés par <code>;</code> (méthode B). Un simple nombre seul compte pour aujourd'hui. Chaque envoi <b>remplace</b> le total de chaque jour concerné (cohérent avec le cumul de Santé).
     </div>
   </div>`);
 
   openModal({ title: 'Synchro des pas — Santé', content, actions: [{ label: 'Fermer' }] });
 
-  // Méthode A : lecture du presse-papier → enregistrement des pas du jour
+  // Méthode A : lecture du presse-papier → enregistrement multi-jours
   content.querySelector('#hs-paste').addEventListener('click', async () => {
     let text = '';
     try { text = await navigator.clipboard.readText(); }
     catch (_) { toast('Presse-papier inaccessible. Autorise le collage ou utilise la méthode B.', 'error'); return; }
-    const m = String(text).replace(/[\s\u00A0]/g, '').match(/\d[\d.,]*/);
-    const count = m ? Math.round(parseFloat(m[0].replace(/,/g, ''))) : NaN;
-    if (isNaN(count) || count <= 0) { toast('Aucun nombre de pas trouvé dans le presse-papier', 'error'); return; }
-    const today = new Date().toISOString().slice(0, 10);
-    store.addStepsLog(today, count);
-    toast(`${count.toLocaleString('fr-FR')} pas enregistrés aujourd'hui`, 'success');
+    const entries = parseStepsPayload(text);
+    if (!entries.length) { toast('Aucune donnée de pas trouvée dans le presse-papier', 'error'); return; }
+    for (const { date, count } of entries) store.addStepsLog(date, count);
+    const n = entries.length;
+    toast(n === 1 ? `${entries[0].count.toLocaleString('fr-FR')} pas enregistrés` : `${n} jours de pas importés`, 'success');
   });
 
   content.querySelector('#hs-copy').addEventListener('click', async () => {

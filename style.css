@@ -584,6 +584,7 @@ body.theme-amoled .session-top { background: rgba(0,0,0,0.94); }
 .collapse-caret svg { width: 18px; height: 18px; }
 .card.collapsed .collapse-caret, .meal-group.collapsed .collapse-caret { transform: rotate(-90deg); }
 .collapse-body { overflow: hidden; max-height: 1600px; transition: max-height 0.3s var(--ease); }
+.collapse-body-tall { max-height: 2000px; }
 .card.collapsed .collapse-body { max-height: 0; }
 .meal-group { margin-bottom: 6px; }
 .meal-cat-head { cursor: pointer; user-select: none; }

@@ -1,10 +1,11 @@
 // OmniFit — app.js : orchestrateur (navigation, swipe, boot)
 import { render as renderHome } from './modules/home.js';
 import { render as renderNutrition } from './modules/nutrition.js';
-import { render as renderWorkout, resumeActiveSession } from './modules/workout.js';
+import { render as renderWorkout, resumeActiveSession, refreshActiveSession } from './modules/workout.js';
 import { render as renderActivity } from './modules/activity.js';
 import { render as renderSettings, applyTheme } from './modules/settings.js';
 import { setStandards } from './utils/ranks.js';
+import { store, parseStepsPayload } from './utils/storage.js';
 
 const PAGES = [
   { id: 'page-home', render: renderHome },
@@ -57,19 +58,40 @@ appContainer.addEventListener('touchend', (e) => {
 
 // ---------- Boot ----------
 applyTheme();
+
+// Synchronisation Santé (Apple) : un raccourci iOS lit les pas depuis l'app Santé
+// puis ouvre l'appli avec ?steps=NNN (&stepsDate=YYYY-MM-DD facultatif). On lit
+// ce paramètre au démarrage, on enregistre le total du jour, puis on nettoie
+// l'URL pour ne pas ré-appliquer une valeur périmée au rechargement.
+function ingestStepsFromURL() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('steps')) return;
+    const entries = parseStepsPayload(params.get('steps'));
+    for (const { date, count } of entries) store.addStepsLog(date, count);
+  } catch (_) { /* on ignore un paramètre malformé */ }
+  // Nettoie l'URL (retire ?steps=… sans recharger la page)
+  try { window.history.replaceState({}, '', window.location.pathname); } catch (_) { /* noop */ }
+}
+ingestStepsFromURL();
+
 goTo(0);
 
-// Restaure une éventuelle séance en cours (l'app a pu être quittée en pleine séance)
-resumeActiveSession(() => {
-  const p = PAGES[currentPage];
-  p.render(document.getElementById(p.id));
-});
+// Standards StrengthLevel (nécessaires au calcul des rangs). Chargement non
+// bloquant, MAIS la reprise d'une séance en cours attend que les standards
+// soient prêts : sinon les rangs des exercices de la séance seraient calculés
+// sans référence et s'afficheraient faux jusqu'au prochain rendu.
+const rerenderCurrent = () => { const p = PAGES[currentPage]; p.render(document.getElementById(p.id)); };
 
-// Standards StrengthLevel (pour le raccourci Onyx). Chargement non bloquant.
 fetch('./standards.json')
   .then((r) => (r.ok ? r.json() : null))
-  .then((data) => { if (data) { setStandards(data); const p = PAGES[currentPage]; p.render(document.getElementById(p.id)); } })
-  .catch(() => {});
+  .then((data) => { if (data) setStandards(data); })
+  .catch(() => {})
+  .finally(() => {
+    rerenderCurrent();                 // la page courante récupère les rangs
+    resumeActiveSession(rerenderCurrent); // reprise séance (standards désormais chargés → rangs corrects)
+    refreshActiveSession();            // et si une séance était déjà là, on recalcule ses rangs
+  });
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
