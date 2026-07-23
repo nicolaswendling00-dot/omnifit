@@ -190,8 +190,8 @@ export function openSheet({ title, content, onClose = null, headerAction = null 
     startY = null; dragging = false;
     if (!wasDragging) return;
     sheet.style.transition = 'transform 260ms var(--ease)';
-    if (dy > sheet.offsetHeight / 2) {
-      // Au-delà de la moitié : on termine la fermeture jusqu'en bas
+    if (dy > sheet.offsetHeight / 3) {
+      // Au-delà du tiers : on termine la fermeture jusqu'en bas
       setY(sheet.offsetHeight);
       setTimeout(close, 220);
     } else {
@@ -228,13 +228,13 @@ export function ringSVG({ size = 72, stroke = 7, progress = 0, color = 'var(--ac
     const x0 = cx + r * Math.cos(a0); const y0 = cy + r * Math.sin(a0);
     const x1 = cx + r * Math.cos(a1); const y1 = cy + r * Math.sin(a1);
     const largeArc = fo > 0.5 ? 1 : 0;
-    overshoot = `<path d="M ${x0.toFixed(1)} ${y0.toFixed(1)} A ${r} ${r} 0 ${largeArc} 1 ${x1.toFixed(1)} ${y1.toFixed(1)}" fill="none" stroke="rgba(255,255,255,0.75)" stroke-width="${stroke}" stroke-linecap="butt" stroke-dasharray="2 3"/>`;
+    overshoot = `<path d="M ${x0.toFixed(1)} ${y0.toFixed(1)} A ${r} ${r} 0 ${largeArc} 1 ${x1.toFixed(1)} ${y1.toFixed(1)}" fill="none" stroke="var(--text)" stroke-width="${stroke}" stroke-linecap="butt" stroke-dasharray="2 3"/>`;
   }
 
   return `
     <svg class="ring" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="${label} ${Math.round(p * 100)}%">
       ${gradient ? `<defs><linearGradient id="grad-${uid}" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00D9FF"/><stop offset="100%" stop-color="#7C3AED"/></linearGradient></defs>` : ''}
-      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(0,217,255,0.12)" stroke-width="${stroke}"/>
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(var(--accent-rgb), 0.14)" stroke-width="${stroke}"/>
       <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${stroking}" stroke-width="${stroke}"
         stroke-linecap="round" stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"
         transform="rotate(-90 ${cx} ${cy})" class="ring-fg"/>

@@ -1,11 +1,11 @@
 // OmniFit — app.js : orchestrateur (navigation, swipe, boot)
 import { render as renderHome } from './modules/home.js';
 import { render as renderNutrition } from './modules/nutrition.js';
-import { render as renderWorkout, resumeActiveSession } from './modules/workout.js';
+import { render as renderWorkout, resumeActiveSession, refreshActiveSession } from './modules/workout.js';
 import { render as renderActivity } from './modules/activity.js';
 import { render as renderSettings, applyTheme } from './modules/settings.js';
 import { setStandards } from './utils/ranks.js';
-import { store } from './utils/storage.js';
+import { store, parseStepsPayload } from './utils/storage.js';
 
 const PAGES = [
   { id: 'page-home', render: renderHome },
@@ -40,7 +40,9 @@ let touchStartY = null;
 appContainer.addEventListener('touchstart', (e) => {
   if (document.body.classList.contains('overlay-open')) { touchStartX = null; return; }
   // Ne pas déclencher le swipe depuis les zones scrollables horizontalement
-  if (e.target.closest('.no-swipe, .date-ribbon, .segment, input[type="range"]')) { touchStartX = null; return; }
+  // ni depuis les lignes à swipe latéral (repas, séries) : sinon le geste de
+  // suppression fait changer d'onglet.
+  if (e.target.closest('.no-swipe, .date-ribbon, .segment, .meal-row, .set-row, input[type="range"]')) { touchStartX = null; return; }
   touchStartX = e.touches[0].clientX;
   touchStartY = e.touches[0].clientY;
 }, { passive: true });
@@ -67,13 +69,8 @@ function ingestStepsFromURL() {
   try {
     const params = new URLSearchParams(window.location.search);
     if (!params.has('steps')) return;
-    const raw = params.get('steps');
-    const count = Math.max(0, Math.round(parseFloat(raw)));
-    if (!isNaN(count)) {
-      const d = params.get('stepsDate');
-      const date = (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) ? d : new Date().toISOString().slice(0, 10);
-      store.addStepsLog(date, count);
-    }
+    const entries = parseStepsPayload(params.get('steps'));
+    for (const { date, count } of entries) store.addStepsLog(date, count);
   } catch (_) { /* on ignore un paramètre malformé */ }
   // Nettoie l'URL (retire ?steps=… sans recharger la page)
   try { window.history.replaceState({}, '', window.location.pathname); } catch (_) { /* noop */ }
@@ -95,6 +92,7 @@ fetch('./standards.json')
   .finally(() => {
     rerenderCurrent();                 // la page courante récupère les rangs
     resumeActiveSession(rerenderCurrent); // reprise séance (standards désormais chargés → rangs corrects)
+    refreshActiveSession();            // et si une séance était déjà là, on recalcule ses rangs
   });
 
 if ('serviceWorker' in navigator) {

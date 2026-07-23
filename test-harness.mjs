@@ -1,4 +1,5 @@
 // Test harness jsdom — OmniFit v3
+import fs from 'node:fs';
 import { JSDOM } from 'jsdom';
 import { readFileSync } from 'fs';
 
@@ -259,6 +260,25 @@ const exoSheet = document.querySelector('.sheet');
 assert(exoSheet.querySelector('.sheet-action'), 'Fiche exo : crayon en entete');
 assert(!exoSheet.querySelector('#ed-rename'), 'Fiche exo : bouton "Modifier le nom" retire');
 clearOverlays();
+
+// Theme clair : aucune couleur sombre en dur hors des definitions :root
+const cssTxt = fs.readFileSync(new URL('./style.css', import.meta.url), 'utf8');
+const cssBody = cssTxt.slice(cssTxt.indexOf('}', cssTxt.indexOf(':root {')));
+assert(!/rgba\(\s*0\s*,\s*217\s*,\s*255/.test(cssBody), 'Theme : aucune teinte accent en dur hors :root');
+assert(!cssBody.includes('#04101d'), 'Theme : aucun texte quasi-noir en dur hors :root');
+assert(!cssBody.includes('rgba(10, 14, 39'), 'Theme : aucun fond de barre sombre en dur hors :root');
+const lightBlock = cssTxt.slice(cssTxt.indexOf('body.theme-light {'), cssTxt.indexOf('}', cssTxt.indexOf('body.theme-light {')));
+assert(lightBlock.includes('--on-accent: #FFFFFF'), 'Theme clair : texte blanc sur boutons pleins');
+assert(lightBlock.includes('--header-bg: rgba(255, 255, 255'), 'Theme clair : header nutrition clair');
+
+// Swipe : les lignes swipables ne declenchent pas le changement d'onglet
+const appTxt = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+assert(/no-swipe[^)]*\.meal-row/.test(appTxt), 'Swipe onglet bloque sur .meal-row');
+assert(/no-swipe[^)]*\.set-row/.test(appTxt), 'Swipe onglet bloque sur .set-row');
+
+// Panneaux : fermeture au tiers de la hauteur
+const uiTxt = fs.readFileSync(new URL('./utils/ui.js', import.meta.url), 'utf8');
+assert(uiTxt.includes('sheet.offsetHeight / 3'), 'Panneau : fermeture au tiers');
 
 console.log(`\n===== RÉSULTAT : ${pass} OK / ${fail} FAIL =====`);
 process.exit(fail ? 1 : 0);
