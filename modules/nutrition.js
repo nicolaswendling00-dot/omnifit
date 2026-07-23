@@ -734,7 +734,7 @@ export function render(container) {
             <div class="ring-caption">Lip / ${mg.fatG}g</div>
           </div>
           <div class="ring-item ring-item-sm">
-            ${ringSVG({ size: 50, stroke: 6, progress: totals.fiber / fiberGoal, color: C_FIBER, label: `${Math.round(totals.fiber)}` })}
+            ${ringSVG({ size: 45, stroke: 6, progress: totals.fiber / fiberGoal, color: C_FIBER, label: `${Math.round(totals.fiber)}` })}
             <div class="ring-caption">Fib / ${fiberGoal}g</div>
           </div>
         </div>
