@@ -11,7 +11,6 @@ let volumeChart = null;
 let impChart = null;
 let pageRerender = null;
 let routinesOpen = false;
-let volumeOpen = true; // section « Volume hebdo » dépliée par défaut
 let session = null; // { elapsed, running, date, notes, exercises:[{exerciseId, sets:[{weight,reps}], ss}] }
 let sessionUI = null; // { overlay, renderExos, close }
 let chronoInterval = null;
@@ -39,8 +38,15 @@ export function allExercises() {
 export function exerciseLookup(id) {
   const e = allExercises().find((x) => x.id === id);
   if (!e) return undefined;
-  const ov = store.userData.settings.exerciseNames;
-  return ov && ov[id] ? { ...e, name: ov[id] } : e;
+  const s = store.userData.settings;
+  const nameOv = s.exerciseNames;
+  const muscleOv = s.exerciseMuscleOverrides && s.exerciseMuscleOverrides[id];
+  if (!nameOv?.[id] && !muscleOv) return e;
+  return {
+    ...e,
+    ...(nameOv?.[id] ? { name: nameOv[id] } : null),
+    ...(muscleOv ? { primaryMuscles: muscleOv.primaryMuscles, secondaryMuscles: muscleOv.secondaryMuscles } : null),
+  };
 }
 // Normalisation pour recherche : minuscules, sans accents
 function normalizeStr(s) {
@@ -239,31 +245,36 @@ export function openExercisePicker(onPick, title = 'Ajouter un exercice') {
 // ============================================================
 // CRÉATEUR D'EXERCICE CUSTOM
 // ============================================================
-function openCustomExerciseModal(onCreated) {
-  const muscleRows = (label) => MUSCLES.map((m) => `
+// existing = null pour créer, ou { id, name, primaryMuscles, secondaryMuscles, isCustom } pour éditer.
+// onSaved(exo) est appelé avec l'exercice créé/modifié (forme allExercises()).
+function openCustomExerciseModal(onSaved, existing = null) {
+  const muscleRows = (label, checked = []) => MUSCLES.map((m) => {
+    const found = checked.find((c) => c.m === m.id);
+    return `
     <div class="card-row" style="padding:3px 0">
       <label style="display:flex;align-items:center;gap:8px;font-size:0.82rem;flex:1">
-        <input type="checkbox" class="${label}-chk" data-m="${m.id}" style="width:18px;height:18px;accent-color:var(--accent)"> ${m.label}
+        <input type="checkbox" class="${label}-chk" data-m="${m.id}" ${found ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--accent)"> ${m.label}
       </label>
-      <input type="number" class="${label}-pct" data-m="${m.id}" min="0" max="100" placeholder="%" style="width:70px;min-height:36px;padding:6px">
-    </div>`).join('');
+      <input type="number" class="${label}-pct" data-m="${m.id}" min="0" max="100" placeholder="%" value="${found ? found.p : ''}" style="width:70px;min-height:36px;padding:6px">
+    </div>`;
+  }).join('');
 
   const form = el(`<div>
-    <label class="field"><span>Nom</span><input id="cx-name" type="text" placeholder="Mon exercice"></label>
+    <label class="field"><span>Nom</span><input id="cx-name" type="text" placeholder="Mon exercice" value="${existing ? existing.name.replace(/"/g, '&quot;') : ''}"></label>
     <h3 style="font-size:0.85rem;margin:8px 0 4px">Muscles principaux</h3>
-    <div style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px 10px">${muscleRows('prim')}</div>
+    <div style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px 10px">${muscleRows('prim', existing ? existing.primaryMuscles : [])}</div>
     <h3 style="font-size:0.85rem;margin:12px 0 4px">Muscles secondaires</h3>
-    <div style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px 10px">${muscleRows('sec')}</div>
+    <div style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px 10px">${muscleRows('sec', existing ? existing.secondaryMuscles : [])}</div>
   </div>`);
 
   openModal({
-    title: 'Créer un exercice',
+    title: existing ? 'Modifier l\'exercice' : 'Créer un exercice',
     content: form,
     wide: true,
     actions: [
       { label: 'Annuler' },
       {
-        label: 'Créer', variant: 'btn-primary',
+        label: existing ? 'Enregistrer' : 'Créer', variant: 'btn-primary',
         onClick: (body) => {
           const name = body.querySelector('#cx-name').value.trim();
           if (!name) { toast('Nom requis', 'error'); return 'keep'; }
@@ -276,14 +287,34 @@ function openCustomExerciseModal(onCreated) {
           if (!primary.length) { toast('Au moins 1 muscle principal avec %', 'error'); return 'keep'; }
           const totalPct = [...primary, ...secondary].reduce((a, x) => a + x.p, 0);
           if (totalPct > 100) { toast(`Total ${totalPct}% > 100%`, 'error'); return 'keep'; }
-          const exo = {
-            id: 'custom_' + crypto.randomUUID().slice(0, 8),
-            name, category: 'Custom', isCustom: true,
-            primaryMuscles: primary, secondaryMuscles: secondary,
-            difficulty: 'Custom', equipment: 'Other',
-          };
-          store.saveUserData({ settings: { customExercises: [...(store.userData.settings.customExercises || []), exo] } });
-          if (onCreated) onCreated(exo);
+
+          if (existing) {
+            if (existing.isCustom) {
+              // Exercice custom : on modifie directement l'entrée dans customExercises
+              const list = (store.userData.settings.customExercises || []).map((e) =>
+                e.id === existing.id ? { ...e, name, primaryMuscles: primary, secondaryMuscles: secondary } : e);
+              store.saveUserData({ settings: { customExercises: list } });
+            } else {
+              // Exercice de la base intégrée : on stocke une surcouche (nom + muscles),
+              // sans toucher à la base d'origine, comme pour le renommage déjà existant.
+              const namesOv = { ...(store.userData.settings.exerciseNames || {}) };
+              namesOv[existing.id] = name;
+              const musclesOv = { ...(store.userData.settings.exerciseMuscleOverrides || {}) };
+              musclesOv[existing.id] = { primaryMuscles: primary, secondaryMuscles: secondary };
+              store.saveUserData({ settings: { exerciseNames: namesOv, exerciseMuscleOverrides: musclesOv } });
+            }
+            toast('Exercice modifié', 'success');
+            if (onSaved) onSaved(exerciseLookup(existing.id));
+          } else {
+            const exo = {
+              id: 'custom_' + crypto.randomUUID().slice(0, 8),
+              name, category: 'Custom', isCustom: true,
+              primaryMuscles: primary, secondaryMuscles: secondary,
+              difficulty: 'Custom', equipment: 'Other',
+            };
+            store.saveUserData({ settings: { customExercises: [...(store.userData.settings.customExercises || []), exo] } });
+            if (onSaved) onSaved(exo);
+          }
         },
       },
     ],
@@ -454,7 +485,6 @@ function openExerciseDetailSheet(exerciseId) {
 
   const form = el(`<div>
     ${rankBlock}
-    <button class="btn btn-secondary btn-sm btn-block" id="ed-rename" style="margin-bottom:12px">${icons.edit} Modifier le nom</button>
     ${best1rm ? `<div class="orm-card">
       <div class="orm-head">Meilleure série</div>
       <div class="orm-value">${best1rm.weight} kg × ${best1rm.reps}</div>
@@ -473,33 +503,25 @@ function openExerciseDetailSheet(exerciseId) {
     <div id="ed-history">${history.length ? '' : '<div class="empty-state">Jamais réalisé</div>'}</div>
   </div>`);
 
-  const sheet = openSheet({ title: def.name, content: form });
+  const sheet = openSheet({
+    title: def.name,
+    content: form,
+    // Crayon en haut à droite : édition complète (nom + pourcentages de muscles),
+    // même interface que la création d'un exercice custom.
+    headerAction: {
+      icon: icons.edit,
+      label: 'Modifier l\'exercice',
+      onClick: ({ close }) => {
+        close();
+        openCustomExerciseModal(() => {
+          openExerciseDetailSheet(exerciseId); // rouvre la fiche à jour
+        }, def);
+      },
+    },
+  });
 
   const rankEl = form.querySelector('#ed-rank');
   if (rankEl) rankEl.addEventListener('click', () => rankEl.classList.toggle('flipped'));
-
-  form.querySelector('#ed-rename').addEventListener('click', () => {
-    const input = el(`<input type="text" class="rename-input" value="${def.name.replace(/"/g, '&quot;')}" style="width:100%">`);
-    openModal({
-      title: 'Modifier le nom',
-      content: input,
-      actions: [
-        { label: 'Annuler' },
-        {
-          label: 'Enregistrer', variant: 'btn-primary',
-          onClick: (body) => {
-            const name = body.querySelector('.rename-input').value.trim();
-            if (!name) { toast('Nom requis', 'error'); return 'keep'; }
-            const ov = { ...(store.userData.settings.exerciseNames || {}) };
-            ov[exerciseId] = name;
-            store.saveUserData({ settings: { exerciseNames: ov } });
-            toast('Nom modifié', 'success');
-            sheet.close();
-          },
-        },
-      ],
-    });
-  });
 
   const slider = form.querySelector('#ed-rest');
   slider.addEventListener('input', () => { form.querySelector('#ed-rest-val').textContent = slider.value + 's'; });
@@ -1066,20 +1088,72 @@ function showSummary(exercises, closeSession) {
       {
         label: 'Valider', variant: 'btn-primary',
         onClick: () => {
-          const payload = {
-            id: session.editingId || crypto.randomUUID(),
-            date: session.date,
-            notes: session.notes,
-            exercises,
-            totalVolume: Math.round(totalVolume),
-            totalTime: elapsedSeconds(),
+          const save = (totalTime) => {
+            const payload = {
+              id: session.editingId || crypto.randomUUID(),
+              date: session.date,
+              notes: session.notes,
+              exercises,
+              totalVolume: Math.round(totalVolume),
+              totalTime,
+            };
+            if (session.editingId) store.updateWorkout(payload);
+            else store.addWorkout(payload);
+            toast(session.editingId ? 'Séance mise à jour' : 'Séance enregistrée', 'success');
+            closeSession();
           };
-          if (session.editingId) store.updateWorkout(payload);
-          else store.addWorkout(payload);
-          toast(session.editingId ? 'Séance mise à jour' : 'Séance enregistrée', 'success');
-          closeSession();
+          const secs = elapsedSeconds();
+          // Au-delà de 2 h, on demande confirmation : le cas typique est d'avoir
+          // oublié d'arrêter le chrono. On propose alors de saisir la vraie durée.
+          if (secs > 7200) confirmSessionDuration(secs, save);
+          else save(secs);
         },
       },
+    ],
+  });
+}
+
+// Séance anormalement longue (> 2 h) : on demande si la durée est correcte.
+// « Oui » -> enregistrement classique. « Corriger » -> saisie h / min / s.
+function confirmSessionDuration(seconds, onConfirm) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  const content = el(`<div>
+    <p class="confirm-text" style="margin-bottom:12px">
+      Cette séance a duré <b style="color:var(--accent)">${formatTime(seconds)}</b>.
+      Est-ce la bonne durée ? Si tu as oublié d'arrêter le chrono, corrige-la ci-dessous.
+    </p>
+    <div class="field-row" id="sd-fields" style="display:none">
+      <label class="field"><span>Heures</span><input id="sd-h" type="number" inputmode="numeric" min="0" max="23" value="${h}"></label>
+      <label class="field"><span>Minutes</span><input id="sd-m" type="number" inputmode="numeric" min="0" max="59" value="${m}"></label>
+      <label class="field"><span>Secondes</span><input id="sd-s" type="number" inputmode="numeric" min="0" max="59" value="${s}"></label>
+    </div>
+  </div>`);
+
+  openModal({
+    title: 'Durée de la séance',
+    content,
+    actions: [
+      {
+        label: 'Corriger', variant: 'btn-secondary',
+        onClick: (body) => {
+          const fields = body.querySelector('#sd-fields');
+          if (fields.style.display === 'none') {
+            // 1er appui : on révèle les champs sans fermer la fenêtre
+            fields.style.display = '';
+            body.querySelector('#sd-h').focus();
+            return 'keep';
+          }
+          const hh = Math.max(0, parseInt(body.querySelector('#sd-h').value, 10) || 0);
+          const mm = Math.max(0, parseInt(body.querySelector('#sd-m').value, 10) || 0);
+          const ss = Math.max(0, parseInt(body.querySelector('#sd-s').value, 10) || 0);
+          const total = hh * 3600 + mm * 60 + ss;
+          if (total <= 0) { toast('Durée invalide', 'error'); return 'keep'; }
+          onConfirm(total);
+        },
+      },
+      { label: 'Oui, c\'est correct', variant: 'btn-primary', onClick: () => onConfirm(seconds) },
     ],
   });
 }
@@ -1306,6 +1380,7 @@ function openFullCalendar() {
 
 function renderVolumeDashboard(host, rerender) {
   const s = store.userData.settings;
+  const volumeOpen = s.volumeSectionOpen !== false; // persisté (comme les routines, mais gardé après un rechargement)
   const end = todayISO();
   const start = todayISO(-6);
   const sets = weeklySetsByMuscle(store.userData.workouts, exerciseLookup, start, end, s.secondaryRatio);
@@ -1347,8 +1422,9 @@ function renderVolumeDashboard(host, rerender) {
 
   card.querySelector('#vol-toggle').addEventListener('click', (e) => {
     if (e.target.closest('#vol-goals-btn')) return;
-    volumeOpen = !volumeOpen;
-    card.classList.toggle('collapsed', !volumeOpen);
+    const next = !volumeOpen;
+    store.saveUserData({ settings: { volumeSectionOpen: next } });
+    card.classList.toggle('collapsed', !next);
   });
 
   card.querySelector('#vol-table').addEventListener('click', (e) => {

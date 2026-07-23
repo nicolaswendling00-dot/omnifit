@@ -35,6 +35,8 @@ function defaultUserData() {
       restByExercise: {},
       exerciseNames: {},
       volumeTrackingEnabled: true,
+      volumeSectionOpen: true,
+      exerciseMuscleOverrides: {},
       showCExo: true,
       secondaryRatio: 0.5,
       exerciseDbFull: true,

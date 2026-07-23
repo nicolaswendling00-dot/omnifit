@@ -124,13 +124,17 @@ export function confirmModal(title, message, onConfirm, danger = false) {
 }
 
 // ---------- Bottom Sheet ----------
-export function openSheet({ title, content, onClose = null }) {
+// headerAction (facultatif) : { icon, label, onClick } -> bouton en haut à droite.
+export function openSheet({ title, content, onClose = null, headerAction = null }) {
   document.body.classList.add('overlay-open');
   const scrim = el(`
     <div class="scrim sheet-scrim">
       <div class="sheet" role="dialog" aria-modal="true" aria-label="${title}">
         <div class="sheet-handle"></div>
-        <div class="sheet-header"><h3>${title}</h3></div>
+        <div class="sheet-header">
+          <h3>${title}</h3>
+          ${headerAction ? `<button class="icon-btn sheet-action" aria-label="${headerAction.label || 'Action'}">${headerAction.icon}</button>` : ''}
+        </div>
         <div class="sheet-body"></div>
       </div>
     </div>`);
@@ -147,15 +151,56 @@ export function openSheet({ title, content, onClose = null }) {
   };
   scrim.addEventListener('click', (e) => { if (e.target === scrim) close(); });
 
-  // Swipe-down pour fermer
-  let startY = null;
-  sheet.addEventListener('touchstart', (e) => { startY = e.touches[0].clientY; }, { passive: true });
-  sheet.addEventListener('touchend', (e) => {
-    if (startY == null) return;
-    const dy = e.changedTouches[0].clientY - startY;
-    if (dy > 90 && sheet.scrollTop <= 0) close();
-    startY = null;
+  if (headerAction) {
+    sheet.querySelector('.sheet-action').addEventListener('click', () => headerAction.onClick({ close }));
+  }
+
+  // ---- Swipe-down pour fermer : le panneau SUIT LE DOIGT ----
+  // Le geste ne démarre que si le contenu est déjà en haut (scrollTop <= 0),
+  // sinon on laisse le scroll interne faire son travail. Au relâchement : si on
+  // a dépassé la moitié de la hauteur du panneau, il finit de se fermer ;
+  // sinon il revient en place.
+  let startY = null; let dy = 0; let dragging = false;
+  const setY = (px) => { sheet.style.transform = `translate3d(0, ${px}px, 0)`; };
+
+  sheet.addEventListener('touchstart', (e) => {
+    if (sheet.scrollTop > 0) { startY = null; return; }
+    startY = e.touches[0].clientY; dy = 0; dragging = false;
   }, { passive: true });
+
+  sheet.addEventListener('touchmove', (e) => {
+    if (startY == null) return;
+    dy = e.touches[0].clientY - startY;
+    if (dy <= 0) { // remontée : on ne déplace pas, on laisse le scroll reprendre
+      if (dragging) { sheet.style.transition = ''; setY(0); dragging = false; }
+      return;
+    }
+    if (!dragging) {
+      if (dy < 6) return;      // petit seuil pour ne pas gêner les taps
+      dragging = true;
+      sheet.style.transition = 'none'; // suivi immédiat du doigt
+    }
+    e.preventDefault();        // empêche le rebond de la page pendant le glissement
+    setY(dy);
+  }, { passive: false });
+
+  const endDrag = () => {
+    if (startY == null) { return; }
+    const wasDragging = dragging;
+    startY = null; dragging = false;
+    if (!wasDragging) return;
+    sheet.style.transition = 'transform 260ms var(--ease)';
+    if (dy > sheet.offsetHeight / 2) {
+      // Au-delà de la moitié : on termine la fermeture jusqu'en bas
+      setY(sheet.offsetHeight);
+      setTimeout(close, 220);
+    } else {
+      setY(0); // retour en place, le panneau reste ouvert
+      setTimeout(() => { sheet.style.transition = ''; sheet.style.transform = ''; }, 280);
+    }
+  };
+  sheet.addEventListener('touchend', endDrag, { passive: true });
+  sheet.addEventListener('touchcancel', endDrag, { passive: true });
 
   document.body.appendChild(scrim);
   requestAnimationFrame(() => scrim.classList.add('visible'));

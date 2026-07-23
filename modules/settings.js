@@ -7,7 +7,7 @@ import { RANK_ORDER, RANK_META, DIV_LP, ONYX_LP, rankBadge, estimateRankFromLift
 import { openExercisePicker } from './workout.js';
 import { backfillNutritionGoals } from './nutrition.js';
 
-const VERSION = '3.26';
+const VERSION = '3.27';
 
 function toggleRow(label, key, sub = '') {
   const s = store.userData.settings;
@@ -123,9 +123,10 @@ export function render(container) {
       <h3>Interface</h3>
       <div class="settings-row">
         <span class="row-label">Thème</span>
-        <div class="segment" style="max-width:200px" id="seg-theme">
+        <div class="segment" style="max-width:280px" id="seg-theme">
           <button data-v="dark" class="${s.theme === 'dark' ? 'active' : ''}">Sombre</button>
           <button data-v="amoled" class="${s.theme === 'amoled' ? 'active' : ''}">AMOLED</button>
+          <button data-v="light" class="${s.theme === 'light' ? 'active' : ''}">Clair</button>
         </div>
       </div>
       <div class="settings-row">
@@ -255,6 +256,7 @@ export function render(container) {
 export function applyTheme() {
   const s = store.userData.settings;
   document.body.classList.toggle('theme-amoled', s.theme === 'amoled');
+  document.body.classList.toggle('theme-light', s.theme === 'light');
   document.body.classList.remove('density-compact', 'density-spacious');
   if (s.density === 'compact') document.body.classList.add('density-compact');
   if (s.density === 'spacious') document.body.classList.add('density-spacious');

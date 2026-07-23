@@ -13,6 +13,7 @@ const mealOpen = {};
 const C_PROT = '#FB923C';
 const C_CARB = '#38BDF8';
 const C_FAT = '#8B5CF6';
+const C_FIBER = '#22C55E';
 
 const MEAL_TYPES = ['Petit-Déjeuner', 'Déjeuner', 'Dîner', 'Snack'];
 function defaultMealType() {
@@ -247,6 +248,24 @@ function openMacroGoalsSheet(rerender) {
 // prefill peut contenir :
 //   - pour l'édition : { editId, name, meal, prot, carbs, fat, fiber } (macros absolues)
 //   - depuis l'historique : { per100:{prot,carbs,fat,fiber}, weight, baseName, meal }
+// Normalise un repas enregistré en données éditables { baseName, per100, weight }.
+// Gère les repas anciens (sans per100/weight/baseName) : on reconstitue les
+// valeurs pour 100 g à partir des macros absolues et du poids, et on retire le
+// suffixe « (123 g) » du nom pour ne pas l'empiler à chaque modification.
+export function mealToEditable(m) {
+  const baseName = m.baseName || String(m.name || '').replace(/\s*\(\s*[\d.,]+\s*g\s*\)\s*$/i, '').trim();
+  const weight = m.weight != null && m.weight > 0 ? m.weight : 100;
+  let per100;
+  if (m.per100) {
+    per100 = { prot: m.per100.prot || 0, carbs: m.per100.carbs || 0, fat: m.per100.fat || 0, fiber: m.per100.fiber || 0 };
+  } else {
+    const r = 100 / weight;
+    const rd = (v) => Math.round((v || 0) * r * 10) / 10;
+    per100 = { prot: rd(m.prot), carbs: rd(m.carbs), fat: rd(m.fat), fiber: rd(m.fiber) };
+  }
+  return { baseName, per100, weight, meal: m.meal };
+}
+
 function openAddMealSheet(rerender, prefill = null) {
   const pf = prefill || {};
   let cat = pf.meal || defaultMealType();
@@ -318,6 +337,17 @@ function openAddMealSheet(rerender, prefill = null) {
   };
   ['#m-prot', '#m-carbs', '#m-fat', '#m-fiber', '#m-weight'].forEach((sel) => form.querySelector(sel).addEventListener('input', upd));
   upd();
+
+  // Au clic dans le champ poids : sélectionne tout le nombre pour pouvoir le
+  // remplacer directement (sans avoir à effacer chiffre par chiffre).
+  const weightInput = form.querySelector('#m-weight');
+  weightInput.addEventListener('focus', () => {
+    setTimeout(() => {
+      try { weightInput.select(); } catch (_) {
+        try { weightInput.setSelectionRange(0, weightInput.value.length); } catch (_) { /* noop */ }
+      }
+    }, 0);
+  });
 
   form.querySelector('#m-cat').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
@@ -524,7 +554,6 @@ function openBarcodeSheet(rerender) {
         <button class="btn btn-secondary btn-sm" id="bc-manual-go">Valider</button>
       </div>
     </div>
-    <div id="bc-result-step" style="display:none"></div>
   </div>`);
 
   const sheet = openSheet({
@@ -538,8 +567,6 @@ function openBarcodeSheet(rerender) {
   });
 
   const statusEl = content.querySelector('#bc-status');
-  const cameraStep = content.querySelector('#bc-camera-step');
-  const resultStep = content.querySelector('#bc-result-step');
   const videoEl = content.querySelector('#bc-video');
   const frozenEl = content.querySelector('#bc-frozen');
   const shootBtn = content.querySelector('#bc-shoot');
@@ -576,7 +603,14 @@ function openBarcodeSheet(rerender) {
         return;
       }
       if (camera) camera.stop();
-      showResultStep(product);
+      // On réutilise le menu d'ajout rapide (mêmes 4 types de repas en haut),
+      // avec les valeurs pour 100 g déjà remplies : il ne reste que le poids.
+      sheet.close();
+      openAddMealSheet(rerender, {
+        baseName: product.name,
+        per100: { prot: product.prot, carbs: product.carbs, fat: product.fat, fiber: product.fiber },
+        weight: 100,
+      });
     } catch (e) {
       if (!stoppedByUser) statusEl.textContent = e.message || 'Erreur lors de la recherche du produit.';
     }
@@ -624,62 +658,6 @@ function openBarcodeSheet(rerender) {
     handleCode(code);
   });
 
-  function showResultStep(product) {
-    cameraStep.style.display = 'none';
-    resultStep.style.display = '';
-    resultStep.innerHTML = `
-      <div class="bc-product-card">
-        <div class="bc-product-name">${product.name}</div>
-        ${product.brand ? `<div class="muted" style="font-size:0.78rem">${product.brand}</div>` : ''}
-        <div class="muted" style="font-size:0.72rem;margin-top:6px">Pour 100 g : ${product.kcal} kcal · P ${product.prot} · G ${product.carbs} · L ${product.fat}${product.fiber ? ` · Fibres ${product.fiber}` : ''}</div>
-      </div>
-      <div class="field-stack" style="margin-top:12px">
-        <label class="field"><span>Type de repas</span>
-          <select id="bc-meal-type">${MEAL_TYPES.map((t) => `<option ${t === defaultMealType() ? 'selected' : ''}>${t}</option>`).join('')}</select>
-        </label>
-        <label class="field"><span>Poids consommé (g)</span><input id="bc-weight" type="number" inputmode="decimal" min="0" step="1" value="100" autofocus></label>
-      </div>
-      <div class="bc-final-card" id="bc-final"></div>
-      <button class="btn btn-primary btn-block" id="bc-add" style="margin-top:12px">${icons.plus} Ajouter au journal</button>
-    `;
-
-    const weightInput = resultStep.querySelector('#bc-weight');
-    const finalHost = resultStep.querySelector('#bc-final');
-    const recompute = () => {
-      const g = parseFloat(weightInput.value) || 0;
-      const ratio = g / 100;
-      const kcal = Math.round(product.kcal * ratio);
-      const prot = Math.round(product.prot * ratio * 10) / 10;
-      const carbs = Math.round(product.carbs * ratio * 10) / 10;
-      const fat = Math.round(product.fat * ratio * 10) / 10;
-      const fiber = Math.round(product.fiber * ratio * 10) / 10;
-      finalHost.innerHTML = `
-        <div class="bc-final-kcal">${kcal} <span>kcal</span></div>
-        <div class="bc-final-macros">P ${prot} g · G ${carbs} g · L ${fat} g${fiber ? ` · Fibres ${fiber} g` : ''}</div>`;
-      return { kcal, prot, carbs, fat, fiber };
-    };
-    let current = recompute();
-    weightInput.addEventListener('input', () => { current = recompute(); });
-
-    resultStep.querySelector('#bc-add').addEventListener('click', () => {
-      const g = parseFloat(weightInput.value);
-      if (!g || g <= 0) { toast('Poids invalide', 'error'); return; }
-      const mealType = resultStep.querySelector('#bc-meal-type').value;
-      store.addNutritionLog(selectedDate, {
-        name: `${product.name} (${g} g)`,
-        baseName: product.name,
-        meal: mealType,
-        prot: current.prot, carbs: current.carbs, fat: current.fat, fiber: current.fiber,
-        kcal: current.kcal,
-        per100: { prot: product.prot, carbs: product.carbs, fat: product.fat, fiber: product.fiber },
-        weight: g,
-      });
-      haptic();
-      toast('Repas ajouté', 'success');
-      sheet.close();
-      if (rerender) rerender();
-    });
-  }
 }
 
 // FAB global dans body (hors du conteneur transformé, sinon invisible sur iOS)
@@ -755,6 +733,10 @@ export function render(container) {
             ${ringSVG({ size: 66, stroke: 7, progress: totals.fat / mg.fatG, color: C_FAT, label: `${Math.round(totals.fat)}` })}
             <div class="ring-caption">Lip / ${mg.fatG}g</div>
           </div>
+          <div class="ring-item ring-item-sm">
+            ${ringSVG({ size: 50, stroke: 6, progress: totals.fiber / fiberGoal, color: C_FIBER, label: `${Math.round(totals.fiber)}` })}
+            <div class="ring-caption">Fib / ${fiberGoal}g</div>
+          </div>
         </div>
         <button class="btn btn-ghost btn-sm btn-block" id="btn-macro-goals" style="margin-top:4px">${icons.edit} Objectifs macros</button>
       </div>
@@ -795,25 +777,25 @@ export function render(container) {
     </div>`);
     const body = groupEl.querySelector('.meal-group-body');
     for (const m of group) {
-      const item = el(`<div class="meal-item">
-        <div>
-          <div class="meal-name">${m.name}</div>
-          <div class="meal-macros">P ${m.prot} · G ${m.carbs} · L ${m.fat}${m.fiber ? ` · <span class="fiber-tag">${m.fiber}g fibres</span>` : ''}</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:2px">
+      // Clic = modifier · swipe vers la gauche = révèle la poubelle (suppression directe)
+      const item = el(`<div class="meal-row" data-id="${m.id}">
+        <button class="meal-del" data-del aria-label="Supprimer">${icons.trash}</button>
+        <div class="meal-item">
+          <div>
+            <div class="meal-name">${m.name}</div>
+            <div class="meal-macros">P ${m.prot} · G ${m.carbs} · L ${m.fat}${m.fiber ? ` · <span class="fiber-tag">${m.fiber}g fibres</span>` : ''}</div>
+          </div>
           <span class="meal-kcal">${m.kcal}</span>
-          <button class="icon-btn" data-edit aria-label="Modifier">${icons.edit}</button>
-          <button class="icon-btn danger" data-del aria-label="Supprimer">${icons.trash}</button>
         </div>
       </div>`);
-      item.querySelector('[data-edit]').addEventListener('click', () => {
-        openAddMealSheet(rerender, { editId: m.id, name: m.name, meal: m.meal, prot: m.prot, carbs: m.carbs, fat: m.fat, fiber: m.fiber });
+      item.querySelector('.meal-item').addEventListener('click', () => {
+        if (item.classList.contains('swiped')) return; // ne pas éditer quand la poubelle est ouverte
+        openAddMealSheet(rerender, { editId: m.id, ...mealToEditable(m) });
       });
       item.querySelector('[data-del]').addEventListener('click', () => {
-        confirmModal('Supprimer', `Supprimer « ${m.name} » ?`, () => {
-          store.removeMeal(selectedDate, m.id);
-          rerender();
-        }, true);
+        store.removeMeal(selectedDate, m.id);
+        haptic();
+        rerender();
       });
       body.appendChild(item);
     }
@@ -823,6 +805,51 @@ export function render(container) {
     });
     list.appendChild(groupEl);
   }
+
+  // Swipe vers la gauche sur un repas -> révèle la poubelle rouge
+  (() => {
+    let row = null; let startX = 0; let startY = 0; let dx = 0; let mode = null; // null | 'h' | 'v'
+    let openRow = null;
+    const closeOpen = (except) => {
+      if (openRow && openRow !== except) {
+        openRow.querySelector('.meal-item').style.transform = '';
+        openRow.classList.remove('swiped');
+        openRow = null;
+      }
+    };
+    list.addEventListener('touchstart', (e) => {
+      const r = e.target.closest('.meal-row');
+      closeOpen(r);
+      if (!r) { row = null; return; }
+      row = r; startX = e.touches[0].clientX; startY = e.touches[0].clientY; dx = 0; mode = null;
+    }, { passive: true });
+    list.addEventListener('touchmove', (e) => {
+      if (!row) return;
+      dx = e.touches[0].clientX - startX;
+      const dy = e.touches[0].clientY - startY;
+      if (mode === null) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        mode = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
+      }
+      if (mode !== 'h') return;
+      e.preventDefault(); // bloque le scroll vertical pendant le swipe
+      const base = row.classList.contains('swiped') ? -76 : 0;
+      const t = Math.max(-76, Math.min(0, base + dx));
+      row.querySelector('.meal-item').style.transform = `translateX(${t}px)`;
+    }, { passive: false });
+    list.addEventListener('touchend', () => {
+      if (!row || mode !== 'h') { row = null; mode = null; return; }
+      const content = row.querySelector('.meal-item');
+      const wasOpen = row.classList.contains('swiped');
+      const open = wasOpen ? dx < 40 : dx < -40;
+      if (open) { content.style.transform = 'translateX(-76px)'; row.classList.add('swiped'); openRow = row; }
+      else {
+        content.style.transform = ''; row.classList.remove('swiped');
+        if (openRow === row) openRow = null;
+      }
+      row = null; mode = null;
+    });
+  })();
 
   container.querySelector('#date-ribbon').addEventListener('click', (e) => {
     const chip = e.target.closest('.date-chip');

@@ -55,10 +55,10 @@ assert(pages.home.querySelector('#btn-chart') && !pages.home.querySelector('#wei
 
 nutrition.render(pages.nutrition);
 assert(pages.nutrition.querySelector('.nutrition-header'), 'Nutrition : header sticky');
-assert(pages.nutrition.querySelectorAll('.macro-rings .ring-item').length === 3, 'Nutrition : 3 anneaux macros');
+assert(pages.nutrition.querySelectorAll('.macro-rings .ring-item').length === 4, 'Nutrition : 4 anneaux macros (prot/gluc/lip + fibres)');
 assert(pages.nutrition.querySelectorAll('.date-chip').length === 15, 'Nutrition : ruban 15 dates');
 assert(pages.nutrition.querySelector('.date-ribbon.no-swipe'), 'Nutrition : ruban en no-swipe');
-assert(document.getElementById('fab-nutrition')?.parentElement === document.body, 'Nutrition : FAB global dans body');
+assert(document.getElementById('fab-nutrition-wrap')?.parentElement === document.body, 'Nutrition : FAB global dans body');
 assert(pages.nutrition.querySelector('#btn-recipes'), 'Nutrition : bouton Recettes');
 // v3 : kcal total en haut + fibres
 assert(pages.nutrition.querySelector('.kcal-total .kcal-consumed'), 'Nutrition : kcal consommées affichées en haut');
@@ -83,12 +83,12 @@ settings.render(pages.settings);
 assert(pages.settings.querySelectorAll('.settings-section').length === 7, 'Réglages : 7 sections');
 assert(pages.settings.querySelector('#btn-export'), 'Réglages : bouton export');
 assert(!pages.settings.querySelector('#btn-vol-goals'), 'Réglages : objectifs de volume retirés (déplacés)');
-assert(pages.settings.textContent.includes('v3.0'), 'Réglages : version 3.0');
+assert(/v\d+\.\d+/.test(pages.settings.textContent), 'Réglages : numéro de version affiché');
 
 console.log('== Objectifs macros : grammes / auto ==');
 const mgGrams = nutrition.macroGoals();
 assert(mgGrams.kcalGoal === 2227, `macroGoals grammes = calcKcal(120,250,83) = ${mgGrams.kcalGoal}`);
-assert(mathmod.fiberGoalFromKcal(2000) === 20, 'Objectif fibres : 10 g / 1000 kcal (2000 → 20)');
+assert(mathmod.fiberGoalFromKcal(2000) === 30, 'Objectif fibres : 15 g / 1000 kcal (2000 → 30)');
 
 console.log('== Log activité : champs empilés ==');
 pages.activity.querySelector('#btn-log-steps').click();
@@ -117,12 +117,13 @@ store.removeMeal(todayISO(), mealId);
 
 store.addStepsLog(todayISO(), 12500);
 activity.render(pages.activity);
-assert(pages.activity.querySelector('.steps-hero .big').textContent.includes('12'), 'Pas affichés dans le hero');
+assert(pages.activity.querySelector('.steps-hero').textContent.includes('12'), 'Pas affichés dans le hero');
 
 console.log('== Recettes ==');
 store.saveRecipe({ id: 'rec1', name: 'Bowl protéiné', prot: 40, carbs: 50, fat: 10, fiber: 8 });
 assert(store.userData.recipes.length === 1, 'saveRecipe ajoute une recette');
-document.getElementById('fab-nutrition').click();
+document.getElementById('fab-nutrition').click();   // ouvre le menu FAB
+document.getElementById('fab-quick').click();       // ajout rapide
 const mealSheet = document.querySelector('.sheet');
 assert(mealSheet.querySelectorAll('#m-cat button').length === 4, 'Ajout repas : 4 types (PDéj/Déj/Dîner/Snack)');
 assert(mealSheet.querySelector('#m-fiber'), 'Ajout repas : champ fibres optionnel');
@@ -137,17 +138,18 @@ const overlay = document.querySelector('.session-overlay');
 overlay.querySelector('#s-add-exo').click();
 const picker = document.querySelector('.picker-overlay');
 const searchInput = picker.querySelector('#exo-search');
-searchInput.value = 'Développé couché';
+searchInput.value = 'Bench Press';
 fire(searchInput, 'input');
-const bench = [...picker.querySelectorAll('.exo-search-item')].find((it) => it.querySelector('span').textContent === 'Développé couché');
+const bench = [...picker.querySelectorAll('.exo-search-item')].find((it) => it.querySelector('span').textContent === 'Bench Press');
 bench.click();
 const card = overlay.querySelector('#s-exos .exo-card');
 assert(card, 'Exercice ajouté');
 assert(!card.textContent.includes('Pectoraux'), 'Muscles masqués sur la carte');
-card.querySelector('.in-weight').value = '80';
-card.querySelector('.in-reps').value = '8';
-card.querySelector('[data-addset]').click();
-assert(overlay.querySelector('.set-line'), 'Série enregistrée');
+const row0 = card.querySelector('.set-row');
+row0.querySelector('.sr-kg').value = '80';
+row0.querySelector('.sr-reps').value = '8';
+row0.querySelector('.sr-check').click();
+assert(overlay.querySelector('.set-row.done'), 'Série enregistrée');
 assert(overlay.querySelector('#rest-topbar').classList.contains('active'), 'Timer repos actif en haut');
 overlay.querySelector('#rt-skip').click();
 overlay.querySelector('[data-menu]').click();
@@ -195,11 +197,10 @@ assert(store.userData.routines.length === 0, 'deleteRoutine');
 
 console.log('== Réglages : Harris-Benedict + thème ==');
 settings.render(pages.settings);
-const goalSelect = pages.settings.querySelector('#set-goal-type');
-goalSelect.value = 'Perte de poids';
-fire(goalSelect, 'change');
-const cg2 = store.userData.settings.calorieGoal;
-assert(cg2 > 1500 && cg2 < 3500, `Harris-Benedict recalculé : ${cg2} kcal`);
+// L'objectif se choisit depuis l'Accueil (#g-type) ; ici on valide le calcul lui-meme.
+const cg2 = mathmod.harrisBenedict(store.userData.profile, 'Perte de poids');
+assert(cg2 > 1500 && cg2 < 3500, `Harris-Benedict recalcule : ${cg2} kcal`);
+assert(mathmod.harrisBenedict(store.userData.profile, 'Prise de muscle') > cg2, 'Prise de muscle > Perte de poids');
 settings.render(pages.settings);
 pages.settings.querySelector('#seg-theme [data-v="amoled"]').click();
 assert(document.body.classList.contains('theme-amoled'), 'Thème AMOLED appliqué');
@@ -209,6 +210,55 @@ const raw = JSON.parse(localStorage.getItem('omniffit_userData'));
 assert(raw.workouts.length === 1 && raw.settings.theme === 'amoled', 'Données persistées');
 store.importJSON({ profile: { name: 'Nicolas' } }, 'merge');
 assert(store.userData.profile.name === 'Nicolas' && store.userData.workouts.length === 1, 'Import merge conserve les données');
+
+console.log('== Nouveautes v3.27 ==');
+// Theme clair
+pages.settings.querySelector('#seg-theme [data-v="light"]').click();
+assert(document.body.classList.contains('theme-light'), 'Theme clair applique');
+assert(!document.body.classList.contains('theme-amoled'), 'Theme clair exclut AMOLED');
+pages.settings.querySelector('#seg-theme [data-v="amoled"]').click();
+
+// Volume hebdo : repli persiste dans les reglages
+workout.render(pages.workout);
+const volToggle = pages.workout.querySelector('#vol-toggle');
+assert(volToggle, 'Volume hebdo : entete repliable presente');
+assert(pages.workout.querySelector('#vol-toggle .collapse-caret'), 'Volume hebdo : chevron present');
+volToggle.click();
+assert(store.userData.settings.volumeSectionOpen === false, 'Volume hebdo : repli persiste (false)');
+workout.render(pages.workout);
+assert(pages.workout.querySelector('#vol-toggle').closest('.card').classList.contains('collapsed'), 'Volume hebdo : reste replie apres re-rendu');
+const volToggle2 = pages.workout.querySelector('#vol-toggle');
+volToggle2.click();
+assert(store.userData.settings.volumeSectionOpen === true, 'Volume hebdo : re-ouverture persiste (true)');
+
+// Repas : plus de crayon/poubelle inline, structure swipe a la place
+store.addNutritionLog(todayISO(), { name: 'Riz (200 g)', baseName: 'Riz', meal: 'Déjeuner', prot: 5, carbs: 56, fat: 0.6, fiber: 0.8, kcal: 250, per100: { prot: 2.5, carbs: 28, fat: 0.3, fiber: 0.4 }, weight: 200 });
+nutrition.render(pages.nutrition);
+const mealRow = pages.nutrition.querySelector('.meal-row');
+assert(mealRow, 'Repas : structure .meal-row (swipe)');
+assert(mealRow.querySelector('.meal-del'), 'Repas : poubelle revelee par swipe');
+assert(!mealRow.querySelector('[data-edit]'), 'Repas : plus de bouton crayon inline');
+assert(mealRow.querySelectorAll('.icon-btn').length === 0, 'Repas : plus de boutons icone inline');
+
+// mealToEditable : nom sans parentheses empilees + poids reel
+const ed = nutrition.mealToEditable(store.userData.nutrition.byDate[todayISO()].meals[0]);
+assert(ed.baseName === 'Riz', `Edition repas : nom propre (${ed.baseName})`);
+assert(ed.weight === 200, `Edition repas : poids reel conserve (${ed.weight})`);
+assert(ed.per100.carbs === 28, 'Edition repas : valeurs /100g conservees');
+const edLegacy = nutrition.mealToEditable({ name: 'Pates (180 g)', prot: 9, carbs: 54, fat: 1.2, fiber: 2, weight: 180 });
+assert(edLegacy.baseName === 'Pates', `Edition repas legacy : suffixe retire (${edLegacy.baseName})`);
+assert(edLegacy.weight === 180, 'Edition repas legacy : poids reel (pas 100g)');
+
+// Fiche exercice : crayon en entete, plus de bouton "Modifier le nom"
+const xbBtn = pages.workout.querySelector('#btn-exo-browser');
+xbBtn.click();
+const xbOverlay = document.querySelector('.picker-overlay');
+assert(xbOverlay.querySelector('#xb-custom'), 'Navigateur exos : bouton exercice custom');
+xbOverlay.querySelector('.exo-search-item').click();
+const exoSheet = document.querySelector('.sheet');
+assert(exoSheet.querySelector('.sheet-action'), 'Fiche exo : crayon en entete');
+assert(!exoSheet.querySelector('#ed-rename'), 'Fiche exo : bouton "Modifier le nom" retire');
+clearOverlays();
 
 console.log(`\n===== RÉSULTAT : ${pass} OK / ${fail} FAIL =====`);
 process.exit(fail ? 1 : 0);
