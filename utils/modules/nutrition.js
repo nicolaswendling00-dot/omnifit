@@ -1,0 +1,866 @@
+// OmniFit — PAGE 1 : Nutrition (macros couleur, fibres, modes grammes/auto/%, repas typés, recettes)
+import { store, todayISO } from '../utils/storage.js';
+import { calcKcal, fiberGoalFromKcal } from '../utils/math.js';
+import { el, icons, openSheet, openModal, toast, ringSVG, confirmModal, fmtDateShort, haptic } from '../utils/ui.js';
+import { startCameraStream, captureFrame, decodeBarcodeFromFile } from '../utils/barcode.js';
+import { fetchProductByBarcode } from '../utils/openfoodfacts.js';
+
+let selectedDate = todayISO();
+let currentRerender = null;
+const mealOpen = {};
+
+// Couleurs macros : Prot orange · Glucides bleu clair · Lipides violet
+const C_PROT = '#FB923C';
+const C_CARB = '#38BDF8';
+const C_FAT = '#8B5CF6';
+const C_FIBER = '#22C55E';
+
+const MEAL_TYPES = ['Petit-Déjeuner', 'Déjeuner', 'Dîner', 'Snack'];
+function defaultMealType() {
+  const h = new Date().getHours();
+  if (h < 11) return 'Petit-Déjeuner';
+  if (h < 15) return 'Déjeuner';
+  if (h < 21) return 'Dîner';
+  return 'Snack';
+}
+
+function currentWeight() {
+  const w = store.userData.weights;
+  return w.length ? w[w.length - 1].value : store.userData.profile.weight;
+}
+
+// Objectifs macros effectifs selon le mode (grammes par défaut / auto / pourcentages)
+export function macroGoals() {
+  const s = store.userData.settings;
+  if (s.macroMode === 'pct') {
+    const kcal = s.calorieGoal;
+    return {
+      protG: Math.round((kcal * (s.protPct / 100)) / 4),
+      carbsG: Math.round((kcal * (s.carbsPct / 100)) / 4),
+      fatG: Math.round((kcal * (s.fatPct / 100)) / 9),
+      kcalGoal: kcal,
+    };
+  }
+  if (s.macroMode === 'auto') {
+    const w = currentWeight();
+    const protG = Math.round((s.protMult ?? 2.2) * w);
+    const fatG = Math.round((s.fatMult ?? 1.0) * w);
+    const kcalGoal = s.calorieGoal;
+    const carbsG = Math.max(0, Math.round((kcalGoal - (protG * 4 + fatG * 9)) / 4));
+    return { protG, carbsG, fatG, kcalGoal };
+  }
+  const protG = s.proteinGoal;
+  const carbsG = s.carbsGoalG;
+  const fatG = s.fatGoalG;
+  return { protG, carbsG, fatG, kcalGoal: calcKcal(protG, carbsG, fatG) };
+}
+
+// Objectif figé par jour : les jours passés gardent l'objectif qu'ils avaient
+// (changer l'objectif aujourd'hui ne modifie plus l'historique).
+export function macroGoalsFor(date) {
+  const day = store.userData.nutrition.byDate[date];
+  const live = macroGoals();
+  if (date === todayISO()) {
+    if (day) { day.goal = live; store.persist(); }
+    return live;
+  }
+  if (day) {
+    if (!day.goal) { day.goal = live; store.persist(); }
+    return day.goal;
+  }
+  return live;
+}
+
+// À appeler juste après un import : fige l'objectif calories/macros pour tous les
+// jours importés qui n'en ont pas déjà un (import externe, sans champ `goal`),
+// au moment de l'import — plutôt que de le figer plus tard avec l'objectif du jour
+// où l'utilisateur consulte cette date par hasard (ce qui serait incorrect/trompeur).
+export function backfillNutritionGoals() {
+  const live = macroGoals();
+  let changed = false;
+  for (const day of Object.values(store.userData.nutrition.byDate)) {
+    if (!day.goal) { day.goal = live; changed = true; }
+  }
+  if (changed) store.persist();
+}
+
+// ============================================================
+// OBJECTIFS MACROS — sheet (Grammes / Auto / Pourcentages)
+// ============================================================
+function openMacroGoalsSheet(rerender) {
+  const s = store.userData.settings;
+  let mode = s.macroMode || 'grams';
+
+  const form = el(`<div>
+    <div class="segment" style="margin-bottom:14px" id="mg-mode">
+      <button data-v="grams" class="${mode === 'grams' ? 'active' : ''}">Grammes</button>
+      <button data-v="auto" class="${mode === 'auto' ? 'active' : ''}">Auto</button>
+      <button data-v="pct" class="${mode === 'pct' ? 'active' : ''}">%</button>
+    </div>
+    <div id="mg-body"></div>
+    <div style="margin:8px 0 4px">
+      <div class="card-row"><span style="font-size:0.9rem;color:#38BDF8">Fibres / 1000 kcal</span>
+        <span class="num" id="mg-fiber-val" style="color:#38BDF8">${s.fiberPer1000 ?? 15} g</span></div>
+      <input id="mg-fiber-per" type="range" min="5" max="25" step="1" value="${s.fiberPer1000 ?? 15}" style="accent-color:#38BDF8">
+    </div>
+    <div class="macro-kcal-sticky">
+      <span class="muted">Calories cibles</span>
+      <span class="num" id="mg-kcal" style="color:var(--accent);font-size:1.2rem">—</span>
+    </div>
+    <button class="btn btn-primary btn-block" id="mg-save" style="margin-top:10px">Enregistrer</button>
+  </div>`);
+  const sheet = openSheet({ title: 'Objectifs macros', content: form });
+  const body = form.querySelector('#mg-body');
+  const kcalEl = form.querySelector('#mg-kcal');
+  const fiberSlider = form.querySelector('#mg-fiber-per');
+  fiberSlider.addEventListener('input', () => { form.querySelector('#mg-fiber-val').textContent = `${fiberSlider.value} g`; });
+  const w = currentWeight();
+
+  const renderBody = () => {
+    if (mode === 'grams') {
+      const rows = [
+        ['p', 'Protéines', s.proteinGoal, C_PROT],
+        ['c', 'Glucides', s.carbsGoalG, C_CARB],
+        ['f', 'Lipides', s.fatGoalG, C_FAT],
+      ];
+      body.innerHTML = rows.map(([k, lbl, v, col]) => `
+        <div style="margin-bottom:14px">
+          <div class="card-row"><span style="font-size:0.9rem">${lbl}</span>
+            <span class="num" id="mg-${k}-val" style="color:${col}">${v} g</span></div>
+          <input id="mg-${k}" type="range" min="0" max="2000" step="5" value="${v}" style="accent-color:${col}">
+        </div>`).join('');
+      const upd = () => {
+        const p = +body.querySelector('#mg-p').value;
+        const c = +body.querySelector('#mg-c').value;
+        const f = +body.querySelector('#mg-f').value;
+        body.querySelector('#mg-p-val').textContent = p + ' g';
+        body.querySelector('#mg-c-val').textContent = c + ' g';
+        body.querySelector('#mg-f-val').textContent = f + ' g';
+        kcalEl.textContent = `${calcKcal(p, c, f)} kcal`;
+      };
+      body.querySelectorAll('input').forEach((i) => i.addEventListener('input', upd));
+      upd();
+    } else if (mode === 'auto') {
+      body.innerHTML = `
+        <div class="muted" style="margin-bottom:12px">Poids de corps actuel : <b>${w} kg</b> · la répartition s'ajuste avec le poids.</div>
+        <label class="field" style="margin-bottom:12px"><span>Objectif calories</span>
+          <input id="mg-cal" type="number" inputmode="numeric" step="10" value="${s.calorieGoal}"></label>
+        <div style="margin-bottom:12px">
+          <div class="card-row"><span style="font-size:0.9rem">Prot · ×poids</span>
+            <span class="num" id="mg-pm-val" style="color:${C_PROT}">${(s.protMult ?? 2.2).toFixed(1)}</span></div>
+          <input id="mg-pm" type="range" min="1.4" max="3.0" step="0.1" value="${s.protMult ?? 2.2}" style="accent-color:${C_PROT}">
+        </div>
+        <div style="margin-bottom:12px">
+          <div class="card-row"><span style="font-size:0.9rem">Lip · ×poids</span>
+            <span class="num" id="mg-fm-val" style="color:${C_FAT}">${(s.fatMult ?? 1.0).toFixed(1)}</span></div>
+          <input id="mg-fm" type="range" min="0.5" max="1.5" step="0.1" value="${s.fatMult ?? 1.0}" style="accent-color:${C_FAT}">
+        </div>
+        <div class="card" style="background:var(--surface-2);margin:0;padding:10px">
+          <div class="card-row"><span class="muted" style="color:${C_PROT}">Protéines</span><span class="num" id="mg-auto-p">—</span></div>
+          <div class="card-row"><span class="muted" style="color:${C_CARB}">Glucides (reste)</span><span class="num" id="mg-auto-c">—</span></div>
+          <div class="card-row"><span class="muted" style="color:${C_FAT}">Lipides</span><span class="num" id="mg-auto-f">—</span></div>
+        </div>`;
+      const upd = () => {
+        const cal = +body.querySelector('#mg-cal').value || 0;
+        const pm = +body.querySelector('#mg-pm').value;
+        const fm = +body.querySelector('#mg-fm').value;
+        body.querySelector('#mg-pm-val').textContent = pm.toFixed(1);
+        body.querySelector('#mg-fm-val').textContent = fm.toFixed(1);
+        const protG = Math.round(pm * w);
+        const fatG = Math.round(fm * w);
+        const carbsG = Math.max(0, Math.round((cal - (protG * 4 + fatG * 9)) / 4));
+        body.querySelector('#mg-auto-p').textContent = `${protG} g`;
+        body.querySelector('#mg-auto-c').textContent = `${carbsG} g`;
+        body.querySelector('#mg-auto-f').textContent = `${fatG} g`;
+        kcalEl.textContent = `${cal} kcal`;
+      };
+      body.querySelectorAll('input').forEach((i) => i.addEventListener('input', upd));
+      upd();
+    } else {
+      body.innerHTML = `
+        <div class="muted" style="margin-bottom:10px">Répartition de l'objectif ${s.calorieGoal} kcal</div>
+        ${[['Protéines', 'p', s.protPct, C_PROT], ['Glucides', 'c', s.carbsPct, C_CARB], ['Lipides', 'f', s.fatPct, C_FAT]].map(([lbl, k, v, col]) => `
+          <div style="margin-bottom:10px">
+            <div class="card-row"><span style="font-size:0.85rem">${lbl}</span><span class="num" id="mgp-${k}-val" style="color:${col}">${v}%</span></div>
+            <input id="mgp-${k}" type="range" min="5" max="70" value="${v}" style="accent-color:${col}">
+          </div>`).join('')}
+        <div class="card-row"><span class="muted">Total</span><span class="num" id="mgp-total"></span></div>`;
+      const upd = () => {
+        const p = +body.querySelector('#mgp-p').value;
+        const c = +body.querySelector('#mgp-c').value;
+        const f = +body.querySelector('#mgp-f').value;
+        body.querySelector('#mgp-p-val').textContent = p + '%';
+        body.querySelector('#mgp-c-val').textContent = c + '%';
+        body.querySelector('#mgp-f-val').textContent = f + '%';
+        const tot = body.querySelector('#mgp-total');
+        tot.textContent = (p + c + f) + '%';
+        tot.style.color = (p + c + f) === 100 ? 'var(--success)' : 'var(--warning)';
+        kcalEl.textContent = `${s.calorieGoal} kcal`;
+      };
+      body.querySelectorAll('input').forEach((i) => i.addEventListener('input', upd));
+      upd();
+    }
+  };
+  renderBody();
+
+  form.querySelector('#mg-mode').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    mode = b.dataset.v;
+    form.querySelectorAll('#mg-mode button').forEach((x) => x.classList.toggle('active', x === b));
+    renderBody();
+  });
+
+  form.querySelector('#mg-save').addEventListener('click', () => {
+    if (mode === 'grams') {
+      store.saveUserData({ settings: {
+        macroMode: 'grams',
+        proteinGoal: +body.querySelector('#mg-p').value,
+        carbsGoalG: +body.querySelector('#mg-c').value,
+        fatGoalG: +body.querySelector('#mg-f').value,
+      } });
+    } else if (mode === 'auto') {
+      store.saveUserData({ settings: {
+        macroMode: 'auto',
+        calorieAuto: false,
+        calorieGoal: +body.querySelector('#mg-cal').value || s.calorieGoal,
+        protMult: +body.querySelector('#mg-pm').value,
+        fatMult: +body.querySelector('#mg-fm').value,
+      } });
+    } else {
+      store.saveUserData({ settings: {
+        macroMode: 'pct',
+        protPct: +body.querySelector('#mgp-p').value,
+        carbsPct: +body.querySelector('#mgp-c').value,
+        fatPct: +body.querySelector('#mgp-f').value,
+      } });
+    }
+    store.saveUserData({ settings: { fiberPer1000: +fiberSlider.value } });
+    sheet.close();
+    toast('Objectifs enregistrés', 'success');
+    rerender();
+  });
+}
+
+// ============================================================
+// AJOUT DE REPAS — sheet : macros POUR 100 g, puis POIDS en bas (mis en valeur)
+// ============================================================
+// prefill peut contenir :
+//   - pour l'édition : { editId, name, meal, prot, carbs, fat, fiber } (macros absolues)
+//   - depuis l'historique : { per100:{prot,carbs,fat,fiber}, weight, baseName, meal }
+// Normalise un repas enregistré en données éditables { baseName, per100, weight }.
+// Gère les repas anciens (sans per100/weight/baseName) : on reconstitue les
+// valeurs pour 100 g à partir des macros absolues et du poids, et on retire le
+// suffixe « (123 g) » du nom pour ne pas l'empiler à chaque modification.
+export function mealToEditable(m) {
+  const baseName = m.baseName || String(m.name || '').replace(/\s*\(\s*[\d.,]+\s*g\s*\)\s*$/i, '').trim();
+  const weight = m.weight != null && m.weight > 0 ? m.weight : 100;
+  let per100;
+  if (m.per100) {
+    per100 = { prot: m.per100.prot || 0, carbs: m.per100.carbs || 0, fat: m.per100.fat || 0, fiber: m.per100.fiber || 0 };
+  } else {
+    const r = 100 / weight;
+    const rd = (v) => Math.round((v || 0) * r * 10) / 10;
+    per100 = { prot: rd(m.prot), carbs: rd(m.carbs), fat: rd(m.fat), fiber: rd(m.fiber) };
+  }
+  return { baseName, per100, weight, meal: m.meal };
+}
+
+function openAddMealSheet(rerender, prefill = null) {
+  const pf = prefill || {};
+  let cat = pf.meal || defaultMealType();
+  const recipes = store.userData.recipes || [];
+
+  // Détermine les valeurs pour 100 g + le poids de départ selon le prefill.
+  let per100 = { prot: '', carbs: '', fat: '', fiber: '' };
+  let startWeight = 100;
+  let baseName = pf.baseName || pf.name || '';
+  if (pf.per100) {
+    per100 = { prot: pf.per100.prot ?? '', carbs: pf.per100.carbs ?? '', fat: pf.per100.fat ?? '', fiber: pf.per100.fiber ?? '' };
+    startWeight = pf.weight ?? 100;
+  } else if (pf.editId && (pf.prot != null || pf.carbs != null || pf.fat != null)) {
+    // Édition d'un ancien repas sans per100 : on repart d'une base 100 g = macros telles quelles
+    per100 = { prot: pf.prot ?? '', carbs: pf.carbs ?? '', fat: pf.fat ?? '', fiber: pf.fiber ?? '' };
+    startWeight = pf.weight ?? 100;
+  }
+
+  const form = el(`<div>
+    <div class="segment segment-wrap" id="m-cat" style="margin-bottom:12px">
+      ${MEAL_TYPES.map((t) => `<button data-v="${t}" class="${t === cat ? 'active' : ''}">${t}</button>`).join('')}
+    </div>
+    <label class="field"><span>Nom de l'aliment</span><input id="m-name" type="text" placeholder="Poulet, riz basmati…" autocomplete="off" value="${baseName}"></label>
+    <div class="muted" style="font-size:0.78rem;margin:2px 0 8px">Valeurs nutritionnelles <b>pour 100 g</b></div>
+    <div class="field-row">
+      <label class="field"><span>Prot /100g</span><input id="m-prot" type="number" inputmode="decimal" min="0" placeholder="0" value="${per100.prot}"></label>
+      <label class="field"><span>Gluc /100g</span><input id="m-carbs" type="number" inputmode="decimal" min="0" placeholder="0" value="${per100.carbs}"></label>
+      <label class="field"><span>Lip /100g</span><input id="m-fat" type="number" inputmode="decimal" min="0" placeholder="0" value="${per100.fat}"></label>
+    </div>
+    <label class="field" style="margin-bottom:8px"><span>Fibres /100g · optionnel</span><input id="m-fiber" type="number" inputmode="decimal" min="0" placeholder="0" value="${per100.fiber}"></label>
+    ${recipes.length ? `<div class="muted" style="margin-bottom:6px">Recettes rapides (valeurs /100g)</div>
+      <div class="recipe-chips" id="m-recipes">${recipes.map((r) => `<button class="recipe-chip" data-id="${r.id}">${r.name}</button>`).join('')}</div>` : ''}
+
+    <div class="m-weight-box">
+      <label class="field m-weight-field"><span>Poids consommé (g)</span>
+        <input id="m-weight" type="number" inputmode="decimal" min="0" step="1" placeholder="0" value="${startWeight}"></label>
+      <div class="m-weight-result">
+        <span class="num" id="m-kcal">0 kcal</span>
+        <span class="m-weight-macros" id="m-macros">P 0 · G 0 · L 0</span>
+      </div>
+    </div>
+
+    <label class="check-row" style="margin:10px 0 12px"><input type="checkbox" id="m-save-recipe"> <span>Enregistrer comme aliment (recette /100g)</span></label>
+    <button class="btn btn-primary btn-block" id="m-add">${pf.editId ? icons.check + ' Enregistrer' : icons.plus + ' Ajouter'}</button>
+  </div>`);
+
+  const sheet = openSheet({ title: pf.editId ? 'Modifier le repas' : `Repas — ${fmtDateShort(selectedDate)}`, content: form });
+
+  const scale = () => {
+    const p100 = parseFloat(form.querySelector('#m-prot').value) || 0;
+    const c100 = parseFloat(form.querySelector('#m-carbs').value) || 0;
+    const f100 = parseFloat(form.querySelector('#m-fat').value) || 0;
+    const fi100 = parseFloat(form.querySelector('#m-fiber').value) || 0;
+    const g = parseFloat(form.querySelector('#m-weight').value) || 0;
+    const r = g / 100;
+    return {
+      prot: Math.round(p100 * r * 10) / 10,
+      carbs: Math.round(c100 * r * 10) / 10,
+      fat: Math.round(f100 * r * 10) / 10,
+      fiber: Math.round(fi100 * r * 10) / 10,
+      per100: { prot: p100, carbs: c100, fat: f100, fiber: fi100 },
+      weight: g,
+    };
+  };
+  const upd = () => {
+    const v = scale();
+    form.querySelector('#m-kcal').textContent = `${calcKcal(v.prot, v.carbs, v.fat)} kcal`;
+    form.querySelector('#m-macros').textContent = `P ${v.prot} · G ${v.carbs} · L ${v.fat}${v.fiber ? ` · Fib ${v.fiber}` : ''}`;
+  };
+  ['#m-prot', '#m-carbs', '#m-fat', '#m-fiber', '#m-weight'].forEach((sel) => form.querySelector(sel).addEventListener('input', upd));
+  upd();
+
+  // Au clic dans le champ poids : sélectionne tout le nombre pour pouvoir le
+  // remplacer directement (sans avoir à effacer chiffre par chiffre).
+  const weightInput = form.querySelector('#m-weight');
+  weightInput.addEventListener('focus', () => {
+    setTimeout(() => {
+      try { weightInput.select(); } catch (_) {
+        try { weightInput.setSelectionRange(0, weightInput.value.length); } catch (_) { /* noop */ }
+      }
+    }, 0);
+  });
+
+  form.querySelector('#m-cat').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    cat = b.dataset.v;
+    form.querySelectorAll('#m-cat button').forEach((x) => x.classList.toggle('active', x === b));
+  });
+
+  const recipesHost = form.querySelector('#m-recipes');
+  if (recipesHost) {
+    recipesHost.addEventListener('click', (e) => {
+      const b = e.target.closest('.recipe-chip'); if (!b) return;
+      const r = (store.userData.recipes || []).find((x) => x.id === b.dataset.id);
+      if (!r) return;
+      form.querySelector('#m-name').value = r.name;
+      form.querySelector('#m-prot').value = r.prot;
+      form.querySelector('#m-carbs').value = r.carbs;
+      form.querySelector('#m-fat').value = r.fat;
+      form.querySelector('#m-fiber').value = r.fiber || '';
+      upd();
+      haptic();
+    });
+  }
+
+  form.querySelector('#m-add').addEventListener('click', () => {
+    const bn = form.querySelector('#m-name').value.trim();
+    const v = scale();
+    if (!bn) { toast('Nom requis', 'error'); return; }
+    if (v.per100.prot + v.per100.carbs + v.per100.fat === 0) { toast('Renseigne les macros /100g', 'error'); return; }
+    if (!v.weight || v.weight <= 0) { toast('Poids invalide', 'error'); return; }
+    const displayName = `${bn} (${v.weight} g)`;
+    const payload = {
+      name: displayName, baseName: bn, meal: cat,
+      prot: v.prot, carbs: v.carbs, fat: v.fat, fiber: v.fiber,
+      kcal: calcKcal(v.prot, v.carbs, v.fat),
+      per100: v.per100, weight: v.weight,
+    };
+    if (pf.editId) {
+      store.updateMeal(selectedDate, pf.editId, payload);
+      toast('Repas modifié', 'success');
+    } else {
+      store.addNutritionLog(selectedDate, payload);
+    }
+    if (form.querySelector('#m-save-recipe').checked) {
+      store.saveRecipe({ id: crypto.randomUUID(), name: bn, prot: v.per100.prot, carbs: v.per100.carbs, fat: v.per100.fat, fiber: v.per100.fiber });
+      toast('Aliment enregistré', 'success');
+    }
+    haptic();
+    sheet.close();
+    rerender();
+  });
+}
+
+// ============================================================
+// HISTORIQUE DES ALIMENTS — sheet (livre ouvert) : ré-ajout rapide
+// Liste toutes les entrées passées, de la plus récente à la plus ancienne.
+// Au clic → ouvre l'ajout pré-rempli avec les valeurs /100g : il n'y a plus
+// qu'à ajuster le poids.
+// ============================================================
+function openHistorySheet(rerender) {
+  const entries = store.nutritionEntryHistory();
+  const form = el(`<div>
+    <input id="h-search" type="text" placeholder="Rechercher un aliment…" autocomplete="off" class="field-input-solo" style="width:100%;min-height:44px;margin-bottom:12px">
+    <div id="h-list">${entries.length ? '' : '<div class="empty-state">Aucune entrée pour le moment.<br>Tes aliments saisis apparaîtront ici.</div>'}</div>
+  </div>`);
+  const sheet = openSheet({ title: 'Historique des aliments', content: form });
+  const list = form.querySelector('#h-list');
+
+  const draw = (q = '') => {
+    const nq = q.trim().toLowerCase();
+    const filtered = nq ? entries.filter((e) => (e.baseName || e.name || '').toLowerCase().includes(nq)) : entries;
+    list.innerHTML = filtered.length ? '' : '<div class="empty-state">Aucun résultat</div>';
+    for (const e of filtered.slice(0, 200)) {
+      const p100 = e.per100 || { prot: e.prot, carbs: e.carbs, fat: e.fat, fiber: e.fiber };
+      const name = e.baseName || e.name || 'Aliment';
+      const kcal100 = calcKcal(p100.prot || 0, p100.carbs || 0, p100.fat || 0);
+      const item = el(`<button class="hist-item">
+        <div class="hist-info">
+          <div class="hist-name">${name}</div>
+          <div class="meal-macros">100 g : ${kcal100} kcal · P ${p100.prot || 0} · G ${p100.carbs || 0} · L ${p100.fat || 0}${p100.fiber ? ` · <span class="fiber-tag">${p100.fiber}g fibres</span>` : ''}</div>
+        </div>
+        <span class="hist-add">${icons.plus}</span>
+      </button>`);
+      item.addEventListener('click', () => {
+        sheet.close();
+        openAddMealSheet(rerender, { baseName: name, per100: p100, weight: e.weight || 100, meal: e.meal });
+      });
+      list.appendChild(item);
+    }
+  };
+  draw();
+  form.querySelector('#h-search').addEventListener('input', (ev) => draw(ev.target.value));
+}
+
+// ============================================================
+// RECETTES — sheet de gestion
+// ============================================================
+function openRecipesSheet(rerender) {
+  const build = () => {
+    const recipes = store.userData.recipes || [];
+    const form = el(`<div>
+      <button class="btn btn-primary btn-block" id="r-new" style="margin-bottom:14px">${icons.plus} Créer une recette</button>
+      <div id="r-list">${recipes.length ? '' : '<div class="empty-state">Aucune recette.<br>Créez-en une pour un ajout rapide.</div>'}</div>
+    </div>`);
+    const sheet = openSheet({ title: 'Mes recettes', content: form });
+    const list = form.querySelector('#r-list');
+    for (const r of recipes) {
+      const item = el(`<div class="recipe-item">
+        <div class="recipe-info">
+          <div class="recipe-name">${r.name}</div>
+          <div class="meal-macros">P ${r.prot} · G ${r.carbs} · L ${r.fat}${r.fiber ? ` · <span class="fiber-tag">${r.fiber}g fibres</span>` : ''} · ${calcKcal(r.prot, r.carbs, r.fat)} kcal</div>
+        </div>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-secondary btn-sm" data-add>${icons.plus}</button>
+          <button class="icon-btn danger" data-del aria-label="Supprimer">${icons.trash}</button>
+        </div>
+      </div>`);
+      item.querySelector('[data-add]').addEventListener('click', () => {
+        sheet.close();
+        openAddMealSheet(rerender, { name: r.name, prot: r.prot, carbs: r.carbs, fat: r.fat, fiber: r.fiber });
+      });
+      item.querySelector('[data-del]').addEventListener('click', () => {
+        confirmModal('Supprimer', `Supprimer la recette « ${r.name} » ?`, () => {
+          store.deleteRecipe(r.id);
+          sheet.close();
+          build();
+        }, true);
+      });
+      list.appendChild(item);
+    }
+    form.querySelector('#r-new').addEventListener('click', () => {
+      sheet.close();
+      openRecipeEditor(() => build());
+    });
+  };
+  build();
+}
+
+function openRecipeEditor(onSaved) {
+  const form = el(`<div>
+    <label class="field"><span>Nom de la recette</span><input id="re-name" type="text" placeholder="Bowl protéiné" autocomplete="off"></label>
+    <div class="field-row">
+      <label class="field"><span>Prot (g)</span><input id="re-prot" type="number" inputmode="decimal" min="0" placeholder="0"></label>
+      <label class="field"><span>Gluc (g)</span><input id="re-carbs" type="number" inputmode="decimal" min="0" placeholder="0"></label>
+      <label class="field"><span>Lip (g)</span><input id="re-fat" type="number" inputmode="decimal" min="0" placeholder="0"></label>
+    </div>
+    <label class="field"><span>Fibres (g) · optionnel</span><input id="re-fiber" type="number" inputmode="decimal" min="0" placeholder="0"></label>
+    <div class="card-row" style="margin:10px 0"><span class="muted">Calories</span><span class="num" id="re-kcal" style="color:var(--accent)">0 kcal</span></div>
+  </div>`);
+  const upd = () => {
+    const p = parseFloat(form.querySelector('#re-prot').value) || 0;
+    const c = parseFloat(form.querySelector('#re-carbs').value) || 0;
+    const f = parseFloat(form.querySelector('#re-fat').value) || 0;
+    form.querySelector('#re-kcal').textContent = `${calcKcal(p, c, f)} kcal`;
+  };
+  ['#re-prot', '#re-carbs', '#re-fat'].forEach((sel) => form.querySelector(sel).addEventListener('input', upd));
+  openModal({
+    title: 'Nouvelle recette',
+    content: form,
+    actions: [
+      { label: 'Annuler' },
+      {
+        label: 'Enregistrer', variant: 'btn-primary',
+        onClick: (b) => {
+          const name = b.querySelector('#re-name').value.trim();
+          const prot = parseFloat(b.querySelector('#re-prot').value) || 0;
+          const carbs = parseFloat(b.querySelector('#re-carbs').value) || 0;
+          const fat = parseFloat(b.querySelector('#re-fat').value) || 0;
+          const fiber = parseFloat(b.querySelector('#re-fiber').value) || 0;
+          if (!name) { toast('Nom requis', 'error'); return 'keep'; }
+          if (prot + carbs + fat === 0) { toast('Au moins un macro', 'error'); return 'keep'; }
+          store.saveRecipe({ id: crypto.randomUUID(), name, prot, carbs, fat, fiber });
+          toast('Recette enregistrée', 'success');
+          if (onSaved) onSaved();
+        },
+      },
+    ],
+  });
+}
+
+// ============================================================
+// SCAN CODE-BARRE — caméra LIVE dans l'app + pause/capture -> Open Food Facts
+// On reste dans l'application : flux vidéo getUserMedia, bouton pour figer une
+// image (« photo »), puis analyse multi-orientation du code-barre.
+// ============================================================
+function openBarcodeSheet(rerender) {
+  let stoppedByUser = false;
+  let camera = null;      // contrôleur { stop }
+  let lastPhotoUrl = null;
+
+  const content = el(`<div>
+    <div id="bc-camera-step">
+      <div class="bc-cam-zone" id="bc-cam-zone">
+        <video id="bc-video" playsinline autoplay muted></video>
+        <img id="bc-frozen" alt="Image figée" style="display:none">
+        <div class="bc-cam-reticle"></div>
+      </div>
+      <div class="bc-cam-actions">
+        <button class="btn btn-primary btn-block" id="bc-shoot">${icons.barcode} Prendre la photo</button>
+        <button class="btn btn-secondary btn-block" id="bc-retry" style="display:none">Reprendre</button>
+      </div>
+      <div class="muted" id="bc-status" style="text-align:center;margin-top:10px">Cadre le code-barre dans le viseur puis prends la photo. Le sens n'a pas d'importance.</div>
+      <div class="bc-manual-row">
+        <input type="text" inputmode="numeric" id="bc-manual-code" placeholder="Ou saisis les chiffres (ex: 3017620422003)">
+        <button class="btn btn-secondary btn-sm" id="bc-manual-go">Valider</button>
+      </div>
+    </div>
+  </div>`);
+
+  const sheet = openSheet({
+    title: 'Scanner un produit',
+    content,
+    onClose: () => {
+      stoppedByUser = true;
+      if (camera) camera.stop();
+      if (lastPhotoUrl) URL.revokeObjectURL(lastPhotoUrl);
+    },
+  });
+
+  const statusEl = content.querySelector('#bc-status');
+  const videoEl = content.querySelector('#bc-video');
+  const frozenEl = content.querySelector('#bc-frozen');
+  const shootBtn = content.querySelector('#bc-shoot');
+  const retryBtn = content.querySelector('#bc-retry');
+
+  // Démarrage de la caméra
+  (async () => {
+    try {
+      camera = await startCameraStream(videoEl);
+    } catch (e) {
+      if (!stoppedByUser) {
+        statusEl.innerHTML = `${e.message}<br>Tu peux saisir les chiffres du code-barre ci-dessous.`;
+        shootBtn.disabled = true;
+      }
+    }
+  })();
+
+  const showLive = () => {
+    videoEl.style.display = '';
+    frozenEl.style.display = 'none';
+    shootBtn.style.display = '';
+    retryBtn.style.display = 'none';
+    if (lastPhotoUrl) { URL.revokeObjectURL(lastPhotoUrl); lastPhotoUrl = null; }
+  };
+
+  async function handleCode(code) {
+    if (stoppedByUser) return;
+    statusEl.textContent = `Code ${code} — recherche du produit…`;
+    try {
+      const product = await fetchProductByBarcode(code);
+      if (stoppedByUser) return;
+      if (!product) {
+        statusEl.textContent = 'Produit introuvable sur Open Food Facts. Vérifie le code ou ajoute-le manuellement (Ajout rapide).';
+        return;
+      }
+      if (camera) camera.stop();
+      // On réutilise le menu d'ajout rapide (mêmes 4 types de repas en haut),
+      // avec les valeurs pour 100 g déjà remplies : il ne reste que le poids.
+      sheet.close();
+      openAddMealSheet(rerender, {
+        baseName: product.name,
+        per100: { prot: product.prot, carbs: product.carbs, fat: product.fat, fiber: product.fiber },
+        weight: 100,
+      });
+    } catch (e) {
+      if (!stoppedByUser) statusEl.textContent = e.message || 'Erreur lors de la recherche du produit.';
+    }
+  }
+
+  // Prendre la photo = figer l'image courante (pause) puis l'analyser
+  shootBtn.addEventListener('click', async () => {
+    shootBtn.disabled = true;
+    let blob;
+    try {
+      blob = await captureFrame(videoEl);
+    } catch (e) {
+      statusEl.textContent = e.message;
+      shootBtn.disabled = false;
+      return;
+    }
+    // Fige l'aperçu (met "pause" sur la caméra)
+    lastPhotoUrl = URL.createObjectURL(blob);
+    frozenEl.src = lastPhotoUrl;
+    videoEl.style.display = 'none';
+    frozenEl.style.display = '';
+    shootBtn.style.display = 'none';
+    retryBtn.style.display = '';
+    statusEl.textContent = 'Analyse de la photo…';
+
+    try {
+      const code = await decodeBarcodeFromFile(blob);
+      if (stoppedByUser) return;
+      await handleCode(code);
+    } catch (e) {
+      if (!stoppedByUser) statusEl.textContent = e.message;
+    } finally {
+      shootBtn.disabled = false;
+    }
+  });
+
+  retryBtn.addEventListener('click', () => {
+    showLive();
+    statusEl.textContent = 'Cadre le code-barre dans le viseur puis prends la photo.';
+  });
+
+  content.querySelector('#bc-manual-go').addEventListener('click', () => {
+    const code = content.querySelector('#bc-manual-code').value.trim();
+    if (!code) { toast('Entre un code-barre', 'error'); return; }
+    handleCode(code);
+  });
+
+}
+
+// FAB global dans body (hors du conteneur transformé, sinon invisible sur iOS)
+// Menu déroulant : "+" principal déploie 2 mini-FAB (ajout rapide / scan code-barre).
+function ensureFab() {
+  let wrap = document.getElementById('fab-nutrition-wrap');
+  if (!wrap) {
+    wrap = el(`<div class="fab-wrap" id="fab-nutrition-wrap">
+      <button class="fab fab-mini" id="fab-history" aria-label="Historique des aliments" style="transition-delay:0ms">${icons.book}</button>
+      <button class="fab fab-mini" id="fab-scan" aria-label="Scanner un code-barre" style="transition-delay:40ms">${icons.barcode}</button>
+      <button class="fab fab-mini" id="fab-quick" aria-label="Ajout rapide" style="transition-delay:80ms">${icons.flame}</button>
+      <button class="fab" id="fab-nutrition" aria-label="Ajouter">${icons.plus}</button>
+    </div>`);
+    document.body.appendChild(wrap);
+    // Clic en dehors du menu déployé -> referme (attaché une seule fois, à la création)
+    document.addEventListener('click', (e) => {
+      if (wrap.classList.contains('fab-open') && !wrap.contains(e.target)) wrap.classList.remove('fab-open');
+    });
+  }
+  const main = wrap.querySelector('#fab-nutrition');
+  const quick = wrap.querySelector('#fab-quick');
+  const scan = wrap.querySelector('#fab-scan');
+  const history = wrap.querySelector('#fab-history');
+
+  const setOpen = (open) => wrap.classList.toggle('fab-open', open);
+
+  main.onclick = () => setOpen(!wrap.classList.contains('fab-open'));
+  quick.onclick = () => { setOpen(false); openAddMealSheet(currentRerender); };
+  scan.onclick = () => { setOpen(false); openBarcodeSheet(currentRerender); };
+  history.onclick = () => { setOpen(false); openHistorySheet(currentRerender); };
+}
+
+export function render(container) {
+  const rerender = () => render(container);
+  currentRerender = rerender;
+  const totals = store.dayTotals(selectedDate);
+  const mg = macroGoalsFor(selectedDate);
+  const consumed = Math.round(totals.kcal);
+  const remaining = mg.kcalGoal - totals.kcal;
+  const fiberGoal = fiberGoalFromKcal(mg.kcalGoal, store.userData.settings.fiberPer1000 ?? 15);
+  const day = store.userData.nutrition.byDate[selectedDate];
+  const meals = day ? day.meals : [];
+
+  const ribbon = [...Array(15)].map((_, i) => {
+    const d = todayISO(i - 14);
+    return `<button class="date-chip ${d === selectedDate ? 'active' : ''} ${d === todayISO() ? 'today' : ''}" data-date="${d}">
+      ${fmtDateShort(d).split(' ')[0]}<span class="d-num">${d.slice(8)}</span>
+    </button>`;
+  }).join('');
+
+  container.innerHTML = '';
+  container.appendChild(el(`
+    <div>
+      <div class="nutrition-header">
+        <div class="kcal-total">
+          <span class="num kcal-consumed">${consumed}</span>
+          <span class="kcal-sep">/ ${mg.kcalGoal} kcal</span>
+        </div>
+        <div class="kcal-sub">
+          <span>${remaining >= 0 ? `${Math.round(remaining)} kcal restantes` : `${Math.abs(Math.round(remaining))} kcal au-dessus`}</span>
+          <span class="fiber-line">Fibres ${Math.round(totals.fiber)} / ${fiberGoal} g</span>
+        </div>
+        <div class="macro-rings">
+          <div class="ring-item">
+            ${ringSVG({ size: 66, stroke: 7, progress: totals.prot / mg.protG, color: C_PROT, label: `${Math.round(totals.prot)}` })}
+            <div class="ring-caption">Prot / ${mg.protG}g</div>
+          </div>
+          <div class="ring-item">
+            ${ringSVG({ size: 66, stroke: 7, progress: totals.carbs / mg.carbsG, color: C_CARB, label: `${Math.round(totals.carbs)}` })}
+            <div class="ring-caption">Gluc / ${mg.carbsG}g</div>
+          </div>
+          <div class="ring-item">
+            ${ringSVG({ size: 66, stroke: 7, progress: totals.fat / mg.fatG, color: C_FAT, label: `${Math.round(totals.fat)}` })}
+            <div class="ring-caption">Lip / ${mg.fatG}g</div>
+          </div>
+          <div class="ring-item ring-item-sm">
+            ${ringSVG({ size: 50, stroke: 6, progress: totals.fiber / fiberGoal, color: C_FIBER, label: `${Math.round(totals.fiber)}` })}
+            <div class="ring-caption">Fib / ${fiberGoal}g</div>
+          </div>
+        </div>
+        <button class="btn btn-ghost btn-sm btn-block" id="btn-macro-goals" style="margin-top:4px">${icons.edit} Objectifs macros</button>
+      </div>
+
+      <div class="date-ribbon no-swipe" id="date-ribbon">${ribbon}</div>
+
+      <div class="card">
+        <div class="card-row" style="margin-bottom:4px">
+          <h3 style="margin:0">Repas</h3>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-ghost btn-sm" id="btn-recipes" aria-label="Recettes">${icons.book}</button>
+          </div>
+        </div>
+        <div id="meal-list">
+          ${meals.length ? '' : '<div class="empty-state">Aucun repas.<br>Appuie sur + pour en ajouter.</div>'}
+        </div>
+      </div>
+    </div>`));
+
+  const list = container.querySelector('#meal-list');
+  // Regroupement par type de repas
+  const byCat = {};
+  for (const m of meals) {
+    const c = MEAL_TYPES.includes(m.meal) ? m.meal : 'Snack';
+    (byCat[c] = byCat[c] || []).push(m);
+  }
+  for (const cat of MEAL_TYPES) {
+    const group = byCat[cat];
+    if (!group || !group.length) continue;
+    const catKcal = group.reduce((a, m) => a + m.kcal, 0);
+    const open = !!mealOpen[cat];
+    const groupEl = el(`<div class="meal-group${open ? '' : ' collapsed'}">
+      <div class="meal-cat-head" data-cat="${cat}">
+        <span><span class="collapse-caret">${icons.chevron}</span> ${cat} <span class="meal-count">${group.length}</span></span>
+        <span class="num">${Math.round(catKcal)} kcal</span>
+      </div>
+      <div class="meal-group-body"></div>
+    </div>`);
+    const body = groupEl.querySelector('.meal-group-body');
+    for (const m of group) {
+      // Clic = modifier · swipe vers la gauche = révèle la poubelle (suppression directe)
+      const item = el(`<div class="meal-row" data-id="${m.id}">
+        <button class="meal-del" data-del aria-label="Supprimer">${icons.trash}</button>
+        <div class="meal-item">
+          <div>
+            <div class="meal-name">${m.name}</div>
+            <div class="meal-macros">P ${m.prot} · G ${m.carbs} · L ${m.fat}${m.fiber ? ` · <span class="fiber-tag">${m.fiber}g fibres</span>` : ''}</div>
+          </div>
+          <span class="meal-kcal">${m.kcal}</span>
+        </div>
+      </div>`);
+      item.querySelector('.meal-item').addEventListener('click', () => {
+        if (item.classList.contains('swiped')) return; // ne pas éditer quand la poubelle est ouverte
+        openAddMealSheet(rerender, { editId: m.id, ...mealToEditable(m) });
+      });
+      item.querySelector('[data-del]').addEventListener('click', () => {
+        store.removeMeal(selectedDate, m.id);
+        haptic();
+        rerender();
+      });
+      body.appendChild(item);
+    }
+    groupEl.querySelector('.meal-cat-head').addEventListener('click', () => {
+      mealOpen[cat] = !mealOpen[cat];
+      groupEl.classList.toggle('collapsed', !mealOpen[cat]);
+    });
+    list.appendChild(groupEl);
+  }
+
+  // Swipe vers la gauche sur un repas -> révèle la poubelle rouge
+  (() => {
+    let row = null; let startX = 0; let startY = 0; let dx = 0; let mode = null; // null | 'h' | 'v'
+    let openRow = null;
+    const closeOpen = (except) => {
+      if (openRow && openRow !== except) {
+        openRow.querySelector('.meal-item').style.transform = '';
+        openRow.classList.remove('swiped');
+        openRow = null;
+      }
+    };
+    list.addEventListener('touchstart', (e) => {
+      const r = e.target.closest('.meal-row');
+      closeOpen(r);
+      if (!r) { row = null; return; }
+      row = r; startX = e.touches[0].clientX; startY = e.touches[0].clientY; dx = 0; mode = null;
+    }, { passive: true });
+    list.addEventListener('touchmove', (e) => {
+      if (!row) return;
+      dx = e.touches[0].clientX - startX;
+      const dy = e.touches[0].clientY - startY;
+      if (mode === null) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        mode = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
+      }
+      if (mode !== 'h') return;
+      e.preventDefault(); // bloque le scroll vertical pendant le swipe
+      const base = row.classList.contains('swiped') ? -76 : 0;
+      const t = Math.max(-76, Math.min(0, base + dx));
+      row.querySelector('.meal-item').style.transform = `translateX(${t}px)`;
+    }, { passive: false });
+    list.addEventListener('touchend', () => {
+      if (!row || mode !== 'h') { row = null; mode = null; return; }
+      const content = row.querySelector('.meal-item');
+      const wasOpen = row.classList.contains('swiped');
+      const open = wasOpen ? dx < 40 : dx < -40;
+      if (open) { content.style.transform = 'translateX(-76px)'; row.classList.add('swiped'); openRow = row; }
+      else {
+        content.style.transform = ''; row.classList.remove('swiped');
+        if (openRow === row) openRow = null;
+      }
+      row = null; mode = null;
+    });
+  })();
+
+  container.querySelector('#date-ribbon').addEventListener('click', (e) => {
+    const chip = e.target.closest('.date-chip');
+    if (!chip) return;
+    selectedDate = chip.dataset.date;
+    rerender();
+  });
+  const active = container.querySelector('.date-chip.active');
+  if (active && active.scrollIntoView) active.scrollIntoView({ inline: 'center', block: 'nearest' });
+
+  container.querySelector('#btn-macro-goals').addEventListener('click', () => openMacroGoalsSheet(rerender));
+  container.querySelector('#btn-recipes').addEventListener('click', () => openRecipesSheet(rerender));
+  ensureFab();
+}
