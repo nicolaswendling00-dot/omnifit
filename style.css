@@ -778,3 +778,63 @@ body[data-page="1"] #fab-nutrition-wrap { display: flex; }
 .grd-cell.s1 { background: rgba(var(--accent-rgb), 0.25); }
 .grd-cell.s2 { background: rgba(var(--accent-rgb), 0.55); }
 .grd-cell.s3 { background: var(--accent); }
+
+/* ============================================================
+   THÈME 8-BIT (MMORPG rétro)
+   Tout devient anguleux : aucun arrondi, aucun dégradé, aucun flou.
+   Les ombres sont des blocs pleins décalés (façon sprite), les bordures
+   épaisses, et la police est pixelisée.
+   ============================================================ */
+body.theme-8bit {
+  --bg: #0B0E1A; --surface: #16203C; --surface-2: #0E1526;
+  --accent: #35E36B; --accent-2: #F2C14E;
+  --accent-rgb: 53, 227, 107;
+  --on-accent: #06110A;
+  --grad-a: #35E36B; --grad-b: #35E36B;
+  --violet-text: #C79BFF;
+  --text: #E8F4EC; --text-2: #8FA6A0;
+  --success: #35E36B; --danger: #FF4D4D; --warning: #F2C14E;
+  --border: #35E36B;
+  --header-bg: #0B0E1A;
+  --shadow-1: 4px 4px 0 #060A14;
+  --shadow-2: 5px 5px 0 #060A14;
+  --shadow-glow: 4px 4px 0 #060A14;
+  --r-card: 0px; --r-btn: 0px; --r-modal: 0px;
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+  letter-spacing: 0.02em;
+}
+/* Anguleux partout : on neutralise tous les arrondis hérités */
+body.theme-8bit *,
+body.theme-8bit *::before,
+body.theme-8bit *::after { border-radius: 0 !important; }
+/* Ni flou ni dégradé : ce sont les deux marqueurs "modernes" à supprimer */
+body.theme-8bit * { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; text-shadow: none !important; }
+body.theme-8bit .btn-primary,
+body.theme-8bit .progress-bar > div { background: var(--accent) !important; }
+/* Police pixel : monospace tant que la fonte n'est pas chargée (hors ligne) */
+body.theme-8bit, body.theme-8bit input, body.theme-8bit button, body.theme-8bit textarea, body.theme-8bit select {
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+}
+/* Textes plus petits : la fonte pixel est très large */
+body.theme-8bit { font-size: 0.82rem; }
+body.theme-8bit h1 { font-size: 1.05rem; }
+body.theme-8bit h3 { font-size: 0.8rem; }
+body.theme-8bit .num, body.theme-8bit .stat-value { letter-spacing: 0; }
+/* Cadres épais façon fenêtre de jeu */
+body.theme-8bit .card,
+body.theme-8bit .modal,
+body.theme-8bit .sheet,
+body.theme-8bit .segment,
+body.theme-8bit .btn,
+body.theme-8bit input,
+body.theme-8bit .meal-item,
+body.theme-8bit .hist-item { border: 3px solid var(--border); box-shadow: var(--shadow-1); }
+body.theme-8bit .btn:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 #060A14; }
+body.theme-8bit #bottom-nav { border-top: 3px solid var(--border); }
+body.theme-8bit .nav-btn.active { background: var(--accent); color: var(--on-accent); }
+/* Rendu pixelisé de toutes les images/SVG */
+body.theme-8bit img, body.theme-8bit svg { image-rendering: pixelated; image-rendering: crisp-edges; }
+/* Les anneaux de progression deviennent carrés */
+body.theme-8bit .ring circle { stroke-linecap: butt; }
+.px-icon { width: 1em; height: 1em; }
+body.theme-8bit .fab { border: 3px solid var(--on-accent); box-shadow: var(--shadow-2); }

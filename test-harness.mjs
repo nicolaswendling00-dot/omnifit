@@ -324,8 +324,38 @@ assert(gr.dayPillars('2026-03-09', ctxPR).training === 1.25, 'Progression : reco
 // Carte affichee sur l'accueil
 home.render(pages.home);
 assert(pages.home.querySelector('#gr-card'), 'Accueil : carte de rang global presente');
-assert(pages.home.querySelectorAll('.gr-pillar').length === 3, 'Accueil : 3 piliers affiches');
+assert(pages.home.querySelectorAll('.gr-pillar').length === 0, 'Accueil : carte de rang epuree (pas de decomposition)');
+assert(pages.home.querySelector('.gr-lp'), 'Accueil : LP affiches');
 assert(pages.home.querySelector('.gr-rank-name'), 'Accueil : nom du rang affiche');
+
+console.log('== Theme 8-bit ==');
+const uiMod = await import('./utils/ui.js');
+const ranksMod = await import('./utils/ranks.js');
+const lineHome = uiMod.icons.home;
+uiMod.setIconSet('8bit');
+assert(Object.keys(uiMod.icons).length === 30, '8-bit : 30 icones');
+assert(Object.values(uiMod.icons).every((v) => v.includes('crispEdges')), '8-bit : toutes les icones sont pixelisees');
+ranksMod.setRankStyle('8bit');
+assert(ranksMod.rankBadge('gold', 60).includes('crispEdges'), '8-bit : badge de rang pixelise');
+assert(!ranksMod.rankBadge('gold', 60).includes('linearGradient'), '8-bit : aucun degrade dans le badge');
+uiMod.setIconSet('default');
+ranksMod.setRankStyle('default');
+assert(uiMod.icons.home === lineHome, '8-bit : retour au jeu d icones par defaut');
+// Bascule complete via les reglages
+store.saveUserData({ settings: { theme: '8bit' } });
+settings.applyTheme();
+assert(document.body.classList.contains('theme-8bit'), '8-bit : classe appliquee');
+assert(uiMod.icons.home.includes('crispEdges'), '8-bit : applyTheme bascule les icones');
+const nav8 = document.querySelector('#bottom-nav .nav-btn svg');
+assert(nav8 && nav8.getAttribute('shape-rendering') === 'crispEdges', '8-bit : barre de nav pixelisee');
+store.saveUserData({ settings: { theme: 'amoled' } });
+settings.applyTheme();
+assert(!document.body.classList.contains('theme-8bit'), '8-bit : retour AMOLED');
+assert(uiMod.icons.home.includes('stroke'), '8-bit : icones vectorielles restaurees');
+// L'option « Sombre » a disparu des reglages
+settings.render(pages.settings);
+assert(!pages.settings.querySelector('#seg-theme [data-v="dark"]'), 'Theme : option Sombre retiree');
+assert(pages.settings.querySelector('#seg-theme [data-v="8bit"]'), 'Theme : option 8-bit presente');
 
 console.log(`\n===== RÉSULTAT : ${pass} OK / ${fail} FAIL =====`);
 process.exit(fail ? 1 : 0);

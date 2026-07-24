@@ -2,12 +2,12 @@
 import { store, parseStepsPayload } from '../utils/storage.js';
 import { harrisBenedict } from '../utils/math.js';
 import { EQUIPMENT_TYPES } from '../data/exercises.js';
-import { el, icons, openModal, toast, confirmModal } from '../utils/ui.js';
-import { RANK_ORDER, RANK_META, DIV_LP, ONYX_LP, rankBadge, estimateRankFromLift, getStandards } from '../utils/ranks.js';
+import { el, icons, openModal, toast, confirmModal, setIconSet } from '../utils/ui.js';
+import { RANK_ORDER, RANK_META, DIV_LP, ONYX_LP, rankBadge, estimateRankFromLift, getStandards, setRankStyle } from '../utils/ranks.js';
 import { openExercisePicker } from './workout.js';
 import { backfillNutritionGoals } from './nutrition.js';
 
-const VERSION = '3.30';
+const VERSION = '3.31';
 
 function toggleRow(label, key, sub = '') {
   const s = store.userData.settings;
@@ -128,9 +128,9 @@ export function render(container) {
       <div class="settings-row">
         <span class="row-label">Thème</span>
         <div class="segment" style="max-width:280px" id="seg-theme">
-          <button data-v="dark" class="${s.theme === 'dark' ? 'active' : ''}">Sombre</button>
           <button data-v="amoled" class="${s.theme === 'amoled' ? 'active' : ''}">AMOLED</button>
           <button data-v="light" class="${s.theme === 'light' ? 'active' : ''}">Clair</button>
+          <button data-v="8bit" class="${s.theme === '8bit' ? 'active' : ''}">8-bit</button>
         </div>
       </div>
       <div class="settings-row">
@@ -260,10 +260,35 @@ export function render(container) {
   });
 }
 
+// Police pixel du thème 8-bit : chargée à la demande (et mise en cache par le
+// navigateur). Hors ligne, le repli monospace garde l'aspect rétro.
+function ensurePixelFont() {
+  if (document.getElementById('font-8bit')) return;
+  const link = document.createElement('link');
+  link.id = 'font-8bit';
+  link.rel = 'stylesheet';
+  link.href = 'https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap';
+  document.head.appendChild(link);
+}
+
 export function applyTheme() {
   const s = store.userData.settings;
+  const is8bit = s.theme === '8bit';
   document.body.classList.toggle('theme-amoled', s.theme === 'amoled');
   document.body.classList.toggle('theme-light', s.theme === 'light');
+  document.body.classList.toggle('theme-8bit', is8bit);
+  // Icônes et badges de rang suivent le thème
+  setIconSet(is8bit ? '8bit' : 'default');
+  setRankStyle(is8bit ? '8bit' : 'default');
+  if (is8bit) ensurePixelFont();
+  // Les icônes de la barre de navigation sont écrites en dur dans index.html :
+  // on les remplace pour qu'elles suivent le jeu d'icônes courant.
+  const navKeys = ['home', 'nutrition', 'workout', 'activity', 'settings'];
+  document.querySelectorAll('#bottom-nav .nav-btn').forEach((btn, i) => {
+    const svg = btn.querySelector('svg');
+    const next = icons[navKeys[i]];
+    if (svg && next) svg.outerHTML = next;
+  });
   document.body.classList.remove('density-compact', 'density-spacious');
   if (s.density === 'compact') document.body.classList.add('density-compact');
   if (s.density === 'spacious') document.body.classList.add('density-spacious');

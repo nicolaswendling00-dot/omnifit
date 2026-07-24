@@ -155,6 +155,12 @@ class StorageManager {
         data.settings.fiberPer1000 = 15;
         data.settings._v38 = true;
       }
+      // Migration v3.31 : l'option de thème « Sombre » a été retirée (remplacée
+      // par « 8-bit ») ; les utilisateurs concernés basculent sur AMOLED.
+      if (!data.settings._v331) {
+        if (data.settings.theme === 'dark') data.settings.theme = 'amoled';
+        data.settings._v331 = true;
+      }
       return data;
     } catch (e) {
       console.error('Erreur chargement userData', e);

@@ -1,6 +1,7 @@
+import { ICONS_PIXEL as PIXEL_ICONS } from './pixelArt.js';
 // OmniFit — Helpers UI partagés (modals, sheets, toasts, icônes SVG)
 
-export const icons = {
+const ICONS_LINE = {
   home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-6h6v6"/></svg>',
   nutrition: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5a4.5 4.5 0 0 0-4.5 4.5"/><path d="M20.5 4 17 7.5"/></svg>',
   workout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5v11M4 9v6M17.5 6.5v11M20 9v6M6.5 12h11"/></svg>',
@@ -32,6 +33,17 @@ export const icons = {
   book: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H19v15H6a2 2 0 0 0-2 2Z"/><path d="M4 19.5A2 2 0 0 1 6 18h13v3H6a2 2 0 0 1-2-1.5Z"/></svg>',
   copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg>',
 };
+
+// `icons` est un objet MUTABLE : le thème 8-bit remplace son contenu par le jeu
+// pixel-art. Les modules l'importent une fois et lisent ses propriétés au moment
+// du rendu, donc la bascule s'applique partout au prochain rendu.
+export const icons = { ...ICONS_LINE };
+
+export function setIconSet(mode) {
+  const src = mode === '8bit' ? PIXEL_ICONS : ICONS_LINE;
+  for (const k of Object.keys(icons)) delete icons[k];
+  Object.assign(icons, src);
+}
 
 export function el(html) {
   const t = document.createElement('template');
