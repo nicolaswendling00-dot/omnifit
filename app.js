@@ -43,32 +43,40 @@ let touchStartY = null;
 // d'onglet JUSQU'À CE QUE LE DOIGT SE LÈVE. Le verrou est posé en phase de
 // CAPTURE sur `document` (donc avant tout autre gestionnaire) et libéré en phase
 // de propagation (donc après celui de #app-container, qui le voit encore actif).
-const SWIPE_LOCK_ZONES = '.meal-row, .set-row, #meal-list, #s-exos, .swipe-lock, .no-swipe, .date-ribbon, .segment, input[type="range"]';
+// Zones dont le glissement horizontal doit être ABSORBÉ (swipe de suppression) :
+// on y bloque le geste horizontal natif. Les rubans à défilement horizontal
+// (dates, segments) en sont exclus : leur scroll doit rester libre.
+const SWIPE_ABSORB_ZONES = '.meal-row, .set-row, #meal-list, #s-exos, .swipe-lock';
+// Zones qui empêchent simplement le CHANGEMENT D'ONGLET (sans bloquer leur propre
+// défilement horizontal) : rubans, segments, curseurs.
+const SWIPE_LOCK_ZONES = SWIPE_ABSORB_ZONES + ', .no-swipe, .date-ribbon, .segment, input[type="range"]';
 let swipeLocked = false;
+let swipeAbsorb = false;   // true seulement sur les zones à swipe de suppression
 let lockStartX = null;
 let lockStartY = null;
 
 document.addEventListener('touchstart', (e) => {
   if (e.target.closest && e.target.closest(SWIPE_LOCK_ZONES)) {
     swipeLocked = true;
+    swipeAbsorb = !!(e.target.closest(SWIPE_ABSORB_ZONES));
     touchStartX = null; // annule un éventuel suivi déjà amorcé
     lockStartX = e.touches[0].clientX;
     lockStartY = e.touches[0].clientY;
   }
 }, { capture: true, passive: true });
 
-// Sur une zone verrouillée, on absorbe le glissement HORIZONTAL : cela empêche à
-// la fois le swipe d'onglet de l'app ET le geste de navigation natif d'iOS
-// (retour/avance de page), qui étaient déclenchés par un mouvement franc.
-// L'écouteur est non-passif (capture) pour pouvoir appeler preventDefault.
+// Sur une zone À ABSORBER, on bloque le glissement HORIZONTAL : cela empêche à la
+// fois le swipe d'onglet ET le geste de navigation natif d'iOS. Les rubans à
+// défilement horizontal (dates, segments) ne sont PAS absorbés : leur scroll
+// reste libre, mais ils ne déclenchent quand même pas le changement d'onglet.
 document.addEventListener('touchmove', (e) => {
-  if (!swipeLocked || lockStartX == null || !e.cancelable) return;
+  if (!swipeAbsorb || lockStartX == null || !e.cancelable) return;
   const dx = e.touches[0].clientX - lockStartX;
   const dy = e.touches[0].clientY - lockStartY;
   if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 6) e.preventDefault();
 }, { capture: true, passive: false });
 
-const releaseSwipeLock = () => { swipeLocked = false; lockStartX = null; lockStartY = null; };
+const releaseSwipeLock = () => { swipeLocked = false; swipeAbsorb = false; lockStartX = null; lockStartY = null; };
 document.addEventListener('touchend', releaseSwipeLock, { passive: true });
 document.addEventListener('touchcancel', releaseSwipeLock, { passive: true });
 

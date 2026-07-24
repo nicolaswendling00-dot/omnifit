@@ -15,9 +15,36 @@ export const RANK_META = {
   onyx: { name: 'Onyx', color: '#9F7CFF' },
 };
 
-// ============================================================
-//  ALGORITHME DE GAIN DE LP
-//  Gain = α · V_relatif + β · ΔP_relatif
+// Enrobe un badge de rang de deux ailettes latérales (façon emblème). L'envergure
+// et le nombre de plumes croissent avec le rang : lecture immédiate du prestige.
+// `badgeHTML` est le SVG du badge (rankChip/rankBadge) ; `size` sa taille en px.
+export function rankWings(rankId, badgeHTML, size = 46) {
+  const id = RANK_META[rankId] ? rankId : 'bronze';
+  const idx = RANK_ORDER.indexOf(id);            // 0..7
+  const color = RANK_META[id].color;
+  const feathers = 2 + Math.floor(idx / 2);      // 2 → 5 plumes selon le rang
+  const span = Math.round(size * (0.55 + idx * 0.06)); // envergure croissante
+  const h = size;
+  const feather = (i, dir) => {
+    const t = feathers > 1 ? i / (feathers - 1) : 0;
+    const len = span * (1 - t * 0.45);
+    const y = h * (0.32 + t * 0.4);
+    const x2 = dir < 0 ? -len : len;
+    const droop = size * 0.12 * (1 + t);
+    return `<path d="M0 ${y.toFixed(1)} Q ${(x2 * 0.5).toFixed(1)} ${(y - droop).toFixed(1)} ${x2.toFixed(1)} ${(y + droop * 0.6).toFixed(1)}"
+      stroke="${color}" stroke-width="${Math.max(1.5, size * 0.055).toFixed(1)}" fill="none" stroke-linecap="round" opacity="${(0.9 - t * 0.35).toFixed(2)}"/>`;
+  };
+  let left = ''; let right = '';
+  for (let i = 0; i < feathers; i++) { left += feather(i, -1); right += feather(i, 1); }
+  const totalW = size + span * 2;
+  return `<span class="rank-wings" style="display:inline-flex;align-items:center;position:relative;width:${totalW}px;height:${h}px;justify-content:center">
+    <svg width="${totalW}" height="${h}" viewBox="${-totalW / 2} 0 ${totalW} ${h}" style="position:absolute;inset:0;pointer-events:none" shape-rendering="geometricPrecision">
+      <g transform="translate(${-size / 2 - 2} 0)">${left}</g>
+      <g transform="translate(${size / 2 + 2} 0)">${right}</g>
+    </svg>
+    <span style="position:relative;z-index:1;display:inline-flex">${badgeHTML}</span>
+  </span>`;
+}
 //   V_relatif  = (volume de la séance / volume moyen historique) × 100  (100 = séance "normale")
 //   ΔP_relatif = % d'augmentation du 1RM estimé vs record perso (ex : +5 % → 5 ; 0 si pas de record)
 //   α, β évoluent avec le rang.

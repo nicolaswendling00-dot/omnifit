@@ -81,7 +81,7 @@ assert(pages.activity.querySelector('.steps-hero') && pages.activity.querySelect
 assert(!pages.activity.querySelector('.mono'), 'Activité : plus de .mono');
 
 settings.render(pages.settings);
-assert(pages.settings.querySelectorAll('.settings-section').length === 7, 'Réglages : 7 sections');
+assert(pages.settings.querySelectorAll('.settings-section').length === 6, 'Réglages : 6 sections');
 assert(pages.settings.querySelector('#btn-export'), 'Réglages : bouton export');
 assert(!pages.settings.querySelector('#btn-vol-goals'), 'Réglages : objectifs de volume retirés (déplacés)');
 assert(/v\d+\.\d+/.test(pages.settings.textContent), 'Réglages : numéro de version affiché');
@@ -203,21 +203,21 @@ const cg2 = mathmod.harrisBenedict(store.userData.profile, 'Perte de poids');
 assert(cg2 > 1500 && cg2 < 3500, `Harris-Benedict recalcule : ${cg2} kcal`);
 assert(mathmod.harrisBenedict(store.userData.profile, 'Prise de muscle') > cg2, 'Prise de muscle > Perte de poids');
 settings.render(pages.settings);
-pages.settings.querySelector('#seg-theme [data-v="amoled"]').click();
-assert(document.body.classList.contains('theme-amoled'), 'Thème AMOLED appliqué');
+pages.settings.querySelector('#seg-shape [data-v="amoled"]').click();
+assert(document.body.classList.contains('shape-amoled'), 'Forme AMOLED appliquee');
 
 console.log('== Persistance + import/export ==');
 const raw = JSON.parse(localStorage.getItem('omniffit_userData'));
-assert(raw.workouts.length === 1 && raw.settings.theme === 'amoled', 'Données persistées');
+assert(raw.workouts.length === 1 && raw.settings.shape === 'amoled', 'Données persistées');
 store.importJSON({ profile: { name: 'Nicolas' } }, 'merge');
 assert(store.userData.profile.name === 'Nicolas' && store.userData.workouts.length === 1, 'Import merge conserve les données');
 
 console.log('== Nouveautes v3.27 ==');
 // Theme clair
-pages.settings.querySelector('#seg-theme [data-v="light"]').click();
-assert(document.body.classList.contains('theme-light'), 'Theme clair applique');
-assert(!document.body.classList.contains('theme-amoled'), 'Theme clair exclut AMOLED');
-pages.settings.querySelector('#seg-theme [data-v="amoled"]').click();
+pages.settings.querySelector('#seg-palette [data-v="light"]').click();
+assert(document.body.classList.contains('palette-light'), 'Palette claire appliquee');
+pages.settings.querySelector('#seg-palette [data-v="dark"]').click();
+assert(!document.body.classList.contains('palette-light'), 'Retour palette sombre');
 
 // Volume hebdo : repli persiste dans les reglages
 workout.render(pages.workout);
@@ -277,13 +277,13 @@ const cssBody = cssTxt.slice(cssTxt.indexOf('}', cssTxt.indexOf(':root {')));
 assert(!/rgba\(\s*0\s*,\s*217\s*,\s*255/.test(cssBody), 'Theme : aucune teinte accent en dur hors :root');
 assert(!cssBody.includes('#04101d'), 'Theme : aucun texte quasi-noir en dur hors :root');
 assert(!cssBody.includes('rgba(10, 14, 39'), 'Theme : aucun fond de barre sombre en dur hors :root');
-const lightBlock = cssTxt.slice(cssTxt.indexOf('body.theme-light {'), cssTxt.indexOf('}', cssTxt.indexOf('body.theme-light {')));
+const lightBlock = cssTxt.slice(cssTxt.indexOf('body.palette-light {'), cssTxt.indexOf('}', cssTxt.indexOf('body.palette-light {')));
 assert(lightBlock.includes('--on-accent: #FFFFFF'), 'Theme clair : texte blanc sur boutons pleins');
 assert(lightBlock.includes('--header-bg: rgba(255, 255, 255'), 'Theme clair : header nutrition clair');
 
 // Swipe : les lignes swipables ne declenchent pas le changement d'onglet
 const appTxt = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
-const lockZones = (appTxt.match(/SWIPE_LOCK_ZONES\s*=\s*'([^']+)'/) || [])[1] || '';
+const lockZones = (appTxt.match(/SWIPE_ABSORB_ZONES\s*=\s*'([^']+)'/) || [])[1] || '';
 assert(lockZones.includes('.meal-row'), 'Verrou swipe : .meal-row couvert');
 assert(lockZones.includes('.set-row'), 'Verrou swipe : .set-row couvert');
 assert(lockZones.includes('#meal-list'), 'Verrou swipe : zone liste des repas couverte');
@@ -349,21 +349,45 @@ uiMod.setIconSet('default');
 ranksMod.setRankStyle('default');
 assert(uiMod.icons.home === lineHome, '8-bit : retour au jeu d icones par defaut');
 // Bascule complete via les reglages
-store.saveUserData({ settings: { theme: '8bit' } });
+store.saveUserData({ settings: { shape: '8bit' } });
 settings.applyTheme();
-assert(document.body.classList.contains('theme-8bit'), '8-bit : classe appliquee');
+assert(document.body.classList.contains('shape-8bit'), '8-bit : classe appliquee');
 assert(uiMod.icons.home.includes('crispEdges'), '8-bit : applyTheme bascule les icones');
 const nav8 = document.querySelector('#bottom-nav .nav-btn svg');
 assert(nav8 && nav8.getAttribute('shape-rendering') === 'crispEdges', '8-bit : barre de nav pixelisee');
 assert(document.getElementById('font-8bit').href.includes('VT323'), '8-bit : police terminal VT323');
-store.saveUserData({ settings: { theme: 'amoled' } });
+store.saveUserData({ settings: { shape: 'amoled' } });
 settings.applyTheme();
-assert(!document.body.classList.contains('theme-8bit'), '8-bit : retour AMOLED');
+assert(!document.body.classList.contains('shape-8bit'), '8-bit : retour AMOLED');
 assert(uiMod.icons.home.includes('stroke'), '8-bit : icones vectorielles restaurees');
 // L'option « Sombre » a disparu des reglages
 settings.render(pages.settings);
-assert(!pages.settings.querySelector('#seg-theme [data-v="dark"]'), 'Theme : option Sombre retiree');
-assert(pages.settings.querySelector('#seg-theme [data-v="8bit"]'), 'Theme : option 8-bit presente');
+assert(pages.settings.querySelector('#seg-shape [data-v="8bit"]'), 'Theme : forme 8-bit presente');
+assert(pages.settings.querySelector('#seg-palette [data-v="light"]'), 'Couleur : palette claire presente');
+assert(!pages.settings.querySelector('#seg-density'), 'Densite : segment retire');
+
+console.log('== v3.33 : deux axes, ailettes, scroll dates ==');
+// 8-bit clair possible
+store.saveUserData({ settings: { shape: '8bit', palette: 'light' } });
+settings.applyTheme();
+assert(document.body.classList.contains('shape-8bit') && document.body.classList.contains('palette-light'), '8-bit clair : combinaison des deux axes');
+store.saveUserData({ settings: { shape: 'amoled', palette: 'dark' } });
+settings.applyTheme();
+// Ailettes de rang
+const rankMod2 = await import('./utils/ranks.js');
+const wB = rankMod2.rankWings('bronze', '<svg></svg>', 46);
+const wO = rankMod2.rankWings('onyx', '<svg></svg>', 46);
+assert(wB.includes('rank-wings'), 'Ailettes : rendues autour du badge');
+assert((wO.match(/<path/g) || []).length > (wB.match(/<path/g) || []).length, 'Ailettes : envergure croit avec le rang');
+home.render(pages.home);
+assert(pages.home.querySelector('.gr-badge .rank-wings'), 'Accueil : ailettes affichees sur le rang');
+// Scroll des dates non bloque par l'absorption
+const appTxt2 = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+const absorb = (appTxt2.match(/SWIPE_ABSORB_ZONES\s*=\s*'([^']+)'/) || [])[1] || '';
+assert(!absorb.includes('.date-ribbon'), 'Scroll dates : ruban NON absorbe (scroll horizontal libre)');
+assert(absorb.includes('.meal-row'), 'Swipe suppression : repas toujours absorbe');
+// Densite figee en spacieux
+assert(document.body.classList.contains('density-spacious'), 'Densite : toujours spacieuse');
 
 console.log(`\n===== RÉSULTAT : ${pass} OK / ${fail} FAIL =====`);
 process.exit(fail ? 1 : 0);

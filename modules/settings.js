@@ -7,7 +7,7 @@ import { RANK_ORDER, RANK_META, DIV_LP, ONYX_LP, rankBadge, estimateRankFromLift
 import { openExercisePicker } from './workout.js';
 import { backfillNutritionGoals } from './nutrition.js';
 
-const VERSION = '3.32';
+const VERSION = '3.33';
 
 function toggleRow(label, key, sub = '') {
   const s = store.userData.settings;
@@ -113,32 +113,22 @@ export function render(container) {
       </div>
     </div>
 
-    <!-- 4b. SANTÉ (APPLE) -->
-    <div class="card settings-section">
-      <h3>Santé (Apple)</h3>
-      <div class="settings-row">
-        <div><div class="row-label">Synchroniser les pas</div><div class="row-sub">Import automatique via un raccourci iOS</div></div>
-        <button class="btn btn-secondary btn-sm" id="btn-health-sync">Configurer</button>
-      </div>
-    </div>
 
     <!-- 5. INTERFACE -->
     <div class="card settings-section">
       <h3>Interface</h3>
       <div class="settings-row">
         <span class="row-label">Thème</span>
-        <div class="segment" style="max-width:280px" id="seg-theme">
-          <button data-v="amoled" class="${s.theme === 'amoled' ? 'active' : ''}">AMOLED</button>
-          <button data-v="light" class="${s.theme === 'light' ? 'active' : ''}">Clair</button>
-          <button data-v="8bit" class="${s.theme === '8bit' ? 'active' : ''}">8-bit</button>
+        <div class="segment" style="max-width:230px" id="seg-shape">
+          <button data-v="amoled" class="${(s.shape || 'amoled') === 'amoled' ? 'active' : ''}">AMOLED</button>
+          <button data-v="8bit" class="${s.shape === '8bit' ? 'active' : ''}">8-bit</button>
         </div>
       </div>
       <div class="settings-row">
-        <span class="row-label">Densité</span>
-        <div class="segment" style="max-width:230px" id="seg-density">
-          <button data-v="compact" class="${s.density === 'compact' ? 'active' : ''}">Compact</button>
-          <button data-v="normal" class="${s.density === 'normal' ? 'active' : ''}">Normal</button>
-          <button data-v="spacious" class="${s.density === 'spacious' ? 'active' : ''}">Spacieux</button>
+        <span class="row-label">Couleur</span>
+        <div class="segment" style="max-width:230px" id="seg-palette">
+          <button data-v="dark" class="${(s.palette || 'dark') === 'dark' ? 'active' : ''}">Sombre</button>
+          <button data-v="light" class="${s.palette === 'light' ? 'active' : ''}">Clair</button>
         </div>
       </div>
       <div id="rows-interface"></div>
@@ -207,15 +197,15 @@ export function render(container) {
   bindRange('#set-rest', '#rest-val', 'restTimerDefault', (v) => `${v}s`, (v) => parseInt(v, 10));
   bindRange('#set-water', '#water-val', 'waterGoal', (v) => `${v}L`);
 
-  root.querySelector('#seg-theme').addEventListener('click', (e) => {
+  root.querySelector('#seg-shape').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
-    store.saveUserData({ settings: { theme: b.dataset.v } });
+    store.saveUserData({ settings: { shape: b.dataset.v } });
     applyTheme();
     rerender();
   });
-  root.querySelector('#seg-density').addEventListener('click', (e) => {
+  root.querySelector('#seg-palette').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
-    store.saveUserData({ settings: { density: b.dataset.v } });
+    store.saveUserData({ settings: { palette: b.dataset.v } });
     applyTheme();
     rerender();
   });
@@ -248,7 +238,6 @@ export function render(container) {
   });
 
   root.querySelector('#btn-clear-history').addEventListener('click', () => openClearHistoryModal(rerender));
-  root.querySelector('#btn-health-sync').addEventListener('click', () => openHealthSyncModal());
   root.querySelector('#btn-reset').addEventListener('click', () => {
     confirmModal('Reset complet', 'Toutes les données seront perdues.', () => {
       confirmModal('Dernière confirmation', 'Vraiment tout supprimer ?', () => {
@@ -273,11 +262,15 @@ function ensurePixelFont() {
 
 export function applyTheme() {
   const s = store.userData.settings;
-  const is8bit = s.theme === '8bit';
-  document.body.classList.toggle('theme-amoled', s.theme === 'amoled');
-  document.body.classList.toggle('theme-light', s.theme === 'light');
-  document.body.classList.toggle('theme-8bit', is8bit);
-  // Icônes et badges de rang suivent le thème
+  const shape = s.shape || 'amoled';   // 'amoled' | '8bit'
+  const palette = s.palette || 'dark'; // 'dark' | 'light'
+  const is8bit = shape === '8bit';
+
+  document.body.classList.toggle('shape-amoled', shape === 'amoled');
+  document.body.classList.toggle('shape-8bit', is8bit);
+  document.body.classList.toggle('palette-light', palette === 'light');
+
+  // Icônes et badges de rang suivent la FORME
   setIconSet(is8bit ? '8bit' : 'default');
   setRankStyle(is8bit ? '8bit' : 'default');
   if (is8bit) ensurePixelFont();
@@ -289,9 +282,9 @@ export function applyTheme() {
     const next = icons[navKeys[i]];
     if (svg && next) svg.outerHTML = next;
   });
-  document.body.classList.remove('density-compact', 'density-spacious');
-  if (s.density === 'compact') document.body.classList.add('density-compact');
-  if (s.density === 'spacious') document.body.classList.add('density-spacious');
+  // Densité : l'application est désormais toujours en « spacieux ».
+  document.body.classList.remove('density-compact');
+  document.body.classList.add('density-spacious');
 }
 
 function openExportModal() {

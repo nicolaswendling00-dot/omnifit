@@ -9,6 +9,7 @@
   --accent: #00D9FF;
   --accent-2: #7C3AED;
   --accent-rgb: 0, 217, 255;   /* teintes translucides de l'accent */
+  --num-color: #7FD8F5;        /* couleur des valeurs .num */
   --on-accent: #04101d;        /* texte posé SUR un fond accent */
   --grad-a: #00D9FF;           /* dégradé des boutons pleins */
   --grad-b: #7C3AED;
@@ -35,29 +36,41 @@
   --safe-t: env(safe-area-inset-top, 0px);
 }
 
-body.theme-amoled { --bg: #000000; --surface: #0B0F26; --surface-2: #06091a; --header-bg: rgba(0, 0, 0, 0.94); }
-body.theme-light {
+body.density-spacious { --space: 24px; }
+
+/* ============================================================
+   SYSTÈME À DEUX AXES
+   · PALETTE (couleur)  : palette-dark (défaut) | palette-light
+   · FORME (thème)      : shape-amoled (défaut) | shape-8bit
+   Les deux se combinent librement : « 8-bit clair » = shape-8bit + palette-light.
+   La palette pose les COULEURS ; la forme pose bordures/police/scanlines et
+   n'écrase les couleurs que là où c'est indispensable (ex. accent phosphore).
+   ============================================================ */
+
+/* --- PALETTE CLAIRE --- */
+body.palette-light {
   --bg: #F4F6FB; --surface: #FFFFFF; --surface-2: #EDF1F8;
-  /* --accent sert aussi de couleur de TEXTE sur fond clair : il reste assez
-     soutenu pour rester lisible. Les boutons pleins, eux, utilisent le dégradé
-     --grad-a/--grad-b, plus lumineux, avec du texte blanc. */
-  --accent: #0587A3; --accent-2: #7C3AED;
-  --accent-rgb: 5, 135, 163;
+  --accent: #2AA7C4; --accent-2: #7C3AED;
+  --accent-rgb: 42, 167, 196;
   --on-accent: #FFFFFF;
-  --grad-a: #17B4D4; --grad-b: #8B5CF6;
+  --grad-a: #7FD8F5; --grad-b: #8B5CF6;
   --violet-text: #6D28D9;
   --text: #10131C; --text-2: #5B6472;
+  /* Bleu des valeurs (.num) volontairement plus soutenu que #7FD8F5, sinon
+     illisible sur fond blanc. */
+  --num-color: #1E86A6;
   --success: #0D9668; --danger: #DC2626; --warning: #B45309;
-  --border: rgba(5, 135, 163, 0.20);
+  --border: rgba(42, 167, 196, 0.22);
   --header-bg: rgba(255, 255, 255, 0.92);
   --shadow-1: 0 4px 12px rgba(16, 19, 28, 0.08);
   --shadow-2: 0 8px 24px rgba(16, 19, 28, 0.12);
-  --shadow-glow: 0 12px 40px rgba(5, 135, 163, 0.10);
+  --shadow-glow: 0 12px 40px rgba(42, 167, 196, 0.10);
 }
-body.theme-light .scrim { background: rgba(16, 19, 28, 0.45); }
-body.theme-light .bc-cam-reticle { box-shadow: 0 0 0 2000px rgba(16, 19, 28, 0.35); }
-body.density-compact { --space: 10px; }
-body.density-spacious { --space: 24px; }
+body.palette-light .scrim { background: rgba(16, 19, 28, 0.45); }
+body.palette-light .bc-cam-reticle { box-shadow: 0 0 0 2000px rgba(16, 19, 28, 0.35); }
+
+/* --- FORME AMOLED (fond noir profond) : uniquement en palette sombre --- */
+body.shape-amoled:not(.palette-light) { --bg: #000000; --surface: #0B0F26; --surface-2: #06091a; --header-bg: rgba(0, 0, 0, 0.94); }
 
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
@@ -78,7 +91,7 @@ h1, h2, h3, h4 { font-weight: 700; letter-spacing: -0.01em; }
 h1 { font-size: 1.35rem; font-weight: 800; }
 h3 { font-size: 1rem; }
 /* Chiffres : Inter tabular, plus de Courier */
-.num { font-variant-numeric: tabular-nums; font-weight: 800; letter-spacing: -0.02em; }
+.num { font-variant-numeric: tabular-nums; font-weight: 800; letter-spacing: -0.02em; color: var(--num-color); }
 
 /* ---------- Layout SPA (fixe, ancré à la nav = plus de gap iOS) ---------- */
 #app-container {
@@ -100,7 +113,7 @@ h3 { font-size: 1rem; }
 }
 .page > div { max-width: 640px; margin: 0 auto; }
 .page-title { margin-bottom: var(--space); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.page-title h1 { background: linear-gradient(90deg, var(--text), var(--accent)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.page-title h1 { background: linear-gradient(90deg, var(--grad-a), var(--grad-b)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
 
 /* ---------- Bottom navigation ---------- */
 #bottom-nav {
@@ -319,7 +332,7 @@ canvas { max-width: 100%; }
 .kcal-remaining { text-align: center; margin-bottom: 8px; }
 .kcal-remaining .big { font-size: 2.2rem; color: var(--accent); text-shadow: 0 0 18px rgba(var(--accent-rgb), 0.4); }
 .kcal-remaining .sub { color: var(--text-2); font-size: 0.74rem; }
-.macro-rings { display: flex; justify-content: space-around; align-items: center; }
+.macro-rings { display: flex; justify-content: space-around; align-items: center; padding-bottom: 14px; }
 .macro-rings .ring-item { text-align: center; }
 .macro-rings .ring-item-sm .ring-caption { font-size: 0.6rem; }
 .macro-rings .ring-caption { font-size: 0.66rem; color: var(--text-2); margin-top: 2px; }
@@ -785,7 +798,15 @@ body[data-page="1"] #fab-nutrition-wrap { display: flex; }
    chrome de fenêtre [_][#][X], scanlines. Chaque « carte » ressemble à une
    fenêtre de logiciel underground des années 90-2000.
    ============================================================ */
-body.theme-8bit {
+/* Forme 8-bit : structure commune aux deux palettes (bordures, police, angles) */
+body.shape-8bit {
+  --border: var(--accent);
+  --shadow-1: none; --shadow-2: none; --shadow-glow: none;
+  --r-card: 0px; --r-btn: 0px; --r-modal: 0px;
+  font-family: 'VT323', 'Courier New', monospace;
+}
+/* 8-bit SOMBRE : palette phosphore violet sur fond noir */
+body.shape-8bit:not(.palette-light) {
   --bg: #05060a; --surface: #0a0b12; --surface-2: #10121c;
   --accent: #b57bff; --accent-2: #7ad7ff;
   --accent-rgb: 181, 123, 255;
@@ -793,88 +814,93 @@ body.theme-8bit {
   --grad-a: #b57bff; --grad-b: #b57bff;
   --violet-text: #c9a4ff;
   --text: #e6e0ff; --text-2: #8a7fb5;
+  --num-color: #b57bff;
   --success: #7ad7ff; --danger: #ff6b8b; --warning: #ffd479;
-  --border: #b57bff;
   --header-bg: #0a0b12;
-  --shadow-1: none; --shadow-2: none; --shadow-glow: none;
-  --r-card: 0px; --r-btn: 0px; --r-modal: 0px;
-  font-family: 'VT323', 'Courier New', monospace;
+}
+/* 8-bit CLAIR : même structure, mais palette claire (héritée de palette-light) */
+body.shape-8bit.palette-light {
+  --accent: #7a3ff2; --accent-2: #2AA7C4;
+  --accent-rgb: 122, 63, 242;
+  --num-color: #5b2bc4;
+  --header-bg: #FFFFFF;
 }
 /* Tout devient anguleux, sans flou ni dégradé */
-body.theme-8bit *, body.theme-8bit *::before, body.theme-8bit *::after { border-radius: 0 !important; }
-body.theme-8bit * { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; text-shadow: none !important; box-shadow: none !important; }
-body.theme-8bit .btn-primary, body.theme-8bit .progress-bar > div, body.theme-8bit .gr-progress i { background: var(--accent) !important; }
+body.shape-8bit *, body.shape-8bit *::before, body.shape-8bit *::after { border-radius: 0 !important; }
+body.shape-8bit * { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; text-shadow: none !important; box-shadow: none !important; }
+body.shape-8bit .btn-primary, body.shape-8bit .progress-bar > div, body.shape-8bit .gr-progress i { background: var(--accent) !important; }
 
 /* Police terminal : grande, monospace, lisible */
-body.theme-8bit, body.theme-8bit input, body.theme-8bit button, body.theme-8bit textarea, body.theme-8bit select {
+body.shape-8bit, body.shape-8bit input, body.shape-8bit button, body.shape-8bit textarea, body.shape-8bit select {
   font-family: 'VT323', 'Courier New', monospace;
   letter-spacing: 0.02em;
 }
-body.theme-8bit { font-size: 1.06rem; line-height: 1.25; }
+body.shape-8bit { font-size: 1.06rem; line-height: 1.25; }
 /* Titres en capitales espacées, comme les libellés d'une fiche technique */
-body.theme-8bit h1, body.theme-8bit h3, body.theme-8bit .row-label,
-body.theme-8bit .stat-label, body.theme-8bit .nav-btn span, body.theme-8bit .btn,
-body.theme-8bit .segment button, body.theme-8bit .sheet-header h3, body.theme-8bit .modal-header h2,
-body.theme-8bit .gr-rank-name, body.theme-8bit .meal-cat-head, body.theme-8bit .page-title h1 {
+body.shape-8bit h1, body.shape-8bit h3, body.shape-8bit .row-label,
+body.shape-8bit .stat-label, body.shape-8bit .nav-btn span, body.shape-8bit .btn,
+body.shape-8bit .segment button, body.shape-8bit .sheet-header h3, body.shape-8bit .modal-header h2,
+body.shape-8bit .gr-rank-name, body.shape-8bit .meal-cat-head, body.shape-8bit .page-title h1 {
   text-transform: uppercase; letter-spacing: 0.12em;
 }
-body.theme-8bit h1 { font-size: 1.6rem; }
-body.theme-8bit h3 { font-size: 1.15rem; color: var(--accent); }
+body.shape-8bit h1 { font-size: 1.6rem; }
+body.shape-8bit h3 { font-size: 1.15rem; color: var(--accent); }
 
 /* Fenêtres à cadre fin + barre de titre facultative */
-body.theme-8bit .card, body.theme-8bit .modal, body.theme-8bit .sheet {
+body.shape-8bit .card, body.shape-8bit .modal, body.shape-8bit .sheet {
   border: 1px solid var(--border); background: var(--surface); position: relative;
 }
 /* Liseré de titre facticement « fenêtre » sur chaque carte */
-body.theme-8bit .card > h3:first-child, body.theme-8bit .card > .card-row:first-child {
+body.shape-8bit .card > h3:first-child, body.shape-8bit .card > .card-row:first-child {
   border-bottom: 1px solid var(--border); margin: -2px -2px 10px; padding: 6px 8px;
   background: var(--surface-2);
 }
 /* Champs et boutons : cadre net, inversion à l'appui */
-body.theme-8bit input, body.theme-8bit textarea, body.theme-8bit select,
-body.theme-8bit .btn, body.theme-8bit .segment { border: 1px solid var(--border); background: var(--surface-2); color: var(--text); }
-body.theme-8bit .btn:active, body.theme-8bit .segment button.active { background: var(--accent); color: var(--on-accent); }
-body.theme-8bit .btn-secondary { background: var(--surface-2); }
+body.shape-8bit input, body.shape-8bit textarea, body.shape-8bit select,
+body.shape-8bit .btn, body.shape-8bit .segment { border: 1px solid var(--border); background: var(--surface-2); color: var(--text); }
+body.shape-8bit .btn:active, body.shape-8bit .segment button.active { background: var(--accent); color: var(--on-accent); }
+body.shape-8bit .btn-secondary { background: var(--surface-2); }
 
 /* Barre de navigation : liseré haut lumineux, item actif inversé */
-body.theme-8bit #bottom-nav { border-top: 1px solid var(--border); background: var(--surface); }
-body.theme-8bit .nav-btn.active { color: var(--accent); }
-body.theme-8bit .nav-btn.active span { border-bottom: 1px solid var(--accent); }
+body.shape-8bit #bottom-nav { border-top: 1px solid var(--border); background: var(--surface); }
+body.shape-8bit .nav-btn.active { color: var(--accent); }
+body.shape-8bit .nav-btn.active span { border-bottom: 1px solid var(--accent); }
 
 /* Icônes pixel : rendu net */
-body.theme-8bit img, body.theme-8bit svg { image-rendering: pixelated; image-rendering: crisp-edges; }
+body.shape-8bit img, body.shape-8bit svg { image-rendering: pixelated; image-rendering: crisp-edges; }
 .px-icon { width: 1em; height: 1em; }
-body.theme-8bit .px-icon { width: 1.1em; height: 1.1em; }
+body.shape-8bit .px-icon { width: 1.1em; height: 1.1em; }
 
 /* Anneaux : traits carrés */
-body.theme-8bit .ring circle { stroke-linecap: butt; }
+body.shape-8bit .ring circle { stroke-linecap: butt; }
+body.shape-8bit .ring-label, body.shape-8bit .ring-sub { font-family: 'VT323', 'Courier New', monospace; font-weight: 400; }
 
 /* Chrome de fenêtre [_][#][X] en coin des cartes principales */
-body.theme-8bit .card-glow::after {
+body.shape-8bit .card-glow::after {
   content: '[_][#][X]'; position: absolute; top: 4px; right: 6px;
   font-size: 0.7rem; color: var(--text-2); letter-spacing: 1px; pointer-events: none;
 }
 /* Scanlines discrètes sur tout l'écran */
-body.theme-8bit::before {
+body.shape-8bit::before {
   content: ''; position: fixed; inset: 0; z-index: 9999; pointer-events: none;
   background: repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0, rgba(0,0,0,0) 2px, rgba(0,0,0,0.18) 3px);
   mix-blend-mode: multiply;
 }
 /* Léger halo phosphore sur le texte accent */
-body.theme-8bit .gr-rank-name, body.theme-8bit h1, body.theme-8bit h3 { color: var(--accent); }
+body.shape-8bit .gr-rank-name, body.shape-8bit h1, body.shape-8bit h3 { color: var(--accent); }
 
 /* Carte de rang : présentation « fiche sujet » */
-body.theme-8bit .gr-card { border: 1px solid var(--border); }
-body.theme-8bit .gr-rank-name { letter-spacing: 0.14em; }
-body.theme-8bit .px-rank { border: 1px solid var(--border); background: var(--surface-2); padding: 2px; }
+body.shape-8bit .gr-card { border: 1px solid var(--border); }
+body.shape-8bit .gr-rank-name { letter-spacing: 0.14em; }
+body.shape-8bit .px-rank { border: 1px solid var(--border); background: var(--surface-2); padding: 2px; }
 
 /* FAB : carré, cadre net */
-body.theme-8bit .fab { border: 1px solid var(--on-accent); background: var(--accent); color: var(--on-accent); }
+body.shape-8bit .fab { border: 1px solid var(--on-accent); background: var(--accent); color: var(--on-accent); }
 
 /* Barres de progression segmentées (façon jauge « GENERATING KEY » ) */
-body.theme-8bit .gr-progress, body.theme-8bit .progress-bar {
+body.shape-8bit .gr-progress, body.shape-8bit .progress-bar {
   background: var(--surface-2); border: 1px solid var(--border); height: 12px; padding: 1px;
 }
-body.theme-8bit .gr-progress i, body.theme-8bit .progress-bar > div {
+body.shape-8bit .gr-progress i, body.shape-8bit .progress-bar > div {
   background: repeating-linear-gradient(to right, var(--accent) 0, var(--accent) 6px, var(--surface-2) 6px, var(--surface-2) 8px) !important;
 }

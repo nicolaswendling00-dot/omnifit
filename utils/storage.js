@@ -48,6 +48,8 @@ function defaultUserData() {
         quads: 12, hamstrings: 8, glutes: 10, calves: 6, core: 8, lowerback: 4,
       },
       theme: 'amoled',
+      shape: 'amoled',
+      palette: 'dark',
       density: 'spacious',
       soundEnabled: false,
       hapticEnabled: true,
@@ -160,6 +162,16 @@ class StorageManager {
       if (!data.settings._v331) {
         if (data.settings.theme === 'dark') data.settings.theme = 'amoled';
         data.settings._v331 = true;
+      }
+      // Migration v3.33 : le thème unique éclate en deux axes indépendants
+      //   shape (amoled | 8bit) + palette (dark | light).
+      if (!data.settings._v333) {
+        const t = data.settings.theme;
+        if (t === '8bit') { data.settings.shape = '8bit'; data.settings.palette = data.settings.palette || 'dark'; }
+        else if (t === 'light') { data.settings.shape = 'amoled'; data.settings.palette = 'light'; }
+        else { data.settings.shape = 'amoled'; data.settings.palette = 'dark'; }
+        data.settings.density = 'spacious';
+        data.settings._v333 = true;
       }
       return data;
     } catch (e) {
