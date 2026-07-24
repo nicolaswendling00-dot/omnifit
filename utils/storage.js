@@ -29,6 +29,7 @@ function defaultUserData() {
       fatMult: 1.0,
       waterGoal: 3,
       stepsGoal: 10000,
+      weeklySessionGoal: 4,
       fiberPer1000: 15,
       unitSystem: 'kg',
       restTimerDefault: 120,

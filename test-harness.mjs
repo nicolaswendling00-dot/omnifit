@@ -294,5 +294,38 @@ assert(/touchcancel/.test(appTxt), 'Verrou swipe : libere aussi sur touchcancel'
 const uiTxt = fs.readFileSync(new URL('./utils/ui.js', import.meta.url), 'utf8');
 assert(uiTxt.includes('sheet.offsetHeight / 3'), 'Panneau : fermeture au tiers');
 
+console.log('== Rang global ==');
+const gr = await import('./utils/globalRank.js');
+// Facteur d'exigence de l'objectif de pas (anti-triche)
+assert(gr.stepsGoalFactor(100) < 0.01, 'Pas : objectif derisoire quasi sans valeur');
+assert(Math.abs(gr.stepsGoalFactor(10000) - 1) < 1e-9, 'Pas : 10 000 = reference x1.0');
+assert(Math.abs(gr.stepsGoalFactor(20000) - 1.4) < 1e-9, 'Pas : 20 000 = x1.4');
+assert(gr.stepsGoalFactor(30000) === 1.5, 'Pas : plafond x1.5');
+let stepMono = true;
+for (let g = 0; g < 40000; g += 500) if (gr.stepsGoalFactor(g + 500) < gr.stepsGoalFactor(g)) stepMono = false;
+assert(stepMono, 'Pas : facteur monotone croissant');
+// Soft reset
+assert(gr.softReset(2100) === 1460, 'Soft reset : Onyx -> 1460 LP');
+assert(gr.softReset(300) === 300, 'Soft reset : debutant intact');
+let srOk = true, srPrev = -1;
+for (let l = 0; l <= 4000; l++) { const n = gr.softReset(l); if (n > l || n < srPrev) srOk = false; srPrev = n; }
+assert(srOk, 'Soft reset : monotone et ne promeut jamais');
+// Multiplicateur de serie
+assert(gr.streakMultiplier(0) === 1 && gr.streakMultiplier(7) === 1.1 && gr.streakMultiplier(60) === 1.5, 'Serie : paliers x1 -> x1.5');
+// Rendement degressif
+assert(gr.PILLAR_LP[0] > gr.PILLAR_LP[7], 'Rendement degressif : un pilier vaut moins en haut');
+// Piliers : jour de repos non penalise si quota hebdo tenu
+const ctxT = { weeklyGoal: 4, sessionsByDate: { '2026-03-03': 1, '2026-03-05': 1, '2026-03-07': 1, '2026-03-08': 1 } };
+assert(gr.dayPillars('2026-03-09', ctxT).training === 1, 'Entrainement : jour de repos non penalise (quota hebdo)');
+assert(gr.dayPillars('2026-03-09', {}).score === 0, 'Piliers : contexte vide sans plantage');
+// Bonus de progression
+const ctxPR = { ...ctxT, prDates: { '2026-03-09': true } };
+assert(gr.dayPillars('2026-03-09', ctxPR).training === 1.25, 'Progression : record battu -> pilier x1.25');
+// Carte affichee sur l'accueil
+home.render(pages.home);
+assert(pages.home.querySelector('#gr-card'), 'Accueil : carte de rang global presente');
+assert(pages.home.querySelectorAll('.gr-pillar').length === 3, 'Accueil : 3 piliers affiches');
+assert(pages.home.querySelector('.gr-rank-name'), 'Accueil : nom du rang affiche');
+
 console.log(`\n===== RÉSULTAT : ${pass} OK / ${fail} FAIL =====`);
 process.exit(fail ? 1 : 0);

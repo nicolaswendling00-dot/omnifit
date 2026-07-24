@@ -3,6 +3,8 @@ import { store, todayISO } from '../utils/storage.js';
 import { calculateSMA } from '../utils/math.js';
 import { el, icons, openModal, toast, ringSVG, haptic } from '../utils/ui.js';
 import { macroGoals } from './nutrition.js';
+import { computeGlobalRank, streakMultiplier } from '../utils/globalRank.js';
+import { rankChip, rankFromLP } from '../utils/ranks.js';
 
 let weightChart = null;
 let smaVisible = true;
@@ -145,6 +147,35 @@ function renderWeightChart(canvas) {
   });
 }
 
+function openGlobalRankModal(gr) {
+  const last56 = gr.days.slice(-56);
+  const cells = last56.map((d) => {
+    const s = d.score >= 3 ? 's3' : d.score >= 2 ? 's2' : d.score > 0 ? 's1' : '';
+    return `<div class="grd-cell ${s}" title="${d.date} · ${Math.round(d.score * 100) / 100} pilier(s) · ${d.gain > 0 ? '+' : ''}${d.gain} LP"></div>`;
+  }).join('');
+  const active = gr.days.filter((d) => d.score > 0).length;
+  const perfect = gr.days.filter((d) => d.score >= 3).length;
+  const content = el(`<div>
+    <div class="muted" style="font-size:0.78rem;line-height:1.5;margin-bottom:12px">
+      Le rang global mesure la <b>constance</b>, pas la performance. Chaque jour rapporte au maximum 3 piliers ;
+      la valeur d'un pilier <b>diminue à mesure que tu montes</b>, et une série ininterrompue la multiplie (jusqu'à ×1,5).
+    </div>
+    <div class="grd-row"><span>Rang actuel</span><b style="color:${gr.rank.color}">${gr.rank.division ? `${gr.rank.name} ${gr.rank.division}` : gr.rank.name}</b></div>
+    <div class="grd-row"><span>LP total</span><b>${gr.lp}</b></div>
+    <div class="grd-row"><span>Série en cours</span><b>${gr.streak} j · ×${streakMultiplier(gr.streak).toFixed(2)}</b></div>
+    <div class="grd-row"><span>Pic de la saison ${gr.season}</span><b>${gr.peak} LP</b></div>
+    ${gr.lastSeasonPeak > 0 ? `<div class="grd-row"><span>Pic saison ${gr.season - 1}</span><b>${rankFromLP(gr.lastSeasonPeak).name}</b></div>` : ''}
+    <div class="grd-row"><span>Jours actifs / parfaits</span><b>${active} / ${perfect}</b></div>
+    <h3 style="font-size:0.85rem;margin:14px 0 2px">8 dernières semaines</h3>
+    <div class="grd-cal">${cells}</div>
+    <div class="muted" style="font-size:0.7rem;margin-top:10px;line-height:1.5">
+      Chaque 1er janvier, un <b>soft reset</b> comprime le LP vers le milieu du classement : le haut redescend nettement,
+      les débutants ne perdent rien. Ton pic de la saison précédente reste affiché.
+    </div>
+  </div>`);
+  openModal({ title: 'Rang global', content, actions: [{ label: 'Fermer' }] });
+}
+
 export function render(container) {
   const rerender = () => render(container);
   const { profile, goal, settings } = store.userData;
@@ -159,9 +190,39 @@ export function render(container) {
     : profile.weight;
 
   container.innerHTML = '';
+  const gr = computeGlobalRank(store.userData, today, { liveMacroGoal: mg });
+  const grRankLabel = gr.rank.division ? `${gr.rank.name} ${gr.rank.division}` : gr.rank.name;
+  const grProgress = gr.rank.lpNeeded ? gr.rank.lp / gr.rank.lpNeeded : 1;
+  const pill = (label, v) => {
+    const pct = Math.max(0, Math.min(1, v));
+    const cls = pct >= 1 ? 'done' : pct > 0 ? 'partial' : '';
+    return `<div class="gr-pillar ${cls}"><span class="gr-pillar-bar"><i style="width:${Math.round(pct * 100)}%"></i></span><span>${label}</span></div>`;
+  };
+
   container.appendChild(el(`
     <div>
       <div class="page-title"><h1>OmniFit</h1></div>
+
+      <div class="card card-glow gr-card" id="gr-card">
+        <div class="gr-top">
+          <div class="gr-badge">${rankChip(gr.rank.id, 46)}</div>
+          <div class="gr-info">
+            <div class="gr-rank-name" style="color:${gr.rank.color}">${grRankLabel}</div>
+            <div class="gr-lp">${gr.rank.lpNeeded ? `${gr.rank.lp} / ${gr.rank.lpNeeded} LP` : `${gr.rank.lp} LP`}<span class="gr-total"> · ${gr.lp} LP total</span></div>
+          </div>
+          <div class="gr-streak" title="Jours consécutifs">${gr.streak > 0 ? `${icons.flame}<span>${gr.streak}</span>` : ''}</div>
+        </div>
+        <div class="gr-progress"><i style="width:${Math.round(grProgress * 100)}%;background:${gr.rank.color}"></i></div>
+        <div class="gr-pillars">
+          ${pill('Nutrition', gr.today.nutrition)}
+          ${pill('Pas', gr.today.steps)}
+          ${pill('Séances', gr.today.training)}
+        </div>
+        <div class="gr-foot muted">
+          Aujourd'hui ${gr.today.lp > 0 ? `+${gr.today.lp}` : gr.today.lp} LP${gr.today.improved ? ' · record battu' : ''}
+          ${gr.lastSeasonPeak > 0 ? `<span class="gr-season">Saison ${gr.season - 1} : ${rankFromLP(gr.lastSeasonPeak).name}</span>` : ''}
+        </div>
+      </div>
 
       <div class="grid-2" style="margin-bottom:var(--space)">
         <div class="card stat-card">
@@ -213,6 +274,7 @@ export function render(container) {
       </div>
     </div>`));
 
+  container.querySelector('#gr-card').addEventListener('click', () => openGlobalRankModal(gr));
   container.querySelector('#btn-edit-goal').addEventListener('click', () => openGoalModal(rerender));
   container.querySelector('#btn-log-weight').addEventListener('click', () => openLogWeightModal(rerender));
   container.querySelector('#btn-chart').addEventListener('click', () => openChartModal(rerender));

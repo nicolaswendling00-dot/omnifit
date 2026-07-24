@@ -748,3 +748,33 @@ body[data-page="1"] #fab-nutrition-wrap { display: flex; }
 .hs-step .hs-num { flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: var(--on-accent); font-weight: 800; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
 .hs-method { border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 14px; background: var(--surface); }
 .hs-method-h { font-weight: 700; font-size: 0.92rem; margin-bottom: 4px; color: var(--accent); }
+
+/* ---- Rang global (accueil) ---- */
+.gr-card { cursor: pointer; }
+.gr-top { display: flex; align-items: center; gap: 12px; }
+.gr-badge { flex: 0 0 auto; display: flex; }
+.gr-info { flex: 1; min-width: 0; }
+.gr-rank-name { font-size: 1.15rem; font-weight: 800; letter-spacing: 0.01em; }
+.gr-lp { font-size: 0.78rem; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.gr-total { opacity: 0.65; }
+.gr-streak { flex: 0 0 auto; display: flex; align-items: center; gap: 3px; color: var(--warning); font-weight: 800; font-size: 0.9rem; }
+.gr-streak svg { width: 16px; height: 16px; }
+.gr-progress { height: 6px; border-radius: 6px; background: var(--surface-2); overflow: hidden; margin: 10px 0 12px; }
+.gr-progress i { display: block; height: 100%; border-radius: 6px; transition: width var(--dur-med) var(--ease); }
+.gr-pillars { display: flex; gap: 8px; }
+.gr-pillar { flex: 1; font-size: 0.66rem; color: var(--text-2); text-align: center; }
+.gr-pillar-bar { display: block; height: 4px; border-radius: 4px; background: var(--surface-2); overflow: hidden; margin-bottom: 4px; }
+.gr-pillar-bar i { display: block; height: 100%; background: var(--text-2); border-radius: 4px; }
+.gr-pillar.partial .gr-pillar-bar i { background: var(--warning); }
+.gr-pillar.done .gr-pillar-bar i { background: var(--success); }
+.gr-pillar.done { color: var(--success); }
+.gr-foot { font-size: 0.7rem; margin-top: 10px; display: flex; justify-content: space-between; gap: 8px; }
+.gr-season { opacity: 0.8; }
+/* Détail du rang global */
+.grd-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 0.86rem; }
+.grd-row:last-child { border-bottom: none; }
+.grd-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 8px; }
+.grd-cell { aspect-ratio: 1; border-radius: 4px; background: var(--surface-2); }
+.grd-cell.s1 { background: rgba(var(--accent-rgb), 0.25); }
+.grd-cell.s2 { background: rgba(var(--accent-rgb), 0.55); }
+.grd-cell.s3 { background: var(--accent); }

@@ -7,7 +7,7 @@ import { RANK_ORDER, RANK_META, DIV_LP, ONYX_LP, rankBadge, estimateRankFromLift
 import { openExercisePicker } from './workout.js';
 import { backfillNutritionGoals } from './nutrition.js';
 
-const VERSION = '3.29';
+const VERSION = '3.30';
 
 function toggleRow(label, key, sub = '') {
   const s = store.userData.settings;
@@ -92,6 +92,10 @@ export function render(container) {
         <div class="card-row"><span class="row-label">Repos par défaut</span><span class="num" id="rest-val" style="color:var(--accent)">${s.restTimerDefault}s</span></div>
         <input id="set-rest" type="range" min="60" max="300" step="15" value="${s.restTimerDefault}">
       </div>
+      <div class="settings-row" style="flex-direction:column;align-items:stretch">
+        <div class="card-row"><span class="row-label">Séances / semaine <span class="muted">(rang global)</span></span><span class="num" id="wsg-val" style="color:var(--accent)">${s.weeklySessionGoal ?? 4}</span></div>
+        <input id="set-weekly-sessions" type="range" min="1" max="7" step="1" value="${s.weeklySessionGoal ?? 4}">
+      </div>
       <div id="row-db-full"></div>
       <div class="settings-row" style="flex-direction:column;align-items:stretch">
         <div class="row-label" style="margin-bottom:6px">Filtre équipement <span class="muted">(aucun = tout)</span></div>
@@ -172,6 +176,9 @@ export function render(container) {
   container.appendChild(root);
 
   root.querySelector('#row-db-full').replaceWith(toggleRow('Base complète', 'exerciseDbFull', 'Décoché : débutant uniquement'));
+  const wsg = root.querySelector('#set-weekly-sessions');
+  wsg.addEventListener('input', (e) => { root.querySelector('#wsg-val').textContent = e.target.value; });
+  wsg.addEventListener('change', (e) => { store.saveUserData({ settings: { weeklySessionGoal: parseInt(e.target.value, 10) } }); });
   const rowsInt = root.querySelector('#rows-interface');
   rowsInt.appendChild(toggleRow('Notifications', 'notificationsEnabled'));
 
