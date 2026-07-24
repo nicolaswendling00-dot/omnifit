@@ -37,15 +37,54 @@ document.querySelectorAll('.nav-btn').forEach((btn, i) => {
 let touchStartX = null;
 let touchStartY = null;
 
+// ---- Verrou de swipe d'onglet ----
+// Certaines zones ont leur propre glissement horizontal (suppression d'un repas
+// ou d'une série). Dès que le doigt se pose dessus, on désactive le changement
+// d'onglet JUSQU'À CE QUE LE DOIGT SE LÈVE. Le verrou est posé en phase de
+// CAPTURE sur `document` (donc avant tout autre gestionnaire) et libéré en phase
+// de propagation (donc après celui de #app-container, qui le voit encore actif).
+const SWIPE_LOCK_ZONES = '.meal-row, .set-row, #meal-list, #s-exos, .swipe-lock, .no-swipe, .date-ribbon, .segment, input[type="range"]';
+let swipeLocked = false;
+let lockStartX = null;
+let lockStartY = null;
+
+document.addEventListener('touchstart', (e) => {
+  if (e.target.closest && e.target.closest(SWIPE_LOCK_ZONES)) {
+    swipeLocked = true;
+    touchStartX = null; // annule un éventuel suivi déjà amorcé
+    lockStartX = e.touches[0].clientX;
+    lockStartY = e.touches[0].clientY;
+  }
+}, { capture: true, passive: true });
+
+// Sur une zone verrouillée, on absorbe le glissement HORIZONTAL : cela empêche à
+// la fois le swipe d'onglet de l'app ET le geste de navigation natif d'iOS
+// (retour/avance de page), qui étaient déclenchés par un mouvement franc.
+// L'écouteur est non-passif (capture) pour pouvoir appeler preventDefault.
+document.addEventListener('touchmove', (e) => {
+  if (!swipeLocked || lockStartX == null || !e.cancelable) return;
+  const dx = e.touches[0].clientX - lockStartX;
+  const dy = e.touches[0].clientY - lockStartY;
+  if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 6) e.preventDefault();
+}, { capture: true, passive: false });
+
+const releaseSwipeLock = () => { swipeLocked = false; lockStartX = null; lockStartY = null; };
+document.addEventListener('touchend', releaseSwipeLock, { passive: true });
+document.addEventListener('touchcancel', releaseSwipeLock, { passive: true });
+
 appContainer.addEventListener('touchstart', (e) => {
+  if (swipeLocked) { touchStartX = null; return; }
   if (document.body.classList.contains('overlay-open')) { touchStartX = null; return; }
   // Ne pas déclencher le swipe depuis les zones scrollables horizontalement
-  if (e.target.closest('.no-swipe, .date-ribbon, .segment, input[type="range"]')) { touchStartX = null; return; }
+  // ni depuis les lignes à swipe latéral (repas, séries) : sinon le geste de
+  // suppression fait changer d'onglet.
+  if (e.target.closest(SWIPE_LOCK_ZONES)) { touchStartX = null; return; }
   touchStartX = e.touches[0].clientX;
   touchStartY = e.touches[0].clientY;
 }, { passive: true });
 
 appContainer.addEventListener('touchend', (e) => {
+  if (swipeLocked) { touchStartX = null; return; }
   if (touchStartX == null) return;
   if (document.body.classList.contains('overlay-open')) { touchStartX = null; return; }
   const dx = e.changedTouches[0].clientX - touchStartX;
