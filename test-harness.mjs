@@ -224,8 +224,18 @@ workout.render(pages.workout);
 const volToggle = pages.workout.querySelector('#vol-toggle');
 assert(volToggle, 'Volume hebdo : entete repliable presente');
 assert(pages.workout.querySelector('#vol-toggle .collapse-caret'), 'Volume hebdo : chevron present');
+const volCard = volToggle.closest('.card');
 volToggle.click();
-assert(store.userData.settings.volumeSectionOpen === false, 'Volume hebdo : repli persiste (false)');
+assert(store.userData.settings.volumeSectionOpen === false, 'Volume hebdo : 1er clic replie (false)');
+assert(volCard.classList.contains('collapsed'), 'Volume hebdo : 1er clic -> visuellement replie');
+// 2e clic SANS re-rendu : detecte un etat fige capture au rendu
+volToggle.click();
+assert(store.userData.settings.volumeSectionOpen === true, 'Volume hebdo : 2e clic rouvre (true)');
+assert(!volCard.classList.contains('collapsed'), 'Volume hebdo : 2e clic -> visuellement ouvert');
+volToggle.click();
+assert(store.userData.settings.volumeSectionOpen === false, 'Volume hebdo : 3e clic replie a nouveau');
+assert(volCard.classList.contains('collapsed'), 'Volume hebdo : 3e clic -> visuellement replie');
+// et le repli survit a un re-rendu
 workout.render(pages.workout);
 assert(pages.workout.querySelector('#vol-toggle').closest('.card').classList.contains('collapsed'), 'Volume hebdo : reste replie apres re-rendu');
 const volToggle2 = pages.workout.querySelector('#vol-toggle');
@@ -273,8 +283,12 @@ assert(lightBlock.includes('--header-bg: rgba(255, 255, 255'), 'Theme clair : he
 
 // Swipe : les lignes swipables ne declenchent pas le changement d'onglet
 const appTxt = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
-assert(/no-swipe[^)]*\.meal-row/.test(appTxt), 'Swipe onglet bloque sur .meal-row');
-assert(/no-swipe[^)]*\.set-row/.test(appTxt), 'Swipe onglet bloque sur .set-row');
+const lockZones = (appTxt.match(/SWIPE_LOCK_ZONES\s*=\s*'([^']+)'/) || [])[1] || '';
+assert(lockZones.includes('.meal-row'), 'Verrou swipe : .meal-row couvert');
+assert(lockZones.includes('.set-row'), 'Verrou swipe : .set-row couvert');
+assert(lockZones.includes('#meal-list'), 'Verrou swipe : zone liste des repas couverte');
+assert(/capture:\s*true/.test(appTxt), 'Verrou swipe : pose en phase de capture');
+assert(/touchcancel/.test(appTxt), 'Verrou swipe : libere aussi sur touchcancel');
 
 // Panneaux : fermeture au tiers de la hauteur
 const uiTxt = fs.readFileSync(new URL('./utils/ui.js', import.meta.url), 'utf8');

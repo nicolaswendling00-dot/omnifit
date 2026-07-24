@@ -37,17 +37,39 @@ document.querySelectorAll('.nav-btn').forEach((btn, i) => {
 let touchStartX = null;
 let touchStartY = null;
 
+// ---- Verrou de swipe d'onglet ----
+// Certaines zones ont leur propre glissement horizontal (suppression d'un repas
+// ou d'une série). Dès que le doigt se pose dessus, on désactive le changement
+// d'onglet JUSQU'À CE QUE LE DOIGT SE LÈVE. Le verrou est posé en phase de
+// CAPTURE sur `document` (donc avant tout autre gestionnaire) et libéré en phase
+// de propagation (donc après celui de #app-container, qui le voit encore actif).
+const SWIPE_LOCK_ZONES = '.meal-row, .set-row, #meal-list, #s-exos, .swipe-lock, .no-swipe, .date-ribbon, .segment, input[type="range"]';
+let swipeLocked = false;
+
+document.addEventListener('touchstart', (e) => {
+  if (e.target.closest && e.target.closest(SWIPE_LOCK_ZONES)) {
+    swipeLocked = true;
+    touchStartX = null; // annule un éventuel suivi déjà amorcé
+  }
+}, { capture: true, passive: true });
+
+const releaseSwipeLock = () => { swipeLocked = false; };
+document.addEventListener('touchend', releaseSwipeLock, { passive: true });
+document.addEventListener('touchcancel', releaseSwipeLock, { passive: true });
+
 appContainer.addEventListener('touchstart', (e) => {
+  if (swipeLocked) { touchStartX = null; return; }
   if (document.body.classList.contains('overlay-open')) { touchStartX = null; return; }
   // Ne pas déclencher le swipe depuis les zones scrollables horizontalement
   // ni depuis les lignes à swipe latéral (repas, séries) : sinon le geste de
   // suppression fait changer d'onglet.
-  if (e.target.closest('.no-swipe, .date-ribbon, .segment, .meal-row, .set-row, input[type="range"]')) { touchStartX = null; return; }
+  if (e.target.closest(SWIPE_LOCK_ZONES)) { touchStartX = null; return; }
   touchStartX = e.touches[0].clientX;
   touchStartY = e.touches[0].clientY;
 }, { passive: true });
 
 appContainer.addEventListener('touchend', (e) => {
+  if (swipeLocked) { touchStartX = null; return; }
   if (touchStartX == null) return;
   if (document.body.classList.contains('overlay-open')) { touchStartX = null; return; }
   const dx = e.changedTouches[0].clientX - touchStartX;

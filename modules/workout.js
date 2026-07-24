@@ -1422,7 +1422,10 @@ function renderVolumeDashboard(host, rerender) {
 
   card.querySelector('#vol-toggle').addEventListener('click', (e) => {
     if (e.target.closest('#vol-goals-btn')) return;
-    const next = !volumeOpen;
+    // On relit l'état AU MOMENT DU CLIC : une valeur capturée au rendu resterait
+    // figée et le second appui ne rouvrirait jamais la section.
+    const current = store.userData.settings.volumeSectionOpen !== false;
+    const next = !current;
     store.saveUserData({ settings: { volumeSectionOpen: next } });
     card.classList.toggle('collapsed', !next);
   });
