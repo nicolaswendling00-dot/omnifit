@@ -297,7 +297,7 @@ export function setRankStyle(mode) { RANK_STYLE = mode === '8bit' ? '8bit' : 'de
 // Badge complet (stats). size ~120.
 export function rankBadge(rankId, size = 120) {
   const id = RANK_META[rankId] ? rankId : 'bronze';
-  if (RANK_STYLE === '8bit') return pixelRankBadge(RANK_META[id].color, size);
+  if (RANK_STYLE === '8bit') return pixelRankBadge(id, RANK_META[id].color, size);
   const P = PAL[id];
   const u = 'rb' + (++_uid);
   const rim = P.holo ? `url(#${u}-holo)` : `url(#${u}-edge)`;
@@ -339,7 +339,7 @@ export function rankBadge(rankId, size = 120) {
 // Puce compacte (listes / séance). size ~30.
 export function rankChip(rankId, size = 30) {
   const id = RANK_META[rankId] ? rankId : 'bronze';
-  if (RANK_STYLE === '8bit') return pixelRankChip(RANK_META[id].color, size);
+  if (RANK_STYLE === '8bit') return pixelRankChip(id, RANK_META[id].color, size);
   const P = PAL[id];
   const u = 'rc' + (++_uid);
   const rim = P.holo ? `url(#${u}-holo)` : P.edge[1];

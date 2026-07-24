@@ -335,7 +335,7 @@ canvas { max-width: 100%; }
 .date-chip.today .d-num { color: var(--accent); }
 .date-chip.active { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 12px rgba(var(--accent-rgb), 0.2); }
 
-.meal-row { position: relative; overflow: hidden; border-radius: 10px; }
+.meal-row { position: relative; overflow: hidden; border-radius: 10px; touch-action: pan-y; }
 .meal-item {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   padding: 9px 10px; border-bottom: 1px solid var(--border);
@@ -585,7 +585,7 @@ body[data-page="1"] #fab-nutrition-wrap { display: flex; }
 .set-thead { padding: 0 2px 6px; }
 .set-thead span { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em; color: var(--text-2); text-align: center; }
 .set-thead span:first-child { text-align: left; }
-.set-row { position: relative; margin-bottom: 6px; overflow: hidden; border-radius: 10px; }
+.set-row { position: relative; margin-bottom: 6px; overflow: hidden; border-radius: 10px; touch-action: pan-y; }
 .sr-content { background: var(--surface); transition: transform 180ms var(--ease); position: relative; z-index: 1; }
 .sr-del { position: absolute; top: 0; right: 0; bottom: 0; width: 70px; border: none; border-radius: 10px; background: var(--danger); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 0; }
 .sr-del svg { width: 22px; height: 22px; }
@@ -780,61 +780,101 @@ body[data-page="1"] #fab-nutrition-wrap { display: flex; }
 .grd-cell.s3 { background: var(--accent); }
 
 /* ============================================================
-   THÈME 8-BIT (MMORPG rétro)
-   Tout devient anguleux : aucun arrondi, aucun dégradé, aucun flou.
-   Les ombres sont des blocs pleins décalés (façon sprite), les bordures
-   épaisses, et la police est pixelisée.
+   THÈME TERMINAL — esthétique keygen / interface rétro
+   Cadres fins lumineux, monochrome phosphore, typo monospace capitale,
+   chrome de fenêtre [_][#][X], scanlines. Chaque « carte » ressemble à une
+   fenêtre de logiciel underground des années 90-2000.
    ============================================================ */
 body.theme-8bit {
-  --bg: #0B0E1A; --surface: #16203C; --surface-2: #0E1526;
-  --accent: #35E36B; --accent-2: #F2C14E;
-  --accent-rgb: 53, 227, 107;
-  --on-accent: #06110A;
-  --grad-a: #35E36B; --grad-b: #35E36B;
-  --violet-text: #C79BFF;
-  --text: #E8F4EC; --text-2: #8FA6A0;
-  --success: #35E36B; --danger: #FF4D4D; --warning: #F2C14E;
-  --border: #35E36B;
-  --header-bg: #0B0E1A;
-  --shadow-1: 4px 4px 0 #060A14;
-  --shadow-2: 5px 5px 0 #060A14;
-  --shadow-glow: 4px 4px 0 #060A14;
+  --bg: #05060a; --surface: #0a0b12; --surface-2: #10121c;
+  --accent: #b57bff; --accent-2: #7ad7ff;
+  --accent-rgb: 181, 123, 255;
+  --on-accent: #05060a;
+  --grad-a: #b57bff; --grad-b: #b57bff;
+  --violet-text: #c9a4ff;
+  --text: #e6e0ff; --text-2: #8a7fb5;
+  --success: #7ad7ff; --danger: #ff6b8b; --warning: #ffd479;
+  --border: #b57bff;
+  --header-bg: #0a0b12;
+  --shadow-1: none; --shadow-2: none; --shadow-glow: none;
   --r-card: 0px; --r-btn: 0px; --r-modal: 0px;
-  font-family: 'Press Start 2P', 'Courier New', monospace;
+  font-family: 'VT323', 'Courier New', monospace;
+}
+/* Tout devient anguleux, sans flou ni dégradé */
+body.theme-8bit *, body.theme-8bit *::before, body.theme-8bit *::after { border-radius: 0 !important; }
+body.theme-8bit * { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; text-shadow: none !important; box-shadow: none !important; }
+body.theme-8bit .btn-primary, body.theme-8bit .progress-bar > div, body.theme-8bit .gr-progress i { background: var(--accent) !important; }
+
+/* Police terminal : grande, monospace, lisible */
+body.theme-8bit, body.theme-8bit input, body.theme-8bit button, body.theme-8bit textarea, body.theme-8bit select {
+  font-family: 'VT323', 'Courier New', monospace;
   letter-spacing: 0.02em;
 }
-/* Anguleux partout : on neutralise tous les arrondis hérités */
-body.theme-8bit *,
-body.theme-8bit *::before,
-body.theme-8bit *::after { border-radius: 0 !important; }
-/* Ni flou ni dégradé : ce sont les deux marqueurs "modernes" à supprimer */
-body.theme-8bit * { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; text-shadow: none !important; }
-body.theme-8bit .btn-primary,
-body.theme-8bit .progress-bar > div { background: var(--accent) !important; }
-/* Police pixel : monospace tant que la fonte n'est pas chargée (hors ligne) */
-body.theme-8bit, body.theme-8bit input, body.theme-8bit button, body.theme-8bit textarea, body.theme-8bit select {
-  font-family: 'Press Start 2P', 'Courier New', monospace;
+body.theme-8bit { font-size: 1.06rem; line-height: 1.25; }
+/* Titres en capitales espacées, comme les libellés d'une fiche technique */
+body.theme-8bit h1, body.theme-8bit h3, body.theme-8bit .row-label,
+body.theme-8bit .stat-label, body.theme-8bit .nav-btn span, body.theme-8bit .btn,
+body.theme-8bit .segment button, body.theme-8bit .sheet-header h3, body.theme-8bit .modal-header h2,
+body.theme-8bit .gr-rank-name, body.theme-8bit .meal-cat-head, body.theme-8bit .page-title h1 {
+  text-transform: uppercase; letter-spacing: 0.12em;
 }
-/* Textes plus petits : la fonte pixel est très large */
-body.theme-8bit { font-size: 0.82rem; }
-body.theme-8bit h1 { font-size: 1.05rem; }
-body.theme-8bit h3 { font-size: 0.8rem; }
-body.theme-8bit .num, body.theme-8bit .stat-value { letter-spacing: 0; }
-/* Cadres épais façon fenêtre de jeu */
-body.theme-8bit .card,
-body.theme-8bit .modal,
-body.theme-8bit .sheet,
-body.theme-8bit .segment,
-body.theme-8bit .btn,
-body.theme-8bit input,
-body.theme-8bit .meal-item,
-body.theme-8bit .hist-item { border: 3px solid var(--border); box-shadow: var(--shadow-1); }
-body.theme-8bit .btn:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 #060A14; }
-body.theme-8bit #bottom-nav { border-top: 3px solid var(--border); }
-body.theme-8bit .nav-btn.active { background: var(--accent); color: var(--on-accent); }
-/* Rendu pixelisé de toutes les images/SVG */
+body.theme-8bit h1 { font-size: 1.6rem; }
+body.theme-8bit h3 { font-size: 1.15rem; color: var(--accent); }
+
+/* Fenêtres à cadre fin + barre de titre facultative */
+body.theme-8bit .card, body.theme-8bit .modal, body.theme-8bit .sheet {
+  border: 1px solid var(--border); background: var(--surface); position: relative;
+}
+/* Liseré de titre facticement « fenêtre » sur chaque carte */
+body.theme-8bit .card > h3:first-child, body.theme-8bit .card > .card-row:first-child {
+  border-bottom: 1px solid var(--border); margin: -2px -2px 10px; padding: 6px 8px;
+  background: var(--surface-2);
+}
+/* Champs et boutons : cadre net, inversion à l'appui */
+body.theme-8bit input, body.theme-8bit textarea, body.theme-8bit select,
+body.theme-8bit .btn, body.theme-8bit .segment { border: 1px solid var(--border); background: var(--surface-2); color: var(--text); }
+body.theme-8bit .btn:active, body.theme-8bit .segment button.active { background: var(--accent); color: var(--on-accent); }
+body.theme-8bit .btn-secondary { background: var(--surface-2); }
+
+/* Barre de navigation : liseré haut lumineux, item actif inversé */
+body.theme-8bit #bottom-nav { border-top: 1px solid var(--border); background: var(--surface); }
+body.theme-8bit .nav-btn.active { color: var(--accent); }
+body.theme-8bit .nav-btn.active span { border-bottom: 1px solid var(--accent); }
+
+/* Icônes pixel : rendu net */
 body.theme-8bit img, body.theme-8bit svg { image-rendering: pixelated; image-rendering: crisp-edges; }
-/* Les anneaux de progression deviennent carrés */
-body.theme-8bit .ring circle { stroke-linecap: butt; }
 .px-icon { width: 1em; height: 1em; }
-body.theme-8bit .fab { border: 3px solid var(--on-accent); box-shadow: var(--shadow-2); }
+body.theme-8bit .px-icon { width: 1.1em; height: 1.1em; }
+
+/* Anneaux : traits carrés */
+body.theme-8bit .ring circle { stroke-linecap: butt; }
+
+/* Chrome de fenêtre [_][#][X] en coin des cartes principales */
+body.theme-8bit .card-glow::after {
+  content: '[_][#][X]'; position: absolute; top: 4px; right: 6px;
+  font-size: 0.7rem; color: var(--text-2); letter-spacing: 1px; pointer-events: none;
+}
+/* Scanlines discrètes sur tout l'écran */
+body.theme-8bit::before {
+  content: ''; position: fixed; inset: 0; z-index: 9999; pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0, rgba(0,0,0,0) 2px, rgba(0,0,0,0.18) 3px);
+  mix-blend-mode: multiply;
+}
+/* Léger halo phosphore sur le texte accent */
+body.theme-8bit .gr-rank-name, body.theme-8bit h1, body.theme-8bit h3 { color: var(--accent); }
+
+/* Carte de rang : présentation « fiche sujet » */
+body.theme-8bit .gr-card { border: 1px solid var(--border); }
+body.theme-8bit .gr-rank-name { letter-spacing: 0.14em; }
+body.theme-8bit .px-rank { border: 1px solid var(--border); background: var(--surface-2); padding: 2px; }
+
+/* FAB : carré, cadre net */
+body.theme-8bit .fab { border: 1px solid var(--on-accent); background: var(--accent); color: var(--on-accent); }
+
+/* Barres de progression segmentées (façon jauge « GENERATING KEY » ) */
+body.theme-8bit .gr-progress, body.theme-8bit .progress-bar {
+  background: var(--surface-2); border: 1px solid var(--border); height: 12px; padding: 1px;
+}
+body.theme-8bit .gr-progress i, body.theme-8bit .progress-bar > div {
+  background: repeating-linear-gradient(to right, var(--accent) 0, var(--accent) 6px, var(--surface-2) 6px, var(--surface-2) 8px) !important;
+}

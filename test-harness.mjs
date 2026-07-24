@@ -289,6 +289,9 @@ assert(lockZones.includes('.set-row'), 'Verrou swipe : .set-row couvert');
 assert(lockZones.includes('#meal-list'), 'Verrou swipe : zone liste des repas couverte');
 assert(/capture:\s*true/.test(appTxt), 'Verrou swipe : pose en phase de capture');
 assert(/touchcancel/.test(appTxt), 'Verrou swipe : libere aussi sur touchcancel');
+assert(/touchmove[\s\S]*?passive: false/.test(appTxt), 'Verrou swipe : touchmove non-passif (bloque le geste horizontal natif iOS)');
+const cssSw = fs.readFileSync(new URL('./style.css', import.meta.url), 'utf8');
+assert(/\.meal-row \{[^}]*touch-action: pan-y/.test(cssSw), 'Verrou swipe : meal-row en touch-action pan-y');
 
 // Panneaux : fermeture au tiers de la hauteur
 const uiTxt = fs.readFileSync(new URL('./utils/ui.js', import.meta.url), 'utf8');
@@ -338,6 +341,10 @@ assert(Object.values(uiMod.icons).every((v) => v.includes('crispEdges')), '8-bit
 ranksMod.setRankStyle('8bit');
 assert(ranksMod.rankBadge('gold', 60).includes('crispEdges'), '8-bit : badge de rang pixelise');
 assert(!ranksMod.rankBadge('gold', 60).includes('linearGradient'), '8-bit : aucun degrade dans le badge');
+const allSigils = ['bronze','gold','plat','diam','emer','saph','ruby','onyx'].map((id) => ranksMod.rankBadge(id, 48));
+assert(new Set(allSigils).size === 8, '8-bit : chaque rang a une silhouette distincte (identifiable en monochrome)');
+const rc = (id) => (ranksMod.rankBadge(id, 48).match(/<rect/g) || []).length;
+assert(rc('onyx') > rc('bronze'), '8-bit : complexite du sigil croit avec le rang');
 uiMod.setIconSet('default');
 ranksMod.setRankStyle('default');
 assert(uiMod.icons.home === lineHome, '8-bit : retour au jeu d icones par defaut');
@@ -348,6 +355,7 @@ assert(document.body.classList.contains('theme-8bit'), '8-bit : classe appliquee
 assert(uiMod.icons.home.includes('crispEdges'), '8-bit : applyTheme bascule les icones');
 const nav8 = document.querySelector('#bottom-nav .nav-btn svg');
 assert(nav8 && nav8.getAttribute('shape-rendering') === 'crispEdges', '8-bit : barre de nav pixelisee');
+assert(document.getElementById('font-8bit').href.includes('VT323'), '8-bit : police terminal VT323');
 store.saveUserData({ settings: { theme: 'amoled' } });
 settings.applyTheme();
 assert(!document.body.classList.contains('theme-8bit'), '8-bit : retour AMOLED');

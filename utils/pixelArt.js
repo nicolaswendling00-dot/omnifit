@@ -195,30 +195,64 @@ export const ICONS_PIXEL = Object.fromEntries(
 );
 
 // ============================================================
-//  BADGES DE RANG 8-BIT
-//  Bouclier/gemme en blocs, palette dérivée de la couleur du rang.
+//  SIGILS DE RANG — esthétique terminal / keygen
+//  Chaque rang a une SILHOUETTE PROPRE (et pas seulement une couleur) : le rang
+//  reste donc identifiable même en monochrome, ou pour un daltonien. La
+//  complexité du glyphe croît avec le rang, ce qui donne une lecture immédiate
+//  de la hiérarchie.
 // ============================================================
-const SHIELD = [
-  '..########..',
-  '.##########.',
-  '############',
-  '############',
-  '############',
-  '############',
-  '.##########.',
-  '.##########.',
-  '..########..',
-  '...######...',
-  '....####....',
-  '.....##.....',
-];
-const GEM = [
-  '............', '............', '....####....', '...######...',
-  '..########..', '..########..', '...######...', '....####....',
-  '............', '............', '............', '............',
-];
+export const RANK_SIGILS = {
+  // 1 chevron
+  bronze: [
+    '............', '............', '............', '.....##.....',
+    '....####....', '...##..##...', '..##....##..', '..#......#..',
+    '............', '............', '............', '............',
+  ],
+  // 2 chevrons
+  gold: [
+    '............', '.....##.....', '....####....', '...##..##...',
+    '..##....##..', '..#......#..', '.....##.....', '....####....',
+    '...##..##...', '..##....##..', '..#......#..', '............',
+  ],
+  // Triangle sur socle
+  plat: [
+    '.....##.....', '.....##.....', '....####....', '....#..#....',
+    '...##..##...', '...#....#...', '..##....##..', '..#......#..',
+    '.##########.', '.##########.', '............', '............',
+  ],
+  // Losange (gemme)
+  diam: [
+    '.....##.....', '....####....', '...##..##...', '..##....##..',
+    '.##......##.', '##........##', '.##......##.', '..##....##..',
+    '...##..##...', '....####....', '.....##.....', '............',
+  ],
+  // Hexagone
+  emer: [
+    '...######...', '..##....##..', '.##......##.', '##........##',
+    '##........##', '##........##', '##........##', '##........##',
+    '.##......##.', '..##....##..', '...######...', '............',
+  ],
+  // Étoile 4 branches
+  saph: [
+    '.....##.....', '.....##.....', '....####....', '....####....',
+    '##.######.##', '############', '##.######.##', '....####....',
+    '....####....', '.....##.....', '.....##.....', '............',
+  ],
+  // Couronne
+  ruby: [
+    '............', '##........##', '###......###', '####....####',
+    '#####..#####', '############', '############', '##.##..##.##',
+    '############', '############', '.##########.', '............',
+  ],
+  // Monolithe dense (le plus chargé)
+  onyx: [
+    '..########..', '.##########.', '############', '##.##..##.##',
+    '##.##..##.##', '############', '####....####', '##.######.##',
+    '############', '.##.####.##.', '..#.####.#..', '...######...',
+  ],
+};
 
-function rectsFrom(rows, fill) {
+function rectsFrom(rows, fill, ox = 0, oy = 0) {
   let out = '';
   rows.forEach((row, y) => {
     let x = 0;
@@ -226,7 +260,7 @@ function rectsFrom(rows, fill) {
       if (row[x] === '#') {
         let w = 1;
         while (x + w < row.length && row[x + w] === '#') w++;
-        out += `<rect x="${x}" y="${y}" width="${w}" height="1" fill="${fill}"/>`;
+        out += `<rect x="${x + ox}" y="${y + oy}" width="${w}" height="1" fill="${fill}"/>`;
         x += w;
       } else x++;
     }
@@ -234,7 +268,7 @@ function rectsFrom(rows, fill) {
   return out;
 }
 
-// Éclaircit/assombrit une couleur hex (facteur -1..1) pour le liseré et la gemme.
+// Éclaircit/assombrit une couleur hex (facteur -1..1).
 function shade(hex, f) {
   const h = String(hex).replace('#', '');
   const n = parseInt(h.length === 3 ? h.split('').map((c) => c + c).join('') : h, 16);
@@ -244,18 +278,21 @@ function shade(hex, f) {
   return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
 }
 
-// Badge 8-bit d'un rang. `color` = couleur du rang (RANK_META).
-export function pixelRankBadge(color, size = 120) {
-  const dark = shade(color, -0.55);
-  const light = shade(color, 0.45);
-  return `<svg viewBox="0 0 ${G} ${G}" width="${size}" height="${size}" shape-rendering="crispEdges" class="px-rank">
-    ${rectsFrom(SHIELD, dark)}
-    ${rectsFrom(SHIELD.map((r, y) => (y === 0 || y === G - 1 ? '............' : r.replace(/^(\.*)#/, '$1.').replace(/#(\.*)$/, '.$1'))), color)}
-    ${rectsFrom(GEM, light)}
-  </svg>`;
+// Badge de rang : sigil encadré de repères d'angle (façon fiche technique).
+export function pixelRankBadge(rankId, color, size = 120) {
+  const rows = RANK_SIGILS[rankId] || RANK_SIGILS.bronze;
+  const dim = shade(color, -0.45);
+  const S = 16; const O = 2; // sigil 12x12 centré dans un cadre 16x16
+  let out = rectsFrom(rows, color, O, O);
+  // Repères d'angle (crop marks)
+  const corner = (x, y, sx, sy) => `<rect x="${x}" y="${y}" width="3" height="1" fill="${dim}" transform="translate(${sx < 0 ? -2 : 0} 0)"/><rect x="${x}" y="${y}" width="1" height="3" fill="${dim}" transform="translate(0 ${sy < 0 ? -2 : 0})"/>`;
+  out += corner(0, 0, 1, 1);
+  out += corner(S - 1, 0, -1, 1);
+  out += corner(0, S - 1, 1, -1);
+  out += corner(S - 1, S - 1, -1, -1);
+  return `<svg viewBox="0 0 ${S} ${S}" width="${size}" height="${size}" shape-rendering="crispEdges" class="px-rank">${out}</svg>`;
 }
 
-// Puce compacte : même dessin, taille réduite.
-export function pixelRankChip(color, size = 30) {
-  return pixelRankBadge(color, size);
+export function pixelRankChip(rankId, color, size = 30) {
+  return pixelRankBadge(rankId, color, size);
 }

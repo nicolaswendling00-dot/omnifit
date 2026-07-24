@@ -7,7 +7,7 @@ import { RANK_ORDER, RANK_META, DIV_LP, ONYX_LP, rankBadge, estimateRankFromLift
 import { openExercisePicker } from './workout.js';
 import { backfillNutritionGoals } from './nutrition.js';
 
-const VERSION = '3.31';
+const VERSION = '3.32';
 
 function toggleRow(label, key, sub = '') {
   const s = store.userData.settings;
@@ -267,7 +267,7 @@ function ensurePixelFont() {
   const link = document.createElement('link');
   link.id = 'font-8bit';
   link.rel = 'stylesheet';
-  link.href = 'https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap';
+  link.href = 'https://fonts.googleapis.com/css2?family=VT323&display=swap';
   document.head.appendChild(link);
 }
 

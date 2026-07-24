@@ -45,15 +45,30 @@ let touchStartY = null;
 // de propagation (donc après celui de #app-container, qui le voit encore actif).
 const SWIPE_LOCK_ZONES = '.meal-row, .set-row, #meal-list, #s-exos, .swipe-lock, .no-swipe, .date-ribbon, .segment, input[type="range"]';
 let swipeLocked = false;
+let lockStartX = null;
+let lockStartY = null;
 
 document.addEventListener('touchstart', (e) => {
   if (e.target.closest && e.target.closest(SWIPE_LOCK_ZONES)) {
     swipeLocked = true;
     touchStartX = null; // annule un éventuel suivi déjà amorcé
+    lockStartX = e.touches[0].clientX;
+    lockStartY = e.touches[0].clientY;
   }
 }, { capture: true, passive: true });
 
-const releaseSwipeLock = () => { swipeLocked = false; };
+// Sur une zone verrouillée, on absorbe le glissement HORIZONTAL : cela empêche à
+// la fois le swipe d'onglet de l'app ET le geste de navigation natif d'iOS
+// (retour/avance de page), qui étaient déclenchés par un mouvement franc.
+// L'écouteur est non-passif (capture) pour pouvoir appeler preventDefault.
+document.addEventListener('touchmove', (e) => {
+  if (!swipeLocked || lockStartX == null || !e.cancelable) return;
+  const dx = e.touches[0].clientX - lockStartX;
+  const dy = e.touches[0].clientY - lockStartY;
+  if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 6) e.preventDefault();
+}, { capture: true, passive: false });
+
+const releaseSwipeLock = () => { swipeLocked = false; lockStartX = null; lockStartY = null; };
 document.addEventListener('touchend', releaseSwipeLock, { passive: true });
 document.addEventListener('touchcancel', releaseSwipeLock, { passive: true });
 
