@@ -4,7 +4,7 @@ import { calculateSMA } from '../utils/math.js';
 import { el, icons, openModal, toast, ringSVG, haptic } from '../utils/ui.js';
 import { macroGoals } from './nutrition.js';
 import { computeGlobalRank } from '../utils/globalRank.js';
-import { rankChip, rankFromLP, rankWings } from '../utils/ranks.js';
+import { rankBadge, rankFromLP } from '../utils/ranks.js';
 
 let weightChart = null;
 let smaVisible = true;
@@ -181,7 +181,7 @@ export function render(container) {
 
       <div class="card card-glow gr-card" id="gr-card">
         <div class="gr-top">
-          <div class="gr-badge">${rankWings(gr.rank.id, rankChip(gr.rank.id, 46), 46)}</div>
+          <div class="gr-badge">${rankBadge(gr.rank.id, 52)}</div>
           <div class="gr-info">
             <div class="gr-rank-name" style="color:${gr.rank.color}">${grRankLabel}</div>
             <div class="gr-lp">${gr.rank.lpNeeded ? `${gr.rank.lp} / ${gr.rank.lpNeeded} LP` : `${gr.rank.lp} LP`}</div>

@@ -366,21 +366,17 @@ assert(pages.settings.querySelector('#seg-shape [data-v="8bit"]'), 'Theme : form
 assert(pages.settings.querySelector('#seg-palette [data-v="light"]'), 'Couleur : palette claire presente');
 assert(!pages.settings.querySelector('#seg-density'), 'Densite : segment retire');
 
-console.log('== v3.33 : deux axes, ailettes, scroll dates ==');
+console.log('== v3.33 : deux axes, badge de rang, scroll dates ==');
 // 8-bit clair possible
 store.saveUserData({ settings: { shape: '8bit', palette: 'light' } });
 settings.applyTheme();
 assert(document.body.classList.contains('shape-8bit') && document.body.classList.contains('palette-light'), '8-bit clair : combinaison des deux axes');
 store.saveUserData({ settings: { shape: 'amoled', palette: 'dark' } });
 settings.applyTheme();
-// Ailettes de rang
-const rankMod2 = await import('./utils/ranks.js');
-const wB = rankMod2.rankWings('bronze', '<svg></svg>', 46);
-const wO = rankMod2.rankWings('onyx', '<svg></svg>', 46);
-assert(wB.includes('rank-wings'), 'Ailettes : rendues autour du badge');
-assert((wO.match(/<path/g) || []).length > (wB.match(/<path/g) || []).length, 'Ailettes : envergure croit avec le rang');
+// Badge de rang global : identique a celui des exercices (px-rank en 8-bit), sans ailettes
 home.render(pages.home);
-assert(pages.home.querySelector('.gr-badge .rank-wings'), 'Accueil : ailettes affichees sur le rang');
+assert(pages.home.querySelector('.gr-badge svg'), 'Accueil : badge de rang affiche');
+assert(!pages.home.querySelector('.gr-badge .rank-wings'), 'Accueil : ailettes retirees');
 // Scroll des dates non bloque par l'absorption
 const appTxt2 = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
 const absorb = (appTxt2.match(/SWIPE_ABSORB_ZONES\s*=\s*'([^']+)'/) || [])[1] || '';
