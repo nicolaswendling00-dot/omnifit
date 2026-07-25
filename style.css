@@ -50,21 +50,21 @@ body.density-spacious { --space: 24px; }
 /* --- PALETTE CLAIRE --- */
 body.palette-light {
   --bg: #F4F6FB; --surface: #FFFFFF; --surface-2: #EDF1F8;
-  --accent: #2AA7C4; --accent-2: #7C3AED;
-  --accent-rgb: 42, 167, 196;
+  --accent: #3AA0F0; --accent-2: #7C3AED;
+  --accent-rgb: 58, 160, 240;
   --on-accent: #FFFFFF;
   --grad-a: #7FD8F5; --grad-b: #8B5CF6;
   --violet-text: #6D28D9;
   --text: #10131C; --text-2: #5B6472;
   /* Bleu des valeurs (.num) volontairement plus soutenu que #7FD8F5, sinon
      illisible sur fond blanc. */
-  --num-color: #1E86A6;
+  --num-color: #2589E0;
   --success: #0D9668; --danger: #DC2626; --warning: #B45309;
-  --border: rgba(42, 167, 196, 0.22);
+  --border: rgba(58, 160, 240, 0.22);
   --header-bg: rgba(255, 255, 255, 0.92);
   --shadow-1: 0 4px 12px rgba(16, 19, 28, 0.08);
   --shadow-2: 0 8px 24px rgba(16, 19, 28, 0.12);
-  --shadow-glow: 0 12px 40px rgba(42, 167, 196, 0.10);
+  --shadow-glow: 0 12px 40px rgba(58, 160, 240, 0.10);
 }
 body.palette-light .scrim { background: rgba(16, 19, 28, 0.45); }
 body.palette-light .bc-cam-reticle { box-shadow: 0 0 0 2000px rgba(16, 19, 28, 0.35); }
@@ -720,7 +720,9 @@ body[data-page="1"] #fab-nutrition-wrap { display: flex; }
 /* ---------- Activité ---------- */
 .steps-hero { text-align: center; padding: 14px 0 10px; }
 .steps-hero .ring { margin: 0 auto; }
-.steps-hero .ring-label { font-size: 30px; }
+/* Le nombre de pas reprend la mise en forme du total de calories : gros, en
+   couleur accent, avec le même halo. Vaut pour tous les thèmes. */
+.steps-hero .ring-label { font-size: 30px; font-weight: 800; fill: var(--accent); filter: drop-shadow(0 0 6px rgba(var(--accent-rgb), 0.45)); }
 .steps-hero .ring-sub { font-size: 11px; fill: var(--text-2); }
 .steps-remaining { color: var(--text-2); font-size: 0.8rem; margin-top: 8px; }
 .steps-list-item { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid rgba(var(--accent-rgb), 0.08); font-size: 0.85rem; }
@@ -820,7 +822,7 @@ body.shape-8bit:not(.palette-light) {
 }
 /* 8-bit CLAIR : même structure, mais palette claire (héritée de palette-light) */
 body.shape-8bit.palette-light {
-  --accent: #7a3ff2; --accent-2: #2AA7C4;
+  --accent: #7a3ff2; --accent-2: #3AA0F0;
   --accent-rgb: 122, 63, 242;
   --num-color: #5b2bc4;
   --header-bg: #FFFFFF;
@@ -904,3 +906,32 @@ body.shape-8bit .gr-progress, body.shape-8bit .progress-bar {
 body.shape-8bit .gr-progress i, body.shape-8bit .progress-bar > div {
   background: repeating-linear-gradient(to right, var(--accent) 0, var(--accent) 6px, var(--surface-2) 6px, var(--surface-2) 8px) !important;
 }
+
+/* ============================================================
+   ACCUEIL SANS SCROLL
+   L'accueil doit tenir dans un seul écran. On resserre les espacements et on
+   laisse la grille de stats occuper la hauteur restante (flex), sans toucher
+   aux autres pages. Sécurité : si l'écran est vraiment petit, le scroll
+   redevient possible plutôt que de tronquer.
+   ============================================================ */
+.home-fit {
+  display: flex; flex-direction: column;
+  min-height: calc(100dvh - var(--nav-h) - var(--safe-b) - var(--safe-t) - var(--space) * 2);
+  gap: 10px;
+}
+.home-fit > * { margin-bottom: 0 !important; }
+.home-fit .page-title { margin-bottom: 2px; }
+.home-fit .gr-card { padding: 10px 12px; }
+.home-fit .gr-progress { margin: 8px 0 0; }
+/* La grille de stats prend l'espace disponible ; les cartes s'étirent */
+.home-fit .grid-2 { flex: 1 1 auto; align-content: stretch; gap: 10px; }
+.home-fit .grid-2 .stat-card { display: flex; flex-direction: column; justify-content: center; padding: 10px 12px; }
+.home-fit .stat-big { font-size: 1.5rem; }
+.home-fit .stat-head { font-size: 0.66rem; }
+/* Carte poids compacte */
+.home-fit .weight-hero { align-items: center; }
+.home-fit .w-now { font-size: 1.6rem; }
+.home-fit .card:last-child { padding: 12px; }
+/* Garde-fou : sur écrans très bas, on retrouve le scroll plutôt que de couper */
+@media (max-height: 620px) { .home-fit { min-height: 0; } }
+#page-home { padding-bottom: calc(var(--space) + var(--safe-b)); }

@@ -176,7 +176,7 @@ export function render(container) {
   const grProgress = gr.rank.lpNeeded ? gr.rank.lp / gr.rank.lpNeeded : 1;
 
   container.appendChild(el(`
-    <div>
+    <div class="home-fit">
       <div class="page-title"><h1>OmniFit</h1></div>
 
       <div class="card card-glow gr-card" id="gr-card">

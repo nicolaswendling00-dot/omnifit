@@ -389,5 +389,14 @@ assert(absorb.includes('.meal-row'), 'Swipe suppression : repas toujours absorbe
 // Densite figee en spacieux
 assert(document.body.classList.contains('density-spacious'), 'Densite : toujours spacieuse');
 
+console.log('== v3.34 : pas colores, bleu clair, accueil sans scroll ==');
+const cssV = fs.readFileSync(new URL('./style.css', import.meta.url), 'utf8');
+assert(/\.steps-hero \.ring-label \{[^}]*fill: var\(--accent\)/.test(cssV), 'Pas : nombre en couleur accent (comme calories)');
+assert(!/2aa7c4/i.test(cssV), 'Couleur : #2AA7C4 supprime partout');
+assert(cssV.includes('#3AA0F0'), 'Couleur : nouveau bleu ciel present');
+home.render(pages.home);
+assert(pages.home.querySelector('.home-fit'), 'Accueil : conteneur home-fit (sans scroll)');
+assert(/\.home-fit \{[^}]*display: flex/.test(cssV), 'Accueil : layout flex pour tenir sur un ecran');
+
 console.log(`\n===== RÉSULTAT : ${pass} OK / ${fail} FAIL =====`);
 process.exit(fail ? 1 : 0);
