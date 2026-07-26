@@ -927,9 +927,9 @@ body.shape-8bit .gr-progress i, body.shape-8bit .progress-bar > div {
 #page-home { overflow: hidden; padding-bottom: calc(10px + var(--safe-b)); padding-top: calc(var(--safe-t) + 10px); }
 .home-fit { display: flex; flex-direction: column; gap: 12px; height: calc(100dvh - var(--nav-h) - var(--safe-b) - var(--safe-t) - 20px); }
 .home-fit > * { margin-bottom: 0 !important; flex: 0 0 auto; }
-/* La grille de stats occupe l'espace restant mais SANS étirer les cartes
-   (elles restent alignées en haut, à leur taille normale). */
-.home-fit .grid-2 { flex: 1 1 auto; align-content: center; min-height: 0; }
+/* Blocs empilés en haut, à leur taille naturelle, avec un espacement régulier —
+   aucun étirement, aucun grand vide entre eux. */
+.home-fit .grid-2 { flex: 0 0 auto; align-content: start; min-height: 0; }
 /* Espacements internes légèrement resserrés pour tenir sans scroll — mais les
    cartes gardent leur taille naturelle (pas de hauteur forcée). */
 .home-fit .gr-card { padding: 12px 14px; }
