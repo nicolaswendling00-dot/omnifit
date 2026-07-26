@@ -408,16 +408,16 @@ assert(store.userData.nutrition.byDate[smD1].goal.protG === 135, 'Lissage : macr
 // jours recommandes = floor(|D|/200)
 assert(Math.floor(600 / 200) === 3, 'Lissage : jours recommandes floor(|D|/200)');
 
-// Calendrier nutrition
-// On reutilise la page nutrition existante : rendre dans un 2e conteneur
-// creerait des id en double (et querySelector scope echoue alors sous jsdom).
+// Ecart calorique dans le ruban de dates horizontal (plus de carte calendrier).
+// On reutilise la page nutrition existante (eviter les id en double sous jsdom).
 const nh = pages.nutrition;
-nutrition.render(nh);
-assert(nh.querySelector('#nut-cal'), 'Nutrition : calendrier present');
-assert(nh.querySelectorAll('.nut-cal .cal-day').length === 28, 'Nutrition : calendrier 28 jours');
-// bouton lisser present quand ecart courant > 100 : on force un gros ecart aujourd'hui
 store.addNutritionLog(todayISO(), { name: 'X (500 g)', baseName: 'X', meal: 'Snack', prot: 50, carbs: 300, fat: 120, fiber: 0, kcal: 2480, per100: { prot: 10, carbs: 60, fat: 24 }, weight: 500 });
 nutrition.render(nh);
+assert(!nh.querySelector('#nut-cal'), 'Nutrition : carte calendrier retiree');
+assert(nh.querySelectorAll('.date-chip').length === 15, 'Nutrition : ruban de dates conserve');
+const chipT = [...nh.querySelectorAll('.date-chip')].find((c) => c.dataset.date === todayISO());
+assert(chipT && chipT.querySelector('.d-diff'), 'Nutrition : ecart calorique affiche dans le ruban');
+assert(chipT.querySelector('.d-diff.bad'), 'Nutrition : gros ecart en rouge');
 assert(nh.querySelector('#btn-macro-goals'), 'Nutrition : bouton Objectifs macros toujours present');
 assert(nh.querySelector('.macro-actions'), 'Nutrition : conteneur macro-actions (deux boutons cote a cote)');
 

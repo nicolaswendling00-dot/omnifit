@@ -348,6 +348,12 @@ canvas { max-width: 100%; }
 .date-chip .d-num { display: block; font-weight: 800; font-size: 0.95rem; color: var(--text); font-variant-numeric: tabular-nums; }
 .date-chip.today .d-num { color: var(--accent); }
 .date-chip.active { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 12px rgba(var(--accent-rgb), 0.2); }
+/* Écart calorique du jour, sous le numéro : vert à ±100 kcal, rouge au-delà */
+.date-chip .d-diff { display: block; margin-top: 2px; font-size: 0.6rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; position: relative; }
+.date-chip .d-diff.ok { color: var(--success); }
+.date-chip .d-diff.bad { color: var(--danger); }
+.date-chip .d-diff.empty { color: var(--text-2); opacity: 0.4; }
+.date-chip .d-smoothed { display: inline-block; width: 4px; height: 4px; border-radius: 50%; background: var(--accent); margin-left: 3px; vertical-align: middle; }
 
 .meal-row { position: relative; overflow: hidden; border-radius: 10px; touch-action: pan-y; }
 .meal-item {
@@ -915,32 +921,20 @@ body.shape-8bit .gr-progress i, body.shape-8bit .progress-bar > div {
    aux autres pages. Sécurité : si l'écran est vraiment petit, le scroll
    redevient possible plutôt que de tronquer.
    ============================================================ */
-/* L'accueil occupe EXACTEMENT la hauteur visible : le conteneur de page ne
-   défile pas, et .home-fit remplit l'espace entre le haut et la barre de nav. */
-#page-home { overflow: hidden; padding-bottom: calc(8px + var(--safe-b)); padding-top: calc(var(--safe-t) + 8px); }
-.home-fit {
-  display: flex; flex-direction: column;
-  height: calc(100dvh - var(--nav-h) - var(--safe-b) - var(--safe-t) - 16px);
-  gap: 8px; overflow: hidden;
-}
+/* L'accueil ne défile pas. On ne fait PAS grossir les cartes (pas d'étirement
+   flex) : elles gardent leur taille naturelle, on resserre seulement les
+   espacements pour que tout tienne. */
+#page-home { overflow: hidden; padding-bottom: calc(10px + var(--safe-b)); padding-top: calc(var(--safe-t) + 10px); }
+.home-fit { display: flex; flex-direction: column; gap: 12px; height: calc(100dvh - var(--nav-h) - var(--safe-b) - var(--safe-t) - 20px); }
 .home-fit > * { margin-bottom: 0 !important; flex: 0 0 auto; }
-.home-fit .page-title { margin-bottom: 0; }
-.home-fit .gr-card { padding: 9px 12px; }
-.home-fit .gr-progress { margin: 7px 0 0; }
-/* La grille de stats prend l'espace disponible ; les cartes s'étirent */
-.home-fit .grid-2 { flex: 1 1 auto; align-content: stretch; gap: 8px; min-height: 0; }
-.home-fit .grid-2 .stat-card { display: flex; flex-direction: column; justify-content: center; padding: 8px 12px; min-height: 0; }
-.home-fit .stat-big { font-size: 1.45rem; }
-.home-fit .stat-head { font-size: 0.64rem; }
-/* Carte poids compacte */
-.home-fit .weight-hero { align-items: center; }
-.home-fit .w-now { font-size: 1.5rem; }
-.home-fit .card:last-child { padding: 10px 12px; flex: 0 0 auto; }
-/* Sécurité : sur écran vraiment bas, la police se réduit encore pour éviter tout débordement */
-@media (max-height: 640px) {
-  .home-fit .stat-big { font-size: 1.15rem; }
-  .home-fit { gap: 6px; }
-}
+/* La grille de stats occupe l'espace restant mais SANS étirer les cartes
+   (elles restent alignées en haut, à leur taille normale). */
+.home-fit .grid-2 { flex: 1 1 auto; align-content: center; min-height: 0; }
+/* Espacements internes légèrement resserrés pour tenir sans scroll — mais les
+   cartes gardent leur taille naturelle (pas de hauteur forcée). */
+.home-fit .gr-card { padding: 12px 14px; }
+.home-fit .stat-card { padding: 12px; }
+.home-fit .card:last-child { padding: 14px; }
 
 /* ============================================================
    TRANSITIONS & MICRO-INTERACTIONS
@@ -1023,14 +1017,3 @@ body.shape-8bit .gr-progress i, body.shape-8bit .progress-bar > div {
 .smooth-row b.over { color: var(--danger); }
 .smooth-row b.under { color: var(--success); }
 
-/* Calendrier nutrition : écart calorique par case */
-.nut-cal .cal-wd { text-align: center; font-size: 0.6rem; color: var(--text-2); font-weight: 700; padding-bottom: 2px; }
-.nut-cal .cal-day { min-height: 46px; cursor: pointer; gap: 2px; }
-.nut-cal .cal-day.has-data.diff-ok { border-color: var(--success); background: rgba(13, 150, 104, 0.12); color: var(--text); }
-.nut-cal .cal-day.has-data.diff-bad { border-color: var(--danger); background: rgba(220, 38, 38, 0.12); color: var(--text); }
-.nut-cal .cal-day.sel { box-shadow: inset 0 0 0 2px var(--accent); }
-.nut-cal .cal-diff { font-size: 0.56rem; font-weight: 800; line-height: 1; }
-.nut-cal .cal-diff.ok { color: var(--success); }
-.nut-cal .cal-diff.bad { color: var(--danger); }
-.nut-cal .cal-empty { min-height: 46px; }
-.nut-cal .cal-smoothed { position: absolute; top: 3px; right: 3px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); animation: popIn 300ms var(--spring) both; }

@@ -789,47 +789,6 @@ function ensureFab() {
   history.onclick = () => { setOpen(false); openHistorySheet(currentRerender); };
 }
 
-// Calendrier des 28 derniers jours : chaque case montre l'écart calorique
-// (consommé − objectif) du jour. Vert si |écart| ≤ 100 kcal, rouge sinon.
-// Un point signale les jours dont l'objectif a été lissé.
-function renderNutritionCalendar(host, rerender) {
-  if (!host) return;
-  const WD = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
-  // En-tête jours de semaine
-  let html = WD.map((d) => `<div class="cal-wd">${d}</div>`).join('');
-  const today = new Date();
-  const start = new Date(today); start.setDate(today.getDate() - 27);
-  // Aligner le début sur un lundi
-  const startDow = (start.getDay() + 6) % 7; // 0 = lundi
-  for (let i = 0; i < startDow; i++) html += '<div class="cal-empty"></div>';
-
-  for (let i = 0; i < 28; i++) {
-    const dt = new Date(start); dt.setDate(start.getDate() + i);
-    const iso = dt.toISOString().slice(0, 10);
-    const day = store.userData.nutrition.byDate[iso];
-    const isToday = iso === todayISO();
-    const hasData = day && day.meals && day.meals.length;
-    let inner = `<span class="cal-dnum">${iso.slice(8)}</span>`;
-    let cls = '';
-    if (hasData) {
-      const totals = store.dayTotals(iso);
-      const goal = macroGoalsFor(iso);
-      const diff = Math.round(totals.kcal - goal.kcalGoal); // + = au-dessus
-      const ok = Math.abs(diff) <= 100;
-      cls = ' has-data ' + (ok ? 'diff-ok' : 'diff-bad');
-      inner += `<span class="cal-diff ${ok ? 'ok' : 'bad'}">${diff > 0 ? '+' : ''}${diff}</span>`;
-      if (day.smoothed) inner += '<span class="cal-smoothed" title="Objectif lissé"></span>';
-    }
-    html += `<button class="cal-day${cls}${isToday ? ' is-today' : ''}${iso === selectedDate ? ' sel' : ''}" data-date="${iso}">${inner}</button>`;
-  }
-  host.innerHTML = html;
-  host.addEventListener('click', (e) => {
-    const b = e.target.closest('.cal-day'); if (!b) return;
-    selectedDate = b.dataset.date;
-    rerender();
-  });
-}
-
 export function render(container) {
   const rerender = () => render(container);
   currentRerender = rerender;
@@ -843,8 +802,17 @@ export function render(container) {
 
   const ribbon = [...Array(15)].map((_, i) => {
     const d = todayISO(i - 14);
+    const dDay = store.userData.nutrition.byDate[d];
+    let diffHtml = '<span class="d-diff empty">·</span>';
+    if (dDay && dDay.meals && dDay.meals.length) {
+      const dTot = store.dayTotals(d);
+      const dGoal = macroGoalsFor(d);
+      const diff = Math.round(dTot.kcal - dGoal.kcalGoal); // + = au-dessus de l'objectif
+      const ok = Math.abs(diff) <= 100;
+      diffHtml = `<span class="d-diff ${ok ? 'ok' : 'bad'}">${diff > 0 ? '+' : ''}${diff}${dDay.smoothed ? '<i class="d-smoothed"></i>' : ''}</span>`;
+    }
     return `<button class="date-chip ${d === selectedDate ? 'active' : ''} ${d === todayISO() ? 'today' : ''}" data-date="${d}">
-      ${fmtDateShort(d).split(' ')[0]}<span class="d-num">${d.slice(8)}</span>
+      ${fmtDateShort(d).split(' ')[0]}<span class="d-num">${d.slice(8)}</span>${diffHtml}
     </button>`;
   }).join('');
 
@@ -895,19 +863,6 @@ export function render(container) {
         </div>
         <div id="meal-list">
           ${meals.length ? '' : '<div class="empty-state">Aucun repas.<br>Appuie sur + pour en ajouter.</div>'}
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-row collapse-head" id="cal-toggle" style="margin-bottom:8px;cursor:pointer">
-          <h3 style="margin:0;display:flex;align-items:center;gap:6px"><span class="collapse-caret">${icons.chevron}</span> Calendrier</h3>
-          <span class="muted" style="font-size:0.7rem">écart / objectif</span>
-        </div>
-        <div class="collapse-body">
-          <div class="cal-grid nut-cal" id="nut-cal"></div>
-          <div class="muted" style="font-size:0.66rem;margin-top:8px;text-align:center">
-            <span style="color:var(--success)">vert</span> : à ±100 kcal · <span style="color:var(--danger)">rouge</span> : au-delà
-          </div>
         </div>
       </div>
     </div>`));
@@ -1022,17 +977,6 @@ export function render(container) {
   container.querySelector('#btn-macro-goals').addEventListener('click', () => openMacroGoalsSheet(rerender));
   const smoothBtn = container.querySelector('#btn-smooth');
   if (smoothBtn) smoothBtn.addEventListener('click', () => openSmoothingSheet(rerender, selectedDate, remaining));
-
-  // --- Calendrier : écart calorique par jour ---
-  renderNutritionCalendar(container.querySelector('#nut-cal'), rerender);
-  const calCard = container.querySelector('#cal-toggle').closest('.card');
-  const calOpen = store.userData.settings.nutCalOpen === true;
-  calCard.classList.toggle('collapsed', !calOpen);
-  container.querySelector('#cal-toggle').addEventListener('click', () => {
-    const next = !(store.userData.settings.nutCalOpen === true);
-    store.saveUserData({ settings: { nutCalOpen: next } });
-    calCard.classList.toggle('collapsed', !next);
-  });
   container.querySelector('#btn-recipes').addEventListener('click', () => openRecipesSheet(rerender));
   ensureFab();
 }
