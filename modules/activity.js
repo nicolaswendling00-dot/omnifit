@@ -1,5 +1,5 @@
 // OmniFit — PAGE 3 : Activité (pas)
-import { store, todayISO } from '../utils/storage.js';
+import { store, todayISO, parseStepsPayload } from '../utils/storage.js';
 import { calculateTrend } from '../utils/math.js';
 import { el, icons, openModal, toast, ringSVG, fmtDateShort, haptic } from '../utils/ui.js';
 
@@ -118,6 +118,67 @@ function monthStats() {
   return { weekAvg, record, activeDays, trend };
 }
 
+// Import des pas depuis le presse-papier (rempli par un raccourci iOS lisant
+// l'app Santé). Accepte un nombre seul (→ aujourd'hui) ou plusieurs jours au
+// format « AAAA-MM-JJ:pas » (une ligne ou séparés par « ; »).
+async function importStepsFromClipboard(rerender) {
+  let text = '';
+  try {
+    text = await navigator.clipboard.readText();
+  } catch (_) {
+    // Lecture refusée (permission / geste utilisateur) → on montre le guide.
+    openStepsGuide(rerender);
+    return;
+  }
+  const entries = parseStepsPayload(text);
+  if (!entries.length) {
+    // Presse-papier vide ou non reconnu → guide, avec saisie manuelle possible.
+    openStepsGuide(rerender);
+    return;
+  }
+  for (const { date, count } of entries) store.addStepsLog(date, count);
+  haptic();
+  const todayEntry = entries.find((e) => e.date === todayISO());
+  toast(
+    entries.length === 1
+      ? `${entries[0].count.toLocaleString('fr-FR')} pas importés`
+      : `${entries.length} jours importés${todayEntry ? ` · ${todayEntry.count.toLocaleString('fr-FR')} aujourd'hui` : ''}`,
+    'success',
+  );
+  rerender();
+}
+
+// Guide de configuration du raccourci iOS (affiché si le presse-papier est vide
+// ou inaccessible).
+function openStepsGuide(rerender) {
+  const content = el(`<div class="steps-guide">
+    <p class="muted" style="font-size:0.82rem;line-height:1.5;margin-bottom:12px">
+      iOS interdit à une app web de lire Santé directement. Un petit <b>raccourci</b> copie tes pas ;
+      ce bouton les récupère ensuite depuis le presse-papier.
+    </p>
+    <div class="guide-step"><span class="guide-n">1</span><div>Ouvre l'app <b>Raccourcis</b> → <b>＋</b> pour en créer un.</div></div>
+    <div class="guide-step"><span class="guide-n">2</span><div>Ajoute l'action <b>« Rechercher des échantillons de Santé »</b> : type <b>Pas</b>, période <b>Aujourd'hui</b>, option <b>Calculer la somme</b>.</div></div>
+    <div class="guide-step"><span class="guide-n">3</span><div>Ajoute <b>« Copier dans le presse-papiers »</b> (la somme de l'étape 2).</div></div>
+    <div class="guide-step"><span class="guide-n">4</span><div>Nomme-le p.ex. « Pas → OmniFit ». Lance-le, reviens ici, touche <b>Importer</b>.</div></div>
+    <div class="guide-auto">
+      <b>Rendre ça (presque) automatique</b>
+      <div class="guide-step"><span class="guide-n">A</span><div>Onglet <b>Automatisation</b> → <b>＋</b> → <b>App</b> → choisis <b>OmniFit</b> → <b>Est ouverte</b>.</div></div>
+      <div class="guide-step"><span class="guide-n">B</span><div>Action <b>« Exécuter le raccourci »</b> → ton raccourci. Décoche <b>« Demander avant d'exécuter »</b>.</div></div>
+      <div class="guide-step"><span class="guide-n">C</span><div>Désormais, à chaque ouverture de l'app, tes pas sont copiés : il ne reste qu'à toucher <b>Importer</b>.</div></div>
+    </div>
+    <div class="guide-multi muted" style="font-size:0.76rem;line-height:1.5;margin-top:10px">
+      <b>Astuce 7 jours :</b> pour combler les trous, fais une boucle « Répéter 7 fois » qui ajoute une ligne
+      <code>AAAA-MM-JJ:pas</code> par jour, puis copie le tout. L'import lit toutes les lignes d'un coup.
+    </div>
+    <button class="btn btn-secondary btn-block" id="guide-manual" style="margin-top:14px">${icons.edit} Saisir manuellement</button>
+  </div>`);
+  const m = openModal({ title: 'Importer les pas', content, actions: [{ label: 'Fermer' }] });
+  content.querySelector('#guide-manual').addEventListener('click', () => {
+    if (m && m.close) m.close();
+    openLogStepsModal(rerender);
+  });
+}
+
 export function render(container) {
   const rerender = () => render(container);
   const today = todayISO();
@@ -132,6 +193,7 @@ export function render(container) {
       <div class="page-title">
         <h1>Activité</h1>
         <div style="display:flex;gap:6px">
+          <button class="btn btn-ghost btn-sm" id="btn-import-steps" title="Importer les pas depuis Santé">${icons.download}</button>
           <button class="btn btn-ghost btn-sm" id="btn-step-goal">${icons.edit} Objectif</button>
           <button class="btn btn-primary btn-sm" id="btn-log-steps">${icons.plus} Log</button>
         </div>
@@ -189,6 +251,7 @@ export function render(container) {
 
   container.querySelector('#btn-log-steps').addEventListener('click', () => openLogStepsModal(rerender));
   container.querySelector('#btn-step-goal').addEventListener('click', () => openStepGoalModal(rerender));
+  container.querySelector('#btn-import-steps').addEventListener('click', () => importStepsFromClipboard(rerender));
   container.querySelector('#view-toggle').addEventListener('click', (e) => {
     const b = e.target.closest('button');
     if (!b) return;

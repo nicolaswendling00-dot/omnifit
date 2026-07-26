@@ -79,6 +79,7 @@ assert(pages.workout.querySelectorAll('#calendar-host .cal-grid .cal-day').lengt
 
 activity.render(pages.activity);
 assert(pages.activity.querySelector('.steps-hero') && pages.activity.querySelector('#steps-chart'), 'Activité : hero + histogramme');
+assert(pages.activity.querySelector('#btn-import-steps'), 'Activité : bouton Importer les pas (Santé)');
 assert(!pages.activity.querySelector('.mono'), 'Activité : plus de .mono');
 
 settings.render(pages.settings);

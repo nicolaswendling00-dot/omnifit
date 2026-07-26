@@ -1017,3 +1017,10 @@ body.shape-8bit .gr-progress i, body.shape-8bit .progress-bar > div {
 .smooth-row b.over { color: var(--danger); }
 .smooth-row b.under { color: var(--success); }
 
+
+/* Guide d'import des pas */
+.steps-guide .guide-step { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; font-size: 0.84rem; line-height: 1.4; }
+.steps-guide .guide-n { flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: var(--on-accent); font-weight: 800; font-size: 0.72rem; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
+.steps-guide .guide-auto { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.steps-guide .guide-auto > b { display: block; margin-bottom: 6px; color: var(--accent); font-size: 0.82rem; }
+.steps-guide code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
