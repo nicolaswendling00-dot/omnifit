@@ -22,6 +22,7 @@
   --warning: #F59E0B;
   --border: rgba(var(--accent-rgb), 0.15);
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --dur-fast: 200ms;
   --dur-med: 400ms;
   --r-card: 12px;
@@ -914,24 +915,122 @@ body.shape-8bit .gr-progress i, body.shape-8bit .progress-bar > div {
    aux autres pages. Sécurité : si l'écran est vraiment petit, le scroll
    redevient possible plutôt que de tronquer.
    ============================================================ */
+/* L'accueil occupe EXACTEMENT la hauteur visible : le conteneur de page ne
+   défile pas, et .home-fit remplit l'espace entre le haut et la barre de nav. */
+#page-home { overflow: hidden; padding-bottom: calc(8px + var(--safe-b)); padding-top: calc(var(--safe-t) + 8px); }
 .home-fit {
   display: flex; flex-direction: column;
-  min-height: calc(100dvh - var(--nav-h) - var(--safe-b) - var(--safe-t) - var(--space) * 2);
-  gap: 10px;
+  height: calc(100dvh - var(--nav-h) - var(--safe-b) - var(--safe-t) - 16px);
+  gap: 8px; overflow: hidden;
 }
-.home-fit > * { margin-bottom: 0 !important; }
-.home-fit .page-title { margin-bottom: 2px; }
-.home-fit .gr-card { padding: 10px 12px; }
-.home-fit .gr-progress { margin: 8px 0 0; }
+.home-fit > * { margin-bottom: 0 !important; flex: 0 0 auto; }
+.home-fit .page-title { margin-bottom: 0; }
+.home-fit .gr-card { padding: 9px 12px; }
+.home-fit .gr-progress { margin: 7px 0 0; }
 /* La grille de stats prend l'espace disponible ; les cartes s'étirent */
-.home-fit .grid-2 { flex: 1 1 auto; align-content: stretch; gap: 10px; }
-.home-fit .grid-2 .stat-card { display: flex; flex-direction: column; justify-content: center; padding: 10px 12px; }
-.home-fit .stat-big { font-size: 1.5rem; }
-.home-fit .stat-head { font-size: 0.66rem; }
+.home-fit .grid-2 { flex: 1 1 auto; align-content: stretch; gap: 8px; min-height: 0; }
+.home-fit .grid-2 .stat-card { display: flex; flex-direction: column; justify-content: center; padding: 8px 12px; min-height: 0; }
+.home-fit .stat-big { font-size: 1.45rem; }
+.home-fit .stat-head { font-size: 0.64rem; }
 /* Carte poids compacte */
 .home-fit .weight-hero { align-items: center; }
-.home-fit .w-now { font-size: 1.6rem; }
-.home-fit .card:last-child { padding: 12px; }
-/* Garde-fou : sur écrans très bas, on retrouve le scroll plutôt que de couper */
-@media (max-height: 620px) { .home-fit { min-height: 0; } }
-#page-home { padding-bottom: calc(var(--space) + var(--safe-b)); }
+.home-fit .w-now { font-size: 1.5rem; }
+.home-fit .card:last-child { padding: 10px 12px; flex: 0 0 auto; }
+/* Sécurité : sur écran vraiment bas, la police se réduit encore pour éviter tout débordement */
+@media (max-height: 640px) {
+  .home-fit .stat-big { font-size: 1.15rem; }
+  .home-fit { gap: 6px; }
+}
+
+/* ============================================================
+   TRANSITIONS & MICRO-INTERACTIONS
+   Rendre l'app vivante : entrées animées des panneaux, apparition en cascade
+   des cartes/listes, retour tactile sur les boutons. Respecte
+   prefers-reduced-motion.
+   ============================================================ */
+/* Sheet : léger rebond à l'ouverture */
+.sheet-scrim.visible .sheet { transition: transform 360ms var(--spring); }
+/* Modale : petit dépassement d'échelle façon pop */
+.scrim.visible .modal { transition: transform 320ms var(--spring); }
+
+/* Boutons : enfoncement + retour ressort */
+.btn { transition: transform var(--dur-fast) var(--spring), box-shadow var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
+.btn:active { transform: scale3d(0.94, 0.94, 1); }
+.icon-btn { transition: transform var(--dur-fast) var(--spring), color var(--dur-fast) var(--ease); }
+.icon-btn:active { transform: scale3d(0.88, 0.88, 1); }
+.segment button { transition: color var(--dur-fast) var(--ease), background var(--dur-med) var(--spring); }
+.date-chip { transition: transform var(--dur-fast) var(--spring), background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
+.date-chip:active { transform: scale3d(0.9, 0.9, 1); }
+.nav-btn { transition: transform var(--dur-fast) var(--spring), color var(--dur-fast) var(--ease); }
+.nav-btn:active { transform: scale3d(0.85, 0.85, 1); }
+
+/* Cartes : apparition douce à l'entrée d'une page */
+@keyframes cardIn { from { opacity: 0; transform: translate3d(0, 14px, 0); } to { opacity: 1; transform: none; } }
+.page > div > .card,
+.page > div > .grid-2,
+.page > div > .nutrition-header,
+.home-fit > .card,
+.home-fit > .gr-card,
+.home-fit > .grid-2 { animation: cardIn 380ms var(--ease) both; }
+/* Cascade : chaque bloc entre légèrement après le précédent */
+.page > div > *:nth-child(1), .home-fit > *:nth-child(1) { animation-delay: 0ms; }
+.page > div > *:nth-child(2), .home-fit > *:nth-child(2) { animation-delay: 45ms; }
+.page > div > *:nth-child(3), .home-fit > *:nth-child(3) { animation-delay: 90ms; }
+.page > div > *:nth-child(4), .home-fit > *:nth-child(4) { animation-delay: 135ms; }
+.page > div > *:nth-child(5), .home-fit > *:nth-child(5) { animation-delay: 180ms; }
+
+/* Items de liste (repas, historique, réglages) : apparition en cascade */
+@keyframes itemIn { from { opacity: 0; transform: translate3d(0, 10px, 0); } to { opacity: 1; transform: none; } }
+.meal-row, .hist-item, .recipe-item, .steps-list-item, .set-row { animation: itemIn 300ms var(--ease) both; }
+.meal-row:nth-child(2), .hist-item:nth-child(2) { animation-delay: 30ms; }
+.meal-row:nth-child(3), .hist-item:nth-child(3) { animation-delay: 60ms; }
+.meal-row:nth-child(4), .hist-item:nth-child(4) { animation-delay: 90ms; }
+.meal-row:nth-child(5), .hist-item:nth-child(5) { animation-delay: 120ms; }
+.meal-row:nth-child(n+6), .hist-item:nth-child(n+6) { animation-delay: 150ms; }
+
+/* Toast : glisse depuis le bas */
+@keyframes toastIn { from { opacity: 0; transform: translate3d(-50%, 20px, 0); } to { opacity: 1; transform: translate3d(-50%, 0, 0); } }
+
+/* Chip de repas / recette : pression */
+.recipe-chip, .hist-add, .fiber-tag { transition: transform var(--dur-fast) var(--spring); }
+.recipe-chip:active { transform: scale3d(0.92, 0.92, 1); }
+
+/* Anneaux : la progression s'anime déjà ; on ajoute un léger fondu */
+.ring-fg { transition: stroke-dashoffset 700ms var(--ease); }
+
+/* Le lissage : pastille du calendrier qui apparaît */
+@keyframes popIn { from { opacity: 0; transform: scale3d(0.6, 0.6, 1); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; animation-delay: 0ms !important; transition-duration: 0.001ms !important; }
+}
+
+/* Bouton « Objectifs macros » + bouton « Lisser » côte à côte, sans que le
+   premier ne bouge (il garde sa largeur ; le second s'ajoute à droite). */
+.macro-actions { display: flex; gap: 6px; align-items: stretch; }
+.macro-actions #btn-macro-goals { flex: 1 1 auto; }
+.macro-actions #btn-smooth { flex: 0 0 auto; width: 44px; display: inline-flex; align-items: center; justify-content: center; }
+.macro-actions #btn-smooth svg { width: 18px; height: 18px; }
+
+/* Sheet de lissage */
+.smooth-head { text-align: center; margin-bottom: 6px; }
+.smooth-delta { font-size: 2rem; font-weight: 800; }
+.smooth-delta.over { color: var(--danger); }
+.smooth-delta.under { color: var(--success); }
+.smooth-preview { margin-top: 12px; border: 1px solid var(--border); border-radius: 12px; padding: 6px 12px; }
+.smooth-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+.smooth-row:last-child { border-bottom: none; }
+.smooth-row b.over { color: var(--danger); }
+.smooth-row b.under { color: var(--success); }
+
+/* Calendrier nutrition : écart calorique par case */
+.nut-cal .cal-wd { text-align: center; font-size: 0.6rem; color: var(--text-2); font-weight: 700; padding-bottom: 2px; }
+.nut-cal .cal-day { min-height: 46px; cursor: pointer; gap: 2px; }
+.nut-cal .cal-day.has-data.diff-ok { border-color: var(--success); background: rgba(13, 150, 104, 0.12); color: var(--text); }
+.nut-cal .cal-day.has-data.diff-bad { border-color: var(--danger); background: rgba(220, 38, 38, 0.12); color: var(--text); }
+.nut-cal .cal-day.sel { box-shadow: inset 0 0 0 2px var(--accent); }
+.nut-cal .cal-diff { font-size: 0.56rem; font-weight: 800; line-height: 1; }
+.nut-cal .cal-diff.ok { color: var(--success); }
+.nut-cal .cal-diff.bad { color: var(--danger); }
+.nut-cal .cal-empty { min-height: 46px; }
+.nut-cal .cal-smoothed { position: absolute; top: 3px; right: 3px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); animation: popIn 300ms var(--spring) both; }

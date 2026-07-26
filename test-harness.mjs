@@ -18,7 +18,8 @@ global.FileReader = window.FileReader;
 global.HTMLElement = window.HTMLElement;
 
 let chartCount = 0;
-global.Chart = class { constructor() { chartCount++; } destroy() {} };
+let lastChartCfg = null;
+global.Chart = class { constructor(c, cfg) { chartCount++; lastChartCfg = cfg; } destroy() {} };
 window.Chart = global.Chart;
 
 let pass = 0, fail = 0;
@@ -393,6 +394,82 @@ assert(cssV.includes('#3AA0F0'), 'Couleur : nouveau bleu ciel present');
 home.render(pages.home);
 assert(pages.home.querySelector('.home-fit'), 'Accueil : conteneur home-fit (sans scroll)');
 assert(/\.home-fit \{[^}]*display: flex/.test(cssV), 'Accueil : layout flex pour tenir sur un ecran');
+
+console.log('== v3.36 : lissage, calendrier, historique, transitions ==');
+// Lissage : logique de stockage
+// Dates isolees (annee 2020) pour ne pas heurter l'etat des tests precedents
+const srcD = '2020-03-10';
+store.userData.nutrition.byDate[srcD] = { meals: [{ id: 'sm1', kcal: 2600, prot: 150, carbs: 300, fat: 80 }], goal: { kcalGoal: 2000, protG: 150, carbsG: 200, fatG: 60 } };
+store.applyCalorieSmoothing(srcD, 2000 - 2600, 3, -200, { kcalGoal: 2000, protG: 150, carbsG: 200, fatG: 60 });
+const smD1 = '2020-03-11';
+assert(store.userData.nutrition.byDate[smD1].goal.kcalGoal === 1800, 'Lissage : objectif du jour suivant reduit (-200)');
+assert(store.userData.nutrition.byDate[smD1].smoothed && store.userData.nutrition.byDate[smD1].smoothed.delta === -200, 'Lissage : jour marque comme lisse');
+assert(store.userData.nutrition.byDate[smD1].goal.protG === 135, 'Lissage : macros ajustees proportionnellement');
+// jours recommandes = floor(|D|/200)
+assert(Math.floor(600 / 200) === 3, 'Lissage : jours recommandes floor(|D|/200)');
+
+// Calendrier nutrition
+// On reutilise la page nutrition existante : rendre dans un 2e conteneur
+// creerait des id en double (et querySelector scope echoue alors sous jsdom).
+const nh = pages.nutrition;
+nutrition.render(nh);
+assert(nh.querySelector('#nut-cal'), 'Nutrition : calendrier present');
+assert(nh.querySelectorAll('.nut-cal .cal-day').length === 28, 'Nutrition : calendrier 28 jours');
+// bouton lisser present quand ecart courant > 100 : on force un gros ecart aujourd'hui
+store.addNutritionLog(todayISO(), { name: 'X (500 g)', baseName: 'X', meal: 'Snack', prot: 50, carbs: 300, fat: 120, fiber: 0, kcal: 2480, per100: { prot: 10, carbs: 60, fat: 24 }, weight: 500 });
+nutrition.render(nh);
+assert(nh.querySelector('#btn-macro-goals'), 'Nutrition : bouton Objectifs macros toujours present');
+assert(nh.querySelector('.macro-actions'), 'Nutrition : conteneur macro-actions (deux boutons cote a cote)');
+
+// Historique : selecteur de repas + memorisation du dernier type
+store.saveUserData({ settings: { lastMealType: 'Déjeuner' } });
+assert(store.userData.settings.lastMealType === 'Déjeuner', 'Historique : dernier type de repas memorise');
+
+// Transitions : keyframes definis
+const cssTx = fs.readFileSync(new URL('./style.css', import.meta.url), 'utf8');
+assert(/@keyframes cardIn/.test(cssTx), 'Transitions : animation cardIn definie');
+assert(/@keyframes itemIn/.test(cssTx), 'Transitions : animation itemIn (listes) definie');
+assert(/--spring:/.test(cssTx), 'Transitions : courbe spring definie');
+assert(/prefers-reduced-motion/.test(cssTx), 'Transitions : respect de prefers-reduced-motion');
+
+// Accueil sans scroll : overflow hidden
+assert(/#page-home \{[^}]*overflow: hidden/.test(cssTx), 'Accueil : page non scrollable (overflow hidden)');
+assert(/\.home-fit \{[^}]*height: calc/.test(cssTx), 'Accueil : hauteur verrouillee');
+
+// Historique : selecteur de repas + ajout direct avec la quantite precedente
+store.addNutritionLog('2020-05-01', { name: 'Boulgour (250 g)', baseName: 'Boulgour', meal: 'Déjeuner', prot: 6.5, carbs: 70, fat: 0.8, fiber: 1, kcal: 313, per100: { prot: 2.6, carbs: 28, fat: 0.3, fiber: 0.4 }, weight: 250 });
+store.saveUserData({ settings: { lastMealType: 'Dîner' } });
+nutrition.render(pages.nutrition);
+document.getElementById('fab-nutrition').click();
+document.getElementById('fab-history').click();
+const histSheet = document.querySelector('.sheet');
+assert(histSheet && histSheet.querySelectorAll('#h-cat button').length === 4, 'Historique : 4 boutons de repas en haut');
+const histActive = [...histSheet.querySelectorAll('#h-cat button')].find((b) => b.classList.contains('active'));
+assert(histActive && histActive.dataset.v === 'Dîner', 'Historique : repas par defaut = dernier utilise');
+// On cible l'entree « Riz » (l'historique liste d'abord les aliments les plus recents)
+const histItem = [...histSheet.querySelectorAll('.hist-item')].find((it) => it.textContent.includes('Boulgour'));
+assert(histItem && histItem.textContent.includes('250 g'), 'Historique : quantite precedente affichee');
+const beforeN = (store.userData.nutrition.byDate[todayISO()] || { meals: [] }).meals.length;
+histItem.querySelector('[data-quick]').click();
+const addedMeal = store.userData.nutrition.byDate[todayISO()].meals.slice(-1)[0];
+assert(store.userData.nutrition.byDate[todayISO()].meals.length === beforeN + 1, 'Historique : + ajoute directement');
+assert(addedMeal.weight === 250, 'Historique : meme quantite que la fois precedente');
+assert(addedMeal.meal === 'Dîner', 'Historique : ajoute au repas selectionne');
+clearOverlays();
+
+// Graphe de poids : cercle creux pour les jours lisses
+store.userData.nutrition.byDate[todayISO()].smoothed = { delta: -150, from: '2020-05-01' };
+home.render(pages.home);
+pages.home.querySelector('#btn-chart').click();
+const chartModal = document.querySelector('.modal');
+chartModal.querySelector('#btn-toggle-cal').click();
+const calDs = lastChartCfg.data.datasets.find((d) => d.label === 'Calories');
+assert(calDs && Array.isArray(calDs.pointBackgroundColor), 'Graphe : couleurs de points par jour');
+const chartDays = [...Array(14)].map((_, i) => todayISO(i - 13));
+const iSm = chartDays.indexOf(todayISO());
+assert(calDs.pointBackgroundColor[iSm] === 'transparent', 'Graphe : jour lisse = cercle creux');
+assert(calDs.pointBorderColor[iSm] === '#FB923C', 'Graphe : contour du cercle creux visible');
+clearOverlays();
 
 console.log(`\n===== RÉSULTAT : ${pass} OK / ${fail} FAIL =====`);
 process.exit(fail ? 1 : 0);

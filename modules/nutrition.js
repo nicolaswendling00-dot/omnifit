@@ -16,6 +16,14 @@ const C_FAT = '#8B5CF6';
 const C_FIBER = '#22C55E';
 
 const MEAL_TYPES = ['Petit-Déjeuner', 'Déjeuner', 'Dîner', 'Snack'];
+// Dernier type de repas auquel on a ajouté quelque chose (persisté entre sessions
+// via les réglages) : sert de sélection par défaut dans l'historique.
+function lastMealType() {
+  return store.userData.settings.lastMealType || defaultMealType();
+}
+function rememberMealType(t) {
+  if (MEAL_TYPES.includes(t)) store.saveUserData({ settings: { lastMealType: t } });
+}
 function defaultMealType() {
   const h = new Date().getHours();
   if (h < 11) return 'Petit-Déjeuner';
@@ -389,6 +397,7 @@ function openAddMealSheet(rerender, prefill = null) {
       toast('Repas modifié', 'success');
     } else {
       store.addNutritionLog(selectedDate, payload);
+      rememberMealType(cat);
     }
     if (form.querySelector('#m-save-recipe').checked) {
       store.saveRecipe({ id: crypto.randomUUID(), name: bn, prot: v.per100.prot, carbs: v.per100.carbs, fat: v.per100.fat, fiber: v.per100.fiber });
@@ -401,19 +410,89 @@ function openAddMealSheet(rerender, prefill = null) {
 }
 
 // ============================================================
-// HISTORIQUE DES ALIMENTS — sheet (livre ouvert) : ré-ajout rapide
+// LISSAGE CALORIQUE — répartit un excès/déficit sur plusieurs jours
+// `remaining` = objectif - consommé du jour source (signé) :
+//   remaining < 0 → excès mangé (on retirera des calories les jours suivants)
+//   remaining > 0 → déficit    (on ajoutera des calories les jours suivants)
+// ============================================================
+function openSmoothingSheet(rerender, sourceDate, remaining) {
+  const D = Math.round(remaining);            // écart signé (obj - consommé)
+  const absD = Math.abs(D);
+  const excess = D < 0;                       // true = on a trop mangé
+  const recommended = Math.max(1, Math.floor(absD / 200));
+  const liveGoal = macroGoalsFor(sourceDate); // objectif du jour source (pour dériver les macros)
+
+  const form = el(`<div>
+    <div class="smooth-head">
+      <div class="smooth-delta ${excess ? 'over' : 'under'}">${excess ? '+' : '−'}${absD} kcal</div>
+      <div class="muted">${excess ? 'mangées en trop le' : 'manquantes le'} ${fmtDateShort(sourceDate)}</div>
+    </div>
+    <p class="muted" style="font-size:0.82rem;line-height:1.5;margin:6px 0 14px">
+      Répartis cet écart sur les prochains jours pour ${excess ? 'ne pas avoir à te priver d\'un coup' : 'ne pas avoir à te gaver d\'un coup'}.
+      L'objectif de ces jours sera ${excess ? 'réduit' : 'augmenté'} en conséquence (uniquement dans Nutrition).
+    </p>
+    <label class="field"><span>Nombre de jours</span>
+      <input id="sm-days" type="number" inputmode="numeric" min="1" max="60" value="${recommended}"></label>
+    <div class="smooth-preview" id="sm-preview"></div>
+    <button class="btn btn-primary btn-block" id="sm-apply" style="margin-top:14px">${icons.check} Lisser sur <span id="sm-apply-n">${recommended}</span> jour(s)</button>
+  </div>`);
+
+  const sheet = openSheet({ title: 'Lisser les calories', content: form });
+  const daysInput = form.querySelector('#sm-days');
+  const preview = form.querySelector('#sm-preview');
+  const applyN = form.querySelector('#sm-apply-n');
+
+  const update = () => {
+    const n = Math.max(1, Math.min(60, parseInt(daysInput.value, 10) || 1));
+    // Excès → on retire des calories (perDay négatif) ; déficit → on ajoute.
+    const perDay = Math.round((excess ? -absD : absD) / n);
+    applyN.textContent = n;
+    preview.innerHTML = `
+      <div class="smooth-row"><span>Par jour</span><b class="${excess ? 'over' : 'under'}">${perDay > 0 ? '+' : ''}${perDay} kcal</b></div>
+      <div class="smooth-row"><span>Sur</span><b>${n} jour(s)</b></div>
+      <div class="smooth-row muted"><span>Total réparti</span><b>${perDay * n > 0 ? '+' : ''}${perDay * n} kcal</b></div>`;
+    return { n, perDay };
+  };
+  update();
+  daysInput.addEventListener('input', update);
+  // Sélectionne tout le nombre au focus (remplacement direct)
+  daysInput.addEventListener('focus', () => {
+    setTimeout(() => { try { daysInput.select(); } catch (_) { /* noop */ } }, 0);
+  });
+
+  form.querySelector('#sm-apply').addEventListener('click', () => {
+    const { n, perDay } = update();
+    if (perDay === 0) { toast('Écart trop faible à lisser', 'error'); return; }
+    store.applyCalorieSmoothing(sourceDate, D, n, perDay, liveGoal);
+    haptic();
+    toast(`Écart lissé sur ${n} jour(s)`, 'success');
+    sheet.close();
+    rerender();
+  });
+}
 // Liste toutes les entrées passées, de la plus récente à la plus ancienne.
 // Au clic → ouvre l'ajout pré-rempli avec les valeurs /100g : il n'y a plus
 // qu'à ajuster le poids.
 // ============================================================
 function openHistorySheet(rerender) {
   const entries = store.nutritionEntryHistory();
+  let cat = lastMealType(); // repas ciblé par défaut = dernier utilisé
   const form = el(`<div>
+    <div class="segment segment-wrap" id="h-cat" style="margin-bottom:12px">
+      ${MEAL_TYPES.map((t) => `<button data-v="${t}" class="${t === cat ? 'active' : ''}">${t}</button>`).join('')}
+    </div>
     <input id="h-search" type="text" placeholder="Rechercher un aliment…" autocomplete="off" class="field-input-solo" style="width:100%;min-height:44px;margin-bottom:12px">
     <div id="h-list">${entries.length ? '' : '<div class="empty-state">Aucune entrée pour le moment.<br>Tes aliments saisis apparaîtront ici.</div>'}</div>
   </div>`);
   const sheet = openSheet({ title: 'Historique des aliments', content: form });
   const list = form.querySelector('#h-list');
+
+  form.querySelector('#h-cat').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    cat = b.dataset.v;
+    form.querySelectorAll('#h-cat button').forEach((x) => x.classList.toggle('active', x === b));
+    haptic();
+  });
 
   const draw = (q = '') => {
     const nq = q.trim().toLowerCase();
@@ -422,17 +501,37 @@ function openHistorySheet(rerender) {
     for (const e of filtered.slice(0, 200)) {
       const p100 = e.per100 || { prot: e.prot, carbs: e.carbs, fat: e.fat, fiber: e.fiber };
       const name = e.baseName || e.name || 'Aliment';
+      const weight = e.weight || 100;
       const kcal100 = calcKcal(p100.prot || 0, p100.carbs || 0, p100.fat || 0);
       const item = el(`<button class="hist-item">
         <div class="hist-info">
           <div class="hist-name">${name}</div>
-          <div class="meal-macros">100 g : ${kcal100} kcal · P ${p100.prot || 0} · G ${p100.carbs || 0} · L ${p100.fat || 0}${p100.fiber ? ` · <span class="fiber-tag">${p100.fiber}g fibres</span>` : ''}</div>
+          <div class="meal-macros">100 g : ${kcal100} kcal · dernier : ${weight} g${p100.fiber ? ` · <span class="fiber-tag">${p100.fiber}g fibres</span>` : ''}</div>
         </div>
-        <span class="hist-add">${icons.plus}</span>
+        <span class="hist-add" data-quick title="Ajouter ${weight} g à ${cat}">${icons.plus}</span>
       </button>`);
-      item.addEventListener('click', () => {
+      // Clic sur la ligne → éditeur pré-rempli (pour ajuster le poids)
+      item.addEventListener('click', (ev) => {
+        if (ev.target.closest('[data-quick]')) return;
         sheet.close();
-        openAddMealSheet(rerender, { baseName: name, per100: p100, weight: e.weight || 100, meal: e.meal });
+        openAddMealSheet(rerender, { baseName: name, per100: p100, weight, meal: cat });
+      });
+      // Clic sur le + → ajout DIRECT avec la même quantité que la dernière fois
+      item.querySelector('[data-quick]').addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        const r = weight / 100;
+        const rd = (v) => Math.round((v || 0) * r * 10) / 10;
+        const prot = rd(p100.prot); const carbs = rd(p100.carbs); const fat = rd(p100.fat); const fiber = rd(p100.fiber);
+        store.addNutritionLog(selectedDate, {
+          name: `${name} (${weight} g)`, baseName: name, meal: cat,
+          prot, carbs, fat, fiber, kcal: calcKcal(prot, carbs, fat),
+          per100: { prot: p100.prot || 0, carbs: p100.carbs || 0, fat: p100.fat || 0, fiber: p100.fiber || 0 },
+          weight,
+        });
+        rememberMealType(cat);
+        haptic();
+        toast(`${name} ajouté à ${cat}`, 'success');
+        rerender();
       });
       list.appendChild(item);
     }
@@ -690,6 +789,47 @@ function ensureFab() {
   history.onclick = () => { setOpen(false); openHistorySheet(currentRerender); };
 }
 
+// Calendrier des 28 derniers jours : chaque case montre l'écart calorique
+// (consommé − objectif) du jour. Vert si |écart| ≤ 100 kcal, rouge sinon.
+// Un point signale les jours dont l'objectif a été lissé.
+function renderNutritionCalendar(host, rerender) {
+  if (!host) return;
+  const WD = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+  // En-tête jours de semaine
+  let html = WD.map((d) => `<div class="cal-wd">${d}</div>`).join('');
+  const today = new Date();
+  const start = new Date(today); start.setDate(today.getDate() - 27);
+  // Aligner le début sur un lundi
+  const startDow = (start.getDay() + 6) % 7; // 0 = lundi
+  for (let i = 0; i < startDow; i++) html += '<div class="cal-empty"></div>';
+
+  for (let i = 0; i < 28; i++) {
+    const dt = new Date(start); dt.setDate(start.getDate() + i);
+    const iso = dt.toISOString().slice(0, 10);
+    const day = store.userData.nutrition.byDate[iso];
+    const isToday = iso === todayISO();
+    const hasData = day && day.meals && day.meals.length;
+    let inner = `<span class="cal-dnum">${iso.slice(8)}</span>`;
+    let cls = '';
+    if (hasData) {
+      const totals = store.dayTotals(iso);
+      const goal = macroGoalsFor(iso);
+      const diff = Math.round(totals.kcal - goal.kcalGoal); // + = au-dessus
+      const ok = Math.abs(diff) <= 100;
+      cls = ' has-data ' + (ok ? 'diff-ok' : 'diff-bad');
+      inner += `<span class="cal-diff ${ok ? 'ok' : 'bad'}">${diff > 0 ? '+' : ''}${diff}</span>`;
+      if (day.smoothed) inner += '<span class="cal-smoothed" title="Objectif lissé"></span>';
+    }
+    html += `<button class="cal-day${cls}${isToday ? ' is-today' : ''}${iso === selectedDate ? ' sel' : ''}" data-date="${iso}">${inner}</button>`;
+  }
+  host.innerHTML = html;
+  host.addEventListener('click', (e) => {
+    const b = e.target.closest('.cal-day'); if (!b) return;
+    selectedDate = b.dataset.date;
+    rerender();
+  });
+}
+
 export function render(container) {
   const rerender = () => render(container);
   currentRerender = rerender;
@@ -734,11 +874,14 @@ export function render(container) {
             <div class="ring-caption">Lip / ${mg.fatG}g</div>
           </div>
           <div class="ring-item ring-item-sm">
-            ${ringSVG({ size: 45, stroke: 6, progress: totals.fiber / fiberGoal, color: C_FIBER, label: `${Math.round(totals.fiber)}` })}
+            ${ringSVG({ size: 50, stroke: 6, progress: totals.fiber / fiberGoal, color: C_FIBER, label: `${Math.round(totals.fiber)}` })}
             <div class="ring-caption">Fib / ${fiberGoal}g</div>
           </div>
         </div>
-        <button class="btn btn-ghost btn-sm btn-block" id="btn-macro-goals" style="margin-top:4px">${icons.edit} Objectifs macros</button>
+        <div class="macro-actions">
+          <button class="btn btn-ghost btn-sm btn-block" id="btn-macro-goals" style="margin-top:4px">${icons.edit} Objectifs macros</button>
+          ${Math.abs(remaining) > 100 ? `<button class="btn btn-ghost btn-sm" id="btn-smooth" style="margin-top:4px" title="Lisser l'écart calorique">${icons.swap}</button>` : ''}
+        </div>
       </div>
 
       <div class="date-ribbon no-swipe" id="date-ribbon">${ribbon}</div>
@@ -754,6 +897,19 @@ export function render(container) {
           ${meals.length ? '' : '<div class="empty-state">Aucun repas.<br>Appuie sur + pour en ajouter.</div>'}
         </div>
       </div>
+
+      <div class="card">
+        <div class="card-row collapse-head" id="cal-toggle" style="margin-bottom:8px;cursor:pointer">
+          <h3 style="margin:0;display:flex;align-items:center;gap:6px"><span class="collapse-caret">${icons.chevron}</span> Calendrier</h3>
+          <span class="muted" style="font-size:0.7rem">écart / objectif</span>
+        </div>
+        <div class="collapse-body">
+          <div class="cal-grid nut-cal" id="nut-cal"></div>
+          <div class="muted" style="font-size:0.66rem;margin-top:8px;text-align:center">
+            <span style="color:var(--success)">vert</span> : à ±100 kcal · <span style="color:var(--danger)">rouge</span> : au-delà
+          </div>
+        </div>
+      </div>
     </div>`));
 
   const list = container.querySelector('#meal-list');
@@ -764,6 +920,9 @@ export function render(container) {
     (byCat[c] = byCat[c] || []).push(m);
   }
   for (const cat of MEAL_TYPES) {
+    // Garde-fou : si la liste est introuvable (conteneur inattendu), on saute
+    // l'affichage des repas sans empêcher le câblage du reste de la page.
+    if (!list) break;
     const group = byCat[cat];
     if (!group || !group.length) continue;
     const catKcal = group.reduce((a, m) => a + m.kcal, 0);
@@ -807,7 +966,7 @@ export function render(container) {
   }
 
   // Swipe vers la gauche sur un repas -> révèle la poubelle rouge
-  (() => {
+  if (list) (() => {
     let row = null; let startX = 0; let startY = 0; let dx = 0; let mode = null; // null | 'h' | 'v'
     let openRow = null;
     const closeOpen = (except) => {
@@ -861,6 +1020,19 @@ export function render(container) {
   if (active && active.scrollIntoView) active.scrollIntoView({ inline: 'center', block: 'nearest' });
 
   container.querySelector('#btn-macro-goals').addEventListener('click', () => openMacroGoalsSheet(rerender));
+  const smoothBtn = container.querySelector('#btn-smooth');
+  if (smoothBtn) smoothBtn.addEventListener('click', () => openSmoothingSheet(rerender, selectedDate, remaining));
+
+  // --- Calendrier : écart calorique par jour ---
+  renderNutritionCalendar(container.querySelector('#nut-cal'), rerender);
+  const calCard = container.querySelector('#cal-toggle').closest('.card');
+  const calOpen = store.userData.settings.nutCalOpen === true;
+  calCard.classList.toggle('collapsed', !calOpen);
+  container.querySelector('#cal-toggle').addEventListener('click', () => {
+    const next = !(store.userData.settings.nutCalOpen === true);
+    store.saveUserData({ settings: { nutCalOpen: next } });
+    calCard.classList.toggle('collapsed', !next);
+  });
   container.querySelector('#btn-recipes').addEventListener('click', () => openRecipesSheet(rerender));
   ensureFab();
 }

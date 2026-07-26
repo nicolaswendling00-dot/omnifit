@@ -118,13 +118,23 @@ function renderWeightChart(canvas) {
     const t = store.dayTotals(d);
     return t.kcal ? Math.round(t.kcal) : null;
   });
+  // Jours dont l'objectif a été lissé : on les marque d'un cercle CREUX (au lieu
+  // d'un point plein) sur la courbe calories, sans changer la valeur affichée.
+  const smoothedFlags = days.map((d) => {
+    const day = store.userData.nutrition.byDate[d];
+    return !!(day && day.smoothed);
+  });
+  const calPointBg = days.map((_, i) => (smoothedFlags[i] ? 'transparent' : '#FB923C'));
+  const calPointBorder = days.map(() => '#FB923C');
+  const calPointRadius = days.map((_, i) => (smoothedFlags[i] ? 5 : 3));
+  const calPointBorderWidth = days.map((_, i) => (smoothedFlags[i] ? 2 : 1));
 
   const datasets = [
     { label: 'Poids (kg)', data: values, borderColor: '#00D9FF', backgroundColor: 'rgba(0,217,255,0.12)', borderWidth: 3, pointRadius: 4, pointBackgroundColor: '#00D9FF', tension: 0.3, spanGaps: true, yAxisID: 'y' },
     { label: 'SMA-5', data: smaValues, borderColor: '#7C3AED', borderWidth: 2, borderDash: [6, 4], pointRadius: 0, tension: 0.35, spanGaps: true, hidden: !smaVisible, yAxisID: 'y' },
   ];
   if (caloriesVisible) {
-    datasets.push({ label: 'Calories', data: calValues, borderColor: '#FB923C', backgroundColor: 'rgba(251,146,60,0.12)', borderWidth: 2, pointRadius: 3, pointBackgroundColor: '#FB923C', tension: 0.3, spanGaps: true, yAxisID: 'y1' });
+    datasets.push({ label: 'Calories', data: calValues, borderColor: '#FB923C', backgroundColor: 'rgba(251,146,60,0.12)', borderWidth: 2, pointRadius: calPointRadius, pointBackgroundColor: calPointBg, pointBorderColor: calPointBorder, pointBorderWidth: calPointBorderWidth, tension: 0.3, spanGaps: true, yAxisID: 'y1' });
   }
 
   const scales = {

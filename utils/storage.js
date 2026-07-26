@@ -216,6 +216,38 @@ class StorageManager {
     this.persist();
   }
 
+  // Lissage calorique : répartit un écart `delta` (kcal, signé) du jour `sourceDate`
+  // sur `days` jours à venir en ajustant leur objectif calorique figé (day.goal).
+  //   delta > 0 : excès mangé → on RÉDUIT l'objectif des jours suivants
+  //   delta < 0 : déficit    → on AUGMENTE l'objectif des jours suivants
+  // Chaque jour touché est marqué { smoothed: true } pour l'affichage (cercle
+  // creux sur le graphe de poids). Les jours affectés commencent le LENDEMAIN du
+  // jour source. Retourne le nombre de jours effectivement ajustés.
+  applyCalorieSmoothing(sourceDate, delta, days, perDay, liveGoalForDay) {
+    const n = Math.max(1, Math.floor(days));
+    const adj = Math.round(perDay); // kcal/jour à appliquer (signe déjà porté par perDay)
+    const dayMs = 86400000;
+    for (let i = 1; i <= n; i++) {
+      const d = new Date(Date.parse(sourceDate + 'T00:00:00Z') + i * dayMs).toISOString().slice(0, 10);
+      if (!this.userData.nutrition.byDate[d]) this.userData.nutrition.byDate[d] = { meals: [] };
+      const day = this.userData.nutrition.byDate[d];
+      // Objectif de base du jour : celui déjà figé, sinon l'objectif courant fourni.
+      const base = (day.goal && day.goal.kcalGoal) ? day.goal : (liveGoalForDay || {});
+      const baseKcal = base.kcalGoal || 0;
+      const factor = baseKcal ? (baseKcal + adj) / baseKcal : 1;
+      day.goal = {
+        kcalGoal: Math.max(0, baseKcal + adj),
+        protG: base.protG != null ? Math.round(base.protG * factor) : base.protG,
+        carbsG: base.carbsG != null ? Math.round(base.carbsG * factor) : base.carbsG,
+        fatG: base.fatG != null ? Math.round(base.fatG * factor) : base.fatG,
+      };
+      // Mémorise le lissage pour pouvoir l'expliquer / l'annuler
+      day.smoothed = { delta: adj, from: sourceDate, at: Date.now() };
+    }
+    this.persist();
+    return n;
+  }
+
   removeMeal(date, mealId) {
     const day = this.userData.nutrition.byDate[date];
     if (!day) return;
