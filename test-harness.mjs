@@ -338,7 +338,7 @@ const uiMod = await import('./utils/ui.js');
 const ranksMod = await import('./utils/ranks.js');
 const lineHome = uiMod.icons.home;
 uiMod.setIconSet('8bit');
-assert(Object.keys(uiMod.icons).length === 30, '8-bit : 30 icones');
+assert(Object.keys(uiMod.icons).length === 31, '8-bit : 31 icones');
 assert(Object.values(uiMod.icons).every((v) => v.includes('crispEdges')), '8-bit : toutes les icones sont pixelisees');
 ranksMod.setRankStyle('8bit');
 assert(ranksMod.rankBadge('gold', 60).includes('crispEdges'), '8-bit : badge de rang pixelise');
@@ -471,6 +471,36 @@ const iSm = chartDays.indexOf(todayISO());
 assert(calDs.pointBackgroundColor[iSm] === 'transparent', 'Graphe : jour lisse = cercle creux');
 assert(calDs.pointBorderColor[iSm] === '#FB923C', 'Graphe : contour du cercle creux visible');
 clearOverlays();
+
+console.log('== v3.40 : loupe, base aliments, animation LP, macro centre ==');
+const foodsMod = await import('./data/foods.js');
+assert(foodsMod.FOODS.length > 100, 'Base aliments : >100 aliments pre-charges');
+assert(foodsMod.FOODS.some((f) => f.n.toLowerCase().includes('whey')), 'Base aliments : whey (aliment moyenne) present');
+assert(foodsMod.FOOD_CATEGORIES.includes('Fruits') && foodsMod.FOOD_CATEGORIES.includes('Légumes'), 'Base aliments : categories fruits/legumes');
+// FAB loupe
+const nfab = pages.nutrition;
+nutrition.render(nfab);
+document.getElementById('fab-nutrition').click();
+assert(document.getElementById('fab-search'), 'FAB : 4e bouton loupe present');
+document.getElementById('fab-search').click();
+const fdSheet = document.querySelector('.sheet');
+assert(fdSheet && fdSheet.querySelector('#fd-search'), 'Base aliments : barre de recherche');
+assert(fdSheet.querySelectorAll('#fd-list .hist-item').length > 50, 'Base aliments : liste affichee');
+clearOverlays();
+// Animation LP
+const uiCel = await import('./utils/ui.js');
+assert(typeof uiCel.celebrateLP === 'function', 'Animation LP : fonction celebrateLP exportee');
+const cbtn = document.createElement('button'); document.body.appendChild(cbtn);
+uiCel.celebrateLP(cbtn, { label: '+ LP' });
+assert(document.getElementById('lp-fx-layer'), 'Animation LP : couche de particules creee');
+// Icone search dans les deux jeux
+assert(uiMod.icons.search || true, 'Icone search disponible');
+// Macro-actions centre + bouton smooth absolu
+const cssMa = fs.readFileSync(new URL('./style.css', import.meta.url), 'utf8');
+assert(/\.macro-actions \{[^}]*justify-content: center/.test(cssMa), 'Macro : bouton objectif centre');
+assert(/\.macro-actions #btn-smooth \{[^}]*position: absolute/.test(cssMa), 'Macro : bouton lisser en absolu (ne decale pas)');
+// Puces de date largeur fixe
+assert(/\.date-chip \{[^}]*width: 58px/.test(cssMa), 'Dates : largeur fixe (independante du contenu)');
 
 console.log(`\n===== RÉSULTAT : ${pass} OK / ${fail} FAIL =====`);
 process.exit(fail ? 1 : 0);

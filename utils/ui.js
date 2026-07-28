@@ -31,6 +31,7 @@ const ICONS_LINE = {
   link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.2 1.2"/><path d="M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.2-1.2"/></svg>',
   calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg>',
   book: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H19v15H6a2 2 0 0 0-2 2Z"/><path d="M4 19.5A2 2 0 0 1 6 18h13v3H6a2 2 0 0 1-2-1.5Z"/></svg>',
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>',
   copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg>',
 };
 
@@ -53,6 +54,94 @@ export function el(html) {
 
 export function haptic() {
   if (navigator.vibrate) navigator.vibrate(10);
+}
+
+// Animation de récompense : jouée quand une quête journalière est validée et
+// rapporte des LP (objectif calorique atteint, séance enregistrée…). Des
+// particules jaillissent du bouton pressé vers l'extérieur de l'écran.
+//   - Thème 8-bit : pièces pixel qui montent en tournoyant (façon jeu rétro).
+//   - Autres thèmes : orbes lumineuses cyan/violet qui éclatent puis retombent.
+// `originEl` = l'élément à partir duquel émettre (le bouton). `opts.label`
+// affiche un « +N LP » flottant.
+export function celebrateLP(originEl, opts = {}) {
+  try {
+    if (typeof document === 'undefined') return;
+    const rect = originEl && originEl.getBoundingClientRect
+      ? originEl.getBoundingClientRect()
+      : { left: window.innerWidth / 2, top: window.innerHeight / 2, width: 0, height: 0 };
+    const ox = rect.left + rect.width / 2;
+    const oy = rect.top + rect.height / 2;
+    const is8bit = document.body.classList.contains('shape-8bit');
+
+    let layer = document.getElementById('lp-fx-layer');
+    if (!layer) {
+      layer = document.createElement('div');
+      layer.id = 'lp-fx-layer';
+      layer.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:99999;overflow:hidden';
+      document.body.appendChild(layer);
+    }
+
+    const canAnimate = typeof Element !== 'undefined' && Element.prototype.animate;
+    const N = is8bit ? 7 : 12;
+
+    for (let i = 0; i < N; i++) {
+      const p = document.createElement('div');
+      if (is8bit) {
+        // Pièce pixel : petit carré doré avec un « ¢ » façon sprite de jeu.
+        p.textContent = '¢';
+        p.style.cssText = `position:absolute;left:${ox}px;top:${oy}px;width:16px;height:16px;line-height:16px;text-align:center;font-family:'VT323',monospace;font-weight:700;font-size:15px;color:#ffd479;background:#8a5a00;border:1px solid #ffd479;image-rendering:pixelated;transform:translate(-50%,-50%);will-change:transform,opacity`;
+      } else {
+        // Orbe lumineuse : dégradé accent → violet, halo.
+        const c = i % 2 ? 'var(--accent)' : 'var(--accent-2)';
+        const size = 8 + Math.round(Math.random() * 8);
+        p.style.cssText = `position:absolute;left:${ox}px;top:${oy}px;width:${size}px;height:${size}px;border-radius:50%;background:${c};box-shadow:0 0 10px ${c};transform:translate(-50%,-50%);will-change:transform,opacity`;
+      }
+      layer.appendChild(p);
+
+      // Trajectoire : vers le haut et sur les côtés, avec un peu de gravité.
+      const angle = (-Math.PI / 2) + (Math.random() - 0.5) * (is8bit ? 1.1 : 2.4);
+      const dist = (is8bit ? 220 : 130) + Math.random() * (is8bit ? 260 : 120);
+      const dx = Math.cos(angle) * dist;
+      const dyUp = Math.sin(angle) * dist;
+      const dur = is8bit ? 900 + Math.random() * 400 : 700 + Math.random() * 400;
+      const spin = (Math.random() - 0.5) * 720;
+
+      if (canAnimate) {
+        const anim = p.animate(
+          [
+            { transform: 'translate(-50%,-50%) translate(0px,0px) rotate(0deg) scale(1)', opacity: 1 },
+            { transform: `translate(-50%,-50%) translate(${dx * 0.6}px, ${dyUp}px) rotate(${spin * 0.6}deg) scale(1.05)`, opacity: 1, offset: 0.6 },
+            { transform: `translate(-50%,-50%) translate(${dx}px, ${dyUp + (is8bit ? -80 : 90)}px) rotate(${spin}deg) scale(${is8bit ? 0.9 : 0.4})`, opacity: 0 },
+          ],
+          { duration: dur, easing: is8bit ? 'cubic-bezier(0.22,1,0.36,1)' : 'cubic-bezier(0.4,0,0.6,1)', fill: 'forwards' },
+        );
+        anim.onfinish = () => p.remove();
+      } else {
+        p.remove();
+      }
+    }
+
+    // « +N LP » flottant
+    if (opts.label) {
+      const tag = document.createElement('div');
+      tag.textContent = opts.label;
+      tag.style.cssText = `position:absolute;left:${ox}px;top:${oy}px;transform:translate(-50%,-50%);font-weight:800;font-size:1rem;color:${is8bit ? '#ffd479' : 'var(--accent)'};text-shadow:0 0 8px rgba(0,0,0,0.4);${is8bit ? "font-family:'VT323',monospace;" : ''}will-change:transform,opacity`;
+      layer.appendChild(tag);
+      if (canAnimate) {
+        const a = tag.animate(
+          [
+            { transform: 'translate(-50%,-50%) translateY(0) scale(0.8)', opacity: 0 },
+            { transform: 'translate(-50%,-50%) translateY(-18px) scale(1.1)', opacity: 1, offset: 0.3 },
+            { transform: 'translate(-50%,-50%) translateY(-52px) scale(1)', opacity: 0 },
+          ],
+          { duration: 1100, easing: 'ease-out', fill: 'forwards' },
+        );
+        a.onfinish = () => tag.remove();
+      } else { tag.remove(); }
+    }
+
+    haptic();
+  } catch (_) { /* l'animation ne doit jamais casser l'action */ }
 }
 
 let audioCtx = null;

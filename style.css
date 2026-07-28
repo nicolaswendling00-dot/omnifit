@@ -341,9 +341,10 @@ canvas { max-width: 100%; }
 .date-ribbon { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 8px; margin-bottom: 10px; scrollbar-width: none; touch-action: pan-x; }
 .date-ribbon::-webkit-scrollbar { display: none; }
 .date-chip {
-  flex-shrink: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-  color: var(--text-2); font-family: inherit; font-size: 0.7rem; padding: 7px 11px; min-height: 44px;
-  cursor: pointer; text-align: center;
+  flex: 0 0 auto; width: 58px; box-sizing: border-box;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  color: var(--text-2); font-family: inherit; font-size: 0.7rem; padding: 7px 6px; min-height: 44px;
+  cursor: pointer; text-align: center; overflow: hidden;
 }
 .date-chip .d-num { display: block; font-weight: 800; font-size: 0.95rem; color: var(--text); font-variant-numeric: tabular-nums; }
 .date-chip.today .d-num { color: var(--accent); }
@@ -1001,9 +1002,12 @@ body.shape-8bit .gr-progress i, body.shape-8bit .progress-bar > div {
 
 /* Bouton « Objectifs macros » + bouton « Lisser » côte à côte, sans que le
    premier ne bouge (il garde sa largeur ; le second s'ajoute à droite). */
-.macro-actions { display: flex; gap: 6px; align-items: stretch; }
-.macro-actions #btn-macro-goals { flex: 1 1 auto; }
-.macro-actions #btn-smooth { flex: 0 0 auto; width: 44px; display: inline-flex; align-items: center; justify-content: center; }
+/* Le bouton « Objectifs macros » reste CENTRÉ au milieu de la carte quel que
+   soit l'état ; le bouton « Lisser » se pose par-dessus, à droite, sans le
+   décaler (position absolue dans un conteneur relatif). */
+.macro-actions { position: relative; display: flex; justify-content: center; align-items: center; margin-top: 4px; }
+.macro-actions #btn-macro-goals { width: 100%; margin-top: 0 !important; }
+.macro-actions #btn-smooth { position: absolute; right: 0; top: 0; bottom: 0; margin-top: 0 !important; width: 40px; display: inline-flex; align-items: center; justify-content: center; background: var(--surface-2); }
 .macro-actions #btn-smooth svg { width: 18px; height: 18px; }
 
 /* Sheet de lissage */
@@ -1024,3 +1028,8 @@ body.shape-8bit .gr-progress i, body.shape-8bit .progress-bar > div {
 .steps-guide .guide-auto { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
 .steps-guide .guide-auto > b { display: block; margin-bottom: 6px; color: var(--accent); font-size: 0.82rem; }
 .steps-guide code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
+
+/* Filtres de catégorie (base d'aliments) : défilement horizontal */
+.segment-scroll { display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 6px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.segment-scroll::-webkit-scrollbar { display: none; }
+.segment-scroll button { flex: 0 0 auto; white-space: nowrap; padding: 6px 12px; }

@@ -4,7 +4,7 @@
 import { store, todayISO } from '../utils/storage.js';
 import { EXERCISES, MUSCLES, muscleLabel, AKA } from '../data/exercises.js';
 import { formatTime, workoutMuscleVolume, weeklySetsByMuscle, muscleAttenuation } from '../utils/math.js';
-import { el, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong } from '../utils/ui.js';
+import { el, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, celebrateLP } from '../utils/ui.js';
 import { computeExerciseLP, computeExerciseLPDetailed, rankFromLP, rankBadge, getStandards } from '../utils/ranks.js';
 
 let volumeChart = null;
@@ -1100,6 +1100,11 @@ function showSummary(exercises, closeSession) {
             if (session.editingId) store.updateWorkout(payload);
             else store.addWorkout(payload);
             toast(session.editingId ? 'Séance mise à jour' : 'Séance enregistrée', 'success');
+            // Une séance enregistrée valide/contribue au pilier entraînement → LP
+            if (!session.editingId) {
+              const btn = document.querySelector('#s-finish') || document.querySelector('.modal .btn-primary');
+              celebrateLP(btn, { label: '+ LP' });
+            }
             closeSession();
           };
           const secs = elapsedSeconds();

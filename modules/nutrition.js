@@ -1,9 +1,10 @@
 // OmniFit — PAGE 1 : Nutrition (macros couleur, fibres, modes grammes/auto/%, repas typés, recettes)
 import { store, todayISO } from '../utils/storage.js';
 import { calcKcal, fiberGoalFromKcal } from '../utils/math.js';
-import { el, icons, openSheet, openModal, toast, ringSVG, confirmModal, fmtDateShort, haptic } from '../utils/ui.js';
+import { el, icons, openSheet, openModal, toast, ringSVG, confirmModal, fmtDateShort, haptic, celebrateLP } from '../utils/ui.js';
 import { startCameraStream, captureFrame, decodeBarcodeFromFile } from '../utils/barcode.js';
 import { fetchProductByBarcode } from '../utils/openfoodfacts.js';
+import { FOODS, FOOD_CATEGORIES } from '../data/foods.js';
 
 let selectedDate = todayISO();
 let currentRerender = null;
@@ -79,8 +80,21 @@ export function macroGoalsFor(date) {
   return live;
 }
 
-// À appeler juste après un import : fige l'objectif calories/macros pour tous les
-// jours importés qui n'en ont pas déjà un (import externe, sans champ `goal`),
+// Quête nutrition d'un jour « validée » : calories dans ±10 % de l'objectif ET
+// protéines ≥ 90 % de l'objectif (même règle que le pilier nutrition du rang
+// global). Sert à déclencher l'animation de gain de LP au bon moment.
+function nutritionGoalMet(date) {
+  const day = store.userData.nutrition.byDate[date];
+  if (!day || !day.meals || !day.meals.length) return false;
+  const goal = macroGoalsFor(date);
+  if (!goal || !goal.kcalGoal) return false;
+  const t = store.dayTotals(date);
+  const relOk = Math.abs(t.kcal - goal.kcalGoal) / goal.kcalGoal <= 0.10;
+  const protOk = !goal.protG || t.prot >= goal.protG * 0.9;
+  return relOk && protOk;
+}
+
+
 // au moment de l'import — plutôt que de le figer plus tard avec l'objectif du jour
 // où l'utilisateur consulte cette date par hasard (ce qui serait incorrect/trompeur).
 export function backfillNutritionGoals() {
@@ -379,12 +393,15 @@ function openAddMealSheet(rerender, prefill = null) {
     });
   }
 
-  form.querySelector('#m-add').addEventListener('click', () => {
+  form.querySelector('#m-add').addEventListener('click', (ev) => {
     const bn = form.querySelector('#m-name').value.trim();
     const v = scale();
     if (!bn) { toast('Nom requis', 'error'); return; }
     if (v.per100.prot + v.per100.carbs + v.per100.fat === 0) { toast('Renseigne les macros /100g', 'error'); return; }
     if (!v.weight || v.weight <= 0) { toast('Poids invalide', 'error'); return; }
+    // État de la quête nutrition AVANT l'ajout, pour détecter un passage à complet
+    const goalMetBefore = nutritionGoalMet(selectedDate);
+    const btn = ev.currentTarget;
     const displayName = `${bn} (${v.weight} g)`;
     const payload = {
       name: displayName, baseName: bn, meal: cat,
@@ -404,6 +421,10 @@ function openAddMealSheet(rerender, prefill = null) {
       toast('Aliment enregistré', 'success');
     }
     haptic();
+    // Quête validée : le pilier nutrition passe de non-atteint à atteint
+    if (!goalMetBefore && nutritionGoalMet(selectedDate)) {
+      celebrateLP(btn, { label: '+ LP' });
+    }
     sheet.close();
     rerender();
   });
@@ -519,6 +540,8 @@ function openHistorySheet(rerender) {
       // Clic sur le + → ajout DIRECT avec la même quantité que la dernière fois
       item.querySelector('[data-quick]').addEventListener('click', (ev) => {
         ev.stopPropagation();
+        const goalMetBefore = nutritionGoalMet(selectedDate);
+        const quickBtn = ev.currentTarget;
         const r = weight / 100;
         const rd = (v) => Math.round((v || 0) * r * 10) / 10;
         const prot = rd(p100.prot); const carbs = rd(p100.carbs); const fat = rd(p100.fat); const fiber = rd(p100.fiber);
@@ -531,6 +554,7 @@ function openHistorySheet(rerender) {
         rememberMealType(cat);
         haptic();
         toast(`${name} ajouté à ${cat}`, 'success');
+        if (!goalMetBefore && nutritionGoalMet(selectedDate)) celebrateLP(quickBtn, { label: '+ LP' });
         rerender();
       });
       list.appendChild(item);
@@ -759,15 +783,71 @@ function openBarcodeSheet(rerender) {
 
 }
 
+// Base d'aliments courants (loupe) : recherche + filtres par catégorie. Un clic
+// ouvre l'éditeur classique pré-rempli (per100) pour ajuster le poids.
+function openFoodDatabaseSheet(rerender) {
+  let activeCat = null;
+  let query = '';
+  const form = el(`<div>
+    <input id="fd-search" type="text" placeholder="Rechercher un aliment…" autocomplete="off" class="field-input-solo" style="width:100%;min-height:44px;margin-bottom:10px">
+    <div class="segment segment-scroll" id="fd-cats" style="margin-bottom:12px">
+      <button data-c="" class="active">Tous</button>
+      ${FOOD_CATEGORIES.map((c) => `<button data-c="${c}">${c}</button>`).join('')}
+    </div>
+    <div id="fd-list"></div>
+  </div>`);
+  const sheet = openSheet({ title: "Base d'aliments", content: form });
+  const list = form.querySelector('#fd-list');
+
+  const draw = () => {
+    const nq = query.trim().toLowerCase();
+    let items = FOODS;
+    if (activeCat) items = items.filter((f) => f.c === activeCat);
+    if (nq) items = items.filter((f) => f.n.toLowerCase().includes(nq));
+    items = items.slice().sort((a, b) => a.n.localeCompare(b.n, 'fr'));
+    list.innerHTML = items.length ? '' : '<div class="empty-state">Aucun aliment trouvé</div>';
+    for (const f of items.slice(0, 300)) {
+      const kcal = calcKcal(f.p, f.g, f.f);
+      const item = el(`<button class="hist-item">
+        <div class="hist-info">
+          <div class="hist-name">${f.n}</div>
+          <div class="meal-macros">100 g : ${kcal} kcal · P ${f.p} · G ${f.g} · L ${f.f}${f.fb ? ` · <span class="fiber-tag">${f.fb}g fibres</span>` : ''}</div>
+        </div>
+        <span class="hist-add">${icons.plus}</span>
+      </button>`);
+      item.addEventListener('click', () => {
+        sheet.close();
+        openAddMealSheet(rerender, {
+          baseName: f.n,
+          per100: { prot: f.p, carbs: f.g, fat: f.f, fiber: f.fb || 0 },
+          weight: 100,
+        });
+      });
+      list.appendChild(item);
+    }
+  };
+  draw();
+
+  form.querySelector('#fd-search').addEventListener('input', (e) => { query = e.target.value; draw(); });
+  form.querySelector('#fd-cats').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    activeCat = b.dataset.c || null;
+    form.querySelectorAll('#fd-cats button').forEach((x) => x.classList.toggle('active', x === b));
+    draw();
+    haptic();
+  });
+}
+
 // FAB global dans body (hors du conteneur transformé, sinon invisible sur iOS)
 // Menu déroulant : "+" principal déploie 2 mini-FAB (ajout rapide / scan code-barre).
 function ensureFab() {
   let wrap = document.getElementById('fab-nutrition-wrap');
   if (!wrap) {
     wrap = el(`<div class="fab-wrap" id="fab-nutrition-wrap">
-      <button class="fab fab-mini" id="fab-history" aria-label="Historique des aliments" style="transition-delay:0ms">${icons.book}</button>
-      <button class="fab fab-mini" id="fab-scan" aria-label="Scanner un code-barre" style="transition-delay:40ms">${icons.barcode}</button>
-      <button class="fab fab-mini" id="fab-quick" aria-label="Ajout rapide" style="transition-delay:80ms">${icons.flame}</button>
+      <button class="fab fab-mini" id="fab-search" aria-label="Base d'aliments" style="transition-delay:0ms">${icons.search}</button>
+      <button class="fab fab-mini" id="fab-history" aria-label="Historique des aliments" style="transition-delay:40ms">${icons.book}</button>
+      <button class="fab fab-mini" id="fab-scan" aria-label="Scanner un code-barre" style="transition-delay:80ms">${icons.barcode}</button>
+      <button class="fab fab-mini" id="fab-quick" aria-label="Ajout rapide" style="transition-delay:120ms">${icons.flame}</button>
       <button class="fab" id="fab-nutrition" aria-label="Ajouter">${icons.plus}</button>
     </div>`);
     document.body.appendChild(wrap);
@@ -780,6 +860,7 @@ function ensureFab() {
   const quick = wrap.querySelector('#fab-quick');
   const scan = wrap.querySelector('#fab-scan');
   const history = wrap.querySelector('#fab-history');
+  const search = wrap.querySelector('#fab-search');
 
   const setOpen = (open) => wrap.classList.toggle('fab-open', open);
 
@@ -787,6 +868,7 @@ function ensureFab() {
   quick.onclick = () => { setOpen(false); openAddMealSheet(currentRerender); };
   scan.onclick = () => { setOpen(false); openBarcodeSheet(currentRerender); };
   history.onclick = () => { setOpen(false); openHistorySheet(currentRerender); };
+  search.onclick = () => { setOpen(false); openFoodDatabaseSheet(currentRerender); };
 }
 
 export function render(container) {
