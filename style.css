@@ -1041,3 +1041,18 @@ body.shape-8bit .gr-progress i, body.shape-8bit .progress-bar > div {
   -webkit-touch-callout: default !important;
   touch-action: auto !important;
 }
+
+/* Recherche unifiée d'aliments (loupe) */
+.fs-searchbar { display: flex; gap: 8px; align-items: stretch; }
+.fs-searchbar #fs-search { flex: 1 1 auto; min-height: 44px; }
+.fs-quick { flex: 0 0 auto; width: 44px; display: inline-flex; align-items: center; justify-content: center; background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; color: var(--warning); cursor: pointer; }
+.fs-quick svg { width: 20px; height: 20px; }
+.fs-quick:active { transform: scale3d(0.9, 0.9, 1); }
+
+/* Éditeur de recette : ajout d'aliments + liste + totaux */
+.re-add-row { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
+.re-ing { display: flex; align-items: center; gap: 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 6px; }
+.re-ing-info { flex: 1; min-width: 0; }
+.re-ing-name { font-weight: 700; font-size: 0.9rem; }
+.re-totals { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
+.re-tot-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem; padding: 2px 0; }

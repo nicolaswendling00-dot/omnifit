@@ -399,6 +399,13 @@ function openAddMealSheet(rerender, prefill = null) {
     if (!bn) { toast('Nom requis', 'error'); return; }
     if (v.per100.prot + v.per100.carbs + v.per100.fat === 0) { toast('Renseigne les macros /100g', 'error'); return; }
     if (!v.weight || v.weight <= 0) { toast('Poids invalide', 'error'); return; }
+    // Mode "composer une recette" : on renvoie l'aliment pesé au lieu de l'ajouter aux repas.
+    if (pf.onPick) {
+      pf.onPick({ name: bn, per100: v.per100, weight: v.weight, prot: v.prot, carbs: v.carbs, fat: v.fat, fiber: v.fiber });
+      haptic();
+      sheet.close();
+      return;
+    }
     // État de la quête nutrition AVANT l'ajout, pour détecter un passage à complet
     const goalMetBefore = nutritionGoalMet(selectedDate);
     const btn = ev.currentTarget;
@@ -495,75 +502,6 @@ function openSmoothingSheet(rerender, sourceDate, remaining) {
 // Au clic → ouvre l'ajout pré-rempli avec les valeurs /100g : il n'y a plus
 // qu'à ajuster le poids.
 // ============================================================
-function openHistorySheet(rerender) {
-  const entries = store.nutritionEntryHistory();
-  let cat = lastMealType(); // repas ciblé par défaut = dernier utilisé
-  const form = el(`<div>
-    <div class="segment segment-wrap" id="h-cat" style="margin-bottom:12px">
-      ${MEAL_TYPES.map((t) => `<button data-v="${t}" class="${t === cat ? 'active' : ''}">${t}</button>`).join('')}
-    </div>
-    <input id="h-search" type="text" placeholder="Rechercher un aliment…" autocomplete="off" class="field-input-solo" style="width:100%;min-height:44px;margin-bottom:12px">
-    <div id="h-list">${entries.length ? '' : '<div class="empty-state">Aucune entrée pour le moment.<br>Tes aliments saisis apparaîtront ici.</div>'}</div>
-  </div>`);
-  const sheet = openSheet({ title: 'Historique des aliments', content: form });
-  const list = form.querySelector('#h-list');
-
-  form.querySelector('#h-cat').addEventListener('click', (e) => {
-    const b = e.target.closest('button'); if (!b) return;
-    cat = b.dataset.v;
-    form.querySelectorAll('#h-cat button').forEach((x) => x.classList.toggle('active', x === b));
-    haptic();
-  });
-
-  const draw = (q = '') => {
-    const nq = q.trim().toLowerCase();
-    const filtered = nq ? entries.filter((e) => (e.baseName || e.name || '').toLowerCase().includes(nq)) : entries;
-    list.innerHTML = filtered.length ? '' : '<div class="empty-state">Aucun résultat</div>';
-    for (const e of filtered.slice(0, 200)) {
-      const p100 = e.per100 || { prot: e.prot, carbs: e.carbs, fat: e.fat, fiber: e.fiber };
-      const name = e.baseName || e.name || 'Aliment';
-      const weight = e.weight || 100;
-      const kcal100 = calcKcal(p100.prot || 0, p100.carbs || 0, p100.fat || 0);
-      const item = el(`<button class="hist-item">
-        <div class="hist-info">
-          <div class="hist-name">${name}</div>
-          <div class="meal-macros">100 g : ${kcal100} kcal · dernier : ${weight} g${p100.fiber ? ` · <span class="fiber-tag">${p100.fiber}g fibres</span>` : ''}</div>
-        </div>
-        <span class="hist-add" data-quick title="Ajouter ${weight} g à ${cat}">${icons.plus}</span>
-      </button>`);
-      // Clic sur la ligne → éditeur pré-rempli (pour ajuster le poids)
-      item.addEventListener('click', (ev) => {
-        if (ev.target.closest('[data-quick]')) return;
-        sheet.close();
-        openAddMealSheet(rerender, { baseName: name, per100: p100, weight, meal: cat });
-      });
-      // Clic sur le + → ajout DIRECT avec la même quantité que la dernière fois
-      item.querySelector('[data-quick]').addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        const goalMetBefore = nutritionGoalMet(selectedDate);
-        const quickBtn = ev.currentTarget;
-        const r = weight / 100;
-        const rd = (v) => Math.round((v || 0) * r * 10) / 10;
-        const prot = rd(p100.prot); const carbs = rd(p100.carbs); const fat = rd(p100.fat); const fiber = rd(p100.fiber);
-        store.addNutritionLog(selectedDate, {
-          name: `${name} (${weight} g)`, baseName: name, meal: cat,
-          prot, carbs, fat, fiber, kcal: calcKcal(prot, carbs, fat),
-          per100: { prot: p100.prot || 0, carbs: p100.carbs || 0, fat: p100.fat || 0, fiber: p100.fiber || 0 },
-          weight,
-        });
-        rememberMealType(cat);
-        haptic();
-        toast(`${name} ajouté à ${cat}`, 'success');
-        if (!goalMetBefore && nutritionGoalMet(selectedDate)) celebrateLP(quickBtn, { label: '+ LP' });
-        rerender();
-      });
-      list.appendChild(item);
-    }
-  };
-  draw();
-  form.querySelector('#h-search').addEventListener('input', (ev) => draw(ev.target.value));
-}
-
 // ============================================================
 // RECETTES — sheet de gestion
 // ============================================================
@@ -572,24 +510,25 @@ function openRecipesSheet(rerender) {
     const recipes = store.userData.recipes || [];
     const form = el(`<div>
       <button class="btn btn-primary btn-block" id="r-new" style="margin-bottom:14px">${icons.plus} Créer une recette</button>
-      <div id="r-list">${recipes.length ? '' : '<div class="empty-state">Aucune recette.<br>Créez-en une pour un ajout rapide.</div>'}</div>
+      <div id="r-list">${recipes.length ? '' : '<div class="empty-state">Aucune recette.<br>Crée-en une avec le bouton ci-dessus.</div>'}</div>
     </div>`);
     const sheet = openSheet({ title: 'Mes recettes', content: form });
     const list = form.querySelector('#r-list');
     for (const r of recipes) {
+      const nIng = (r.ingredients && r.ingredients.length) ? ` · ${r.ingredients.length} aliment(s)` : '';
       const item = el(`<div class="recipe-item">
         <div class="recipe-info">
           <div class="recipe-name">${r.name}</div>
-          <div class="meal-macros">P ${r.prot} · G ${r.carbs} · L ${r.fat}${r.fiber ? ` · <span class="fiber-tag">${r.fiber}g fibres</span>` : ''} · ${calcKcal(r.prot, r.carbs, r.fat)} kcal</div>
+          <div class="meal-macros">${calcKcal(r.prot, r.carbs, r.fat)} kcal · P ${r.prot} · G ${r.carbs} · L ${r.fat}${nIng}</div>
         </div>
         <div style="display:flex;gap:4px">
-          <button class="btn btn-secondary btn-sm" data-add>${icons.plus}</button>
+          <button class="icon-btn" data-edit aria-label="Modifier">${icons.edit}</button>
           <button class="icon-btn danger" data-del aria-label="Supprimer">${icons.trash}</button>
         </div>
       </div>`);
-      item.querySelector('[data-add]').addEventListener('click', () => {
+      item.querySelector('[data-edit]').addEventListener('click', () => {
         sheet.close();
-        openAddMealSheet(rerender, { name: r.name, prot: r.prot, carbs: r.carbs, fat: r.fat, fiber: r.fiber });
+        openRecipeEditor(() => build(), r);
       });
       item.querySelector('[data-del]').addEventListener('click', () => {
         confirmModal('Supprimer', `Supprimer la recette « ${r.name} » ?`, () => {
@@ -608,41 +547,100 @@ function openRecipesSheet(rerender) {
   build();
 }
 
-function openRecipeEditor(onSaved) {
-  const form = el(`<div>
-    <label class="field"><span>Nom de la recette</span><input id="re-name" type="text" placeholder="Bowl protéiné" autocomplete="off"></label>
-    <div class="field-row">
-      <label class="field"><span>Prot (g)</span><input id="re-prot" type="number" inputmode="decimal" min="0" placeholder="0"></label>
-      <label class="field"><span>Gluc (g)</span><input id="re-carbs" type="number" inputmode="decimal" min="0" placeholder="0"></label>
-      <label class="field"><span>Lip (g)</span><input id="re-fat" type="number" inputmode="decimal" min="0" placeholder="0"></label>
-    </div>
-    <label class="field"><span>Fibres (g) · optionnel</span><input id="re-fiber" type="number" inputmode="decimal" min="0" placeholder="0"></label>
-    <div class="card-row" style="margin:10px 0"><span class="muted">Calories</span><span class="num" id="re-kcal" style="color:var(--accent)">0 kcal</span></div>
-  </div>`);
-  const upd = () => {
-    const p = parseFloat(form.querySelector('#re-prot').value) || 0;
-    const c = parseFloat(form.querySelector('#re-carbs').value) || 0;
-    const f = parseFloat(form.querySelector('#re-fat').value) || 0;
-    form.querySelector('#re-kcal').textContent = `${calcKcal(p, c, f)} kcal`;
+// Éditeur de recette : nom + liste d'aliments composée via Loupe / code-barre.
+// Les macros de la recette = somme des aliments ajoutés. `existing` = recette à éditer.
+function openRecipeEditor(onSaved, existing = null) {
+  const state = {
+    name: existing ? existing.name : '',
+    ingredients: existing && existing.ingredients ? existing.ingredients.map((i) => ({ ...i }) ) : [],
   };
-  ['#re-prot', '#re-carbs', '#re-fat'].forEach((sel) => form.querySelector(sel).addEventListener('input', upd));
+
+  const totals = () => state.ingredients.reduce((a, i) => ({
+    prot: a.prot + (i.prot || 0), carbs: a.carbs + (i.carbs || 0),
+    fat: a.fat + (i.fat || 0), fiber: a.fiber + (i.fiber || 0),
+  }), { prot: 0, carbs: 0, fat: 0, fiber: 0 });
+
+  const form = el(`<div>
+    <label class="field"><span>Nom de la recette</span><input id="re-name" type="text" placeholder="Bowl protéiné" autocomplete="off" value="${state.name.replace(/"/g, '&quot;')}"></label>
+    <div class="re-add-row">
+      <span class="muted" style="font-size:0.8rem">Ajouter un aliment :</span>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-secondary btn-sm" id="re-search" aria-label="Rechercher">${icons.search}</button>
+        <button class="btn btn-secondary btn-sm" id="re-scan" aria-label="Code-barre">${icons.barcode}</button>
+      </div>
+    </div>
+    <div id="re-ings" style="margin-top:10px"></div>
+    <div class="re-totals" id="re-totals"></div>
+  </div>`);
+
+  const round = (v) => Math.round((v || 0) * 10) / 10;
+  const renderIngs = () => {
+    const host = form.querySelector('#re-ings');
+    if (!state.ingredients.length) {
+      host.innerHTML = '<div class="empty-state" style="padding:16px">Aucun aliment.<br>Utilise la loupe ou le code-barre.</div>';
+    } else {
+      host.innerHTML = '';
+      state.ingredients.forEach((ing, idx) => {
+        const row = el(`<div class="re-ing">
+          <div class="re-ing-info">
+            <div class="re-ing-name">${ing.name}${ing.weight ? ` <span class="muted">(${ing.weight} g)</span>` : ''}</div>
+            <div class="meal-macros">${calcKcal(ing.prot, ing.carbs, ing.fat)} kcal · P ${round(ing.prot)} · G ${round(ing.carbs)} · L ${round(ing.fat)}</div>
+          </div>
+          <button class="icon-btn danger" data-rm aria-label="Retirer">${icons.trash}</button>
+        </div>`);
+        row.querySelector('[data-rm]').addEventListener('click', () => { state.ingredients.splice(idx, 1); renderIngs(); });
+        host.appendChild(row);
+      });
+    }
+    const t = totals();
+    form.querySelector('#re-totals').innerHTML = `
+      <div class="re-tot-row"><span>Total recette</span><b class="num" style="color:var(--accent)">${calcKcal(t.prot, t.carbs, t.fat)} kcal</b></div>
+      <div class="re-tot-row muted"><span>P ${round(t.prot)} · G ${round(t.carbs)} · L ${round(t.fat)}${t.fiber ? ` · ${round(t.fiber)}g fibres` : ''}</span></div>`;
+  };
+  renderIngs();
+
+  // Callback commun : reçoit un aliment pesé et l'ajoute à la recette.
+  const addIngredient = (food) => {
+    const r = (food.weight || 100) / 100;
+    const rd = (v) => Math.round((v || 0) * r * 10) / 10;
+    // food peut venir de la base (per100) ou de l'éditeur (déjà pesé : prot/carbs...)
+    const already = food.prot != null && food.per100; // openAddMealSheet renvoie les deux
+    const prot = already ? food.prot : rd(food.per100.prot);
+    const carbs = already ? food.carbs : rd(food.per100.carbs);
+    const fat = already ? food.fat : rd(food.per100.fat);
+    const fiber = already ? food.fiber : rd(food.per100.fiber);
+    state.ingredients.push({ name: food.name, weight: food.weight || 100, prot, carbs, fat, fiber, per100: food.per100 });
+    renderIngs();
+  };
+
+  form.querySelector('#re-search').addEventListener('click', () => {
+    openFoodSearchSheet(() => {}, { onPick: addIngredient });
+  });
+  form.querySelector('#re-scan').addEventListener('click', () => {
+    openBarcodeSheet(() => {}, { onPick: addIngredient });
+  });
+
   openModal({
-    title: 'Nouvelle recette',
+    title: existing ? 'Modifier la recette' : 'Nouvelle recette',
     content: form,
+    wide: true,
     actions: [
       { label: 'Annuler' },
       {
         label: 'Enregistrer', variant: 'btn-primary',
         onClick: (b) => {
           const name = b.querySelector('#re-name').value.trim();
-          const prot = parseFloat(b.querySelector('#re-prot').value) || 0;
-          const carbs = parseFloat(b.querySelector('#re-carbs').value) || 0;
-          const fat = parseFloat(b.querySelector('#re-fat').value) || 0;
-          const fiber = parseFloat(b.querySelector('#re-fiber').value) || 0;
           if (!name) { toast('Nom requis', 'error'); return 'keep'; }
-          if (prot + carbs + fat === 0) { toast('Au moins un macro', 'error'); return 'keep'; }
-          store.saveRecipe({ id: crypto.randomUUID(), name, prot, carbs, fat, fiber });
-          toast('Recette enregistrée', 'success');
+          if (!state.ingredients.length) { toast('Ajoute au moins un aliment', 'error'); return 'keep'; }
+          const t = totals();
+          const recipe = {
+            id: existing ? existing.id : crypto.randomUUID(),
+            name,
+            prot: Math.round(t.prot), carbs: Math.round(t.carbs), fat: Math.round(t.fat), fiber: Math.round(t.fiber),
+            ingredients: state.ingredients,
+          };
+          store.saveRecipe(recipe);
+          toast(existing ? 'Recette mise à jour' : 'Recette enregistrée', 'success');
           if (onSaved) onSaved();
         },
       },
@@ -655,7 +653,7 @@ function openRecipeEditor(onSaved) {
 // On reste dans l'application : flux vidéo getUserMedia, bouton pour figer une
 // image (« photo »), puis analyse multi-orientation du code-barre.
 // ============================================================
-function openBarcodeSheet(rerender) {
+function openBarcodeSheet(rerender, opts = {}) {
   let stoppedByUser = false;
   let camera = null;      // contrôleur { stop }
   let lastPhotoUrl = null;
@@ -729,11 +727,12 @@ function openBarcodeSheet(rerender) {
       // On réutilise le menu d'ajout rapide (mêmes 4 types de repas en haut),
       // avec les valeurs pour 100 g déjà remplies : il ne reste que le poids.
       sheet.close();
-      openAddMealSheet(rerender, {
-        baseName: product.name,
-        per100: { prot: product.prot, carbs: product.carbs, fat: product.fat, fiber: product.fiber },
-        weight: 100,
-      });
+      const per100 = { prot: product.prot, carbs: product.carbs, fat: product.fat, fiber: product.fiber };
+      if (opts.onPick) {
+        openAddMealSheet(rerender, { baseName: product.name, per100, weight: 100, onPick: opts.onPick });
+      } else {
+        openAddMealSheet(rerender, { baseName: product.name, per100, weight: 100 });
+      }
     } catch (e) {
       if (!stoppedByUser) statusEl.textContent = e.message || 'Erreur lors de la recherche du produit.';
     }
@@ -785,56 +784,126 @@ function openBarcodeSheet(rerender) {
 
 // Base d'aliments courants (loupe) : recherche + filtres par catégorie. Un clic
 // ouvre l'éditeur classique pré-rempli (per100) pour ajuster le poids.
-function openFoodDatabaseSheet(rerender) {
-  let activeCat = null;
+// ============================================================
+// RECHERCHE UNIFIÉE (bouton Loupe)
+// Regroupe Historique / Tous (base d'aliments) / Recettes, avec une barre de
+// recherche et un bouton flamme (ajout rapide) à droite.
+// `opts.onPick(food)` : si fourni, sélectionner un aliment appelle ce callback
+//   au lieu d'ouvrir l'éditeur de repas (utilisé pour composer une recette).
+//   `food` = { name, per100:{prot,carbs,fat,fiber}, weight }
+// `opts.mealDefault` : type de repas ciblé par défaut (mode repas).
+// `opts.includeRecipes` (défaut true) : afficher l'onglet Recettes.
+// ============================================================
+function openFoodSearchSheet(rerender, opts = {}) {
+  const onPick = opts.onPick || null;         // mode "composer une recette" si défini
+  const includeRecipes = opts.includeRecipes !== false && !onPick; // pas de recettes dans une recette
+  let tab = 'history';                          // history | all | recipes
   let query = '';
-  const form = el(`<div>
-    <input id="fd-search" type="text" placeholder="Rechercher un aliment…" autocomplete="off" class="field-input-solo" style="width:100%;min-height:44px;margin-bottom:10px">
-    <div class="segment segment-scroll" id="fd-cats" style="margin-bottom:12px">
-      <button data-c="" class="active">Tous</button>
-      ${FOOD_CATEGORIES.map((c) => `<button data-c="${c}">${c}</button>`).join('')}
-    </div>
-    <div id="fd-list"></div>
-  </div>`);
-  const sheet = openSheet({ title: "Base d'aliments", content: form });
-  const list = form.querySelector('#fd-list');
+  let cat = opts.mealDefault || lastMealType(); // repas ciblé (mode repas)
 
-  const draw = () => {
-    const nq = query.trim().toLowerCase();
+  const tabsHtml = `
+    <button data-tab="history" class="active">Historique</button>
+    <button data-tab="all">Tous</button>
+    ${includeRecipes ? '<button data-tab="recipes">Recettes</button>' : ''}`;
+
+  const form = el(`<div>
+    <div class="fs-searchbar">
+      <input id="fs-search" type="text" placeholder="Rechercher…" autocomplete="off" class="field-input-solo">
+      <button class="fs-quick" id="fs-quick" aria-label="Ajout rapide" title="Ajout rapide">${icons.flame}</button>
+    </div>
+    <div class="segment segment-scroll" id="fs-tabs" style="margin:10px 0 12px">${tabsHtml}</div>
+    <div id="fs-list"></div>
+  </div>`);
+  const sheet = openSheet({ title: onPick ? 'Ajouter un aliment' : 'Aliments', content: form });
+  const list = form.querySelector('#fs-list');
+
+  // Ajoute un aliment (per100 + poids) soit à la recette (onPick), soit ouvre l'éditeur repas.
+  const pick = (food) => {
+    sheet.close();
+    if (onPick) { onPick(food); return; }
+    openAddMealSheet(rerender, { baseName: food.name, per100: food.per100, weight: food.weight || 100, meal: cat });
+  };
+
+  const rowFood = (name, per100, weight, meta) => {
+    const kcal100 = calcKcal(per100.prot || 0, per100.carbs || 0, per100.fat || 0);
+    const item = el(`<button class="hist-item">
+      <div class="hist-info">
+        <div class="hist-name">${name}</div>
+        <div class="meal-macros">100 g : ${kcal100} kcal${meta || ''}${per100.fiber ? ` · <span class="fiber-tag">${per100.fiber}g fibres</span>` : ''}</div>
+      </div>
+      <span class="hist-add">${icons.plus}</span>
+    </button>`);
+    item.addEventListener('click', () => pick({ name, per100, weight: weight || 100 }));
+    return item;
+  };
+
+  const drawHistory = (nq) => {
+    const entries = store.nutritionEntryHistory();
+    const filtered = nq ? entries.filter((e) => (e.baseName || e.name || '').toLowerCase().includes(nq)) : entries;
+    if (!filtered.length) { list.innerHTML = `<div class="empty-state">${nq ? 'Aucun résultat' : 'Aucune entrée pour le moment.'}</div>`; return; }
+    list.innerHTML = '';
+    for (const e of filtered.slice(0, 200)) {
+      const p100 = e.per100 || { prot: e.prot, carbs: e.carbs, fat: e.fat, fiber: e.fiber };
+      const name = e.baseName || e.name || 'Aliment';
+      const weight = e.weight || 100;
+      list.appendChild(rowFood(name, p100, weight, ` · dernier : ${weight} g`));
+    }
+  };
+
+  const drawAll = (nq) => {
     let items = FOODS;
-    if (activeCat) items = items.filter((f) => f.c === activeCat);
     if (nq) items = items.filter((f) => f.n.toLowerCase().includes(nq));
     items = items.slice().sort((a, b) => a.n.localeCompare(b.n, 'fr'));
-    list.innerHTML = items.length ? '' : '<div class="empty-state">Aucun aliment trouvé</div>';
+    if (!items.length) { list.innerHTML = '<div class="empty-state">Aucun aliment trouvé</div>'; return; }
+    list.innerHTML = '';
     for (const f of items.slice(0, 300)) {
-      const kcal = calcKcal(f.p, f.g, f.f);
+      list.appendChild(rowFood(f.n, { prot: f.p, carbs: f.g, fat: f.f, fiber: f.fb || 0 }, 100, ` · P ${f.p} · G ${f.g} · L ${f.f}`));
+    }
+  };
+
+  const drawRecipes = (nq) => {
+    let recipes = store.userData.recipes || [];
+    if (nq) recipes = recipes.filter((r) => r.name.toLowerCase().includes(nq));
+    if (!recipes.length) { list.innerHTML = `<div class="empty-state">${nq ? 'Aucune recette' : 'Aucune recette.<br>Crée-en depuis l\'onglet Recettes.'}</div>`; return; }
+    list.innerHTML = '';
+    for (const r of recipes) {
       const item = el(`<button class="hist-item">
         <div class="hist-info">
-          <div class="hist-name">${f.n}</div>
-          <div class="meal-macros">100 g : ${kcal} kcal · P ${f.p} · G ${f.g} · L ${f.f}${f.fb ? ` · <span class="fiber-tag">${f.fb}g fibres</span>` : ''}</div>
+          <div class="hist-name">${r.name}</div>
+          <div class="meal-macros">${calcKcal(r.prot, r.carbs, r.fat)} kcal · P ${r.prot} · G ${r.carbs} · L ${r.fat}</div>
         </div>
         <span class="hist-add">${icons.plus}</span>
       </button>`);
+      // Une recette est un total : on l'ajoute tel quel (poids "1 portion").
       item.addEventListener('click', () => {
         sheet.close();
-        openAddMealSheet(rerender, {
-          baseName: f.n,
-          per100: { prot: f.p, carbs: f.g, fat: f.f, fiber: f.fb || 0 },
-          weight: 100,
-        });
+        if (onPick) { onPick({ name: r.name, per100: { prot: r.prot, carbs: r.carbs, fat: r.fat, fiber: r.fiber || 0 }, weight: 100, isRecipe: true }); return; }
+        openAddMealSheet(rerender, { name: r.name, prot: r.prot, carbs: r.carbs, fat: r.fat, fiber: r.fiber });
       });
       list.appendChild(item);
     }
   };
+
+  const draw = () => {
+    const nq = query.trim().toLowerCase();
+    if (tab === 'history') drawHistory(nq);
+    else if (tab === 'all') drawAll(nq);
+    else drawRecipes(nq);
+  };
   draw();
 
-  form.querySelector('#fd-search').addEventListener('input', (e) => { query = e.target.value; draw(); });
-  form.querySelector('#fd-cats').addEventListener('click', (e) => {
+  form.querySelector('#fs-search').addEventListener('input', (e) => { query = e.target.value; draw(); });
+  form.querySelector('#fs-tabs').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
-    activeCat = b.dataset.c || null;
-    form.querySelectorAll('#fd-cats button').forEach((x) => x.classList.toggle('active', x === b));
+    tab = b.dataset.tab;
+    form.querySelectorAll('#fs-tabs button').forEach((x) => x.classList.toggle('active', x === b));
     draw();
     haptic();
+  });
+  form.querySelector('#fs-quick').addEventListener('click', () => {
+    sheet.close();
+    if (onPick) openAddMealSheet(rerender, { onPick }); // ajout rapide vers la recette
+    else openAddMealSheet(rerender);
   });
 }
 
@@ -844,10 +913,8 @@ function ensureFab() {
   let wrap = document.getElementById('fab-nutrition-wrap');
   if (!wrap) {
     wrap = el(`<div class="fab-wrap" id="fab-nutrition-wrap">
-      <button class="fab fab-mini" id="fab-search" aria-label="Base d'aliments" style="transition-delay:0ms">${icons.search}</button>
-      <button class="fab fab-mini" id="fab-history" aria-label="Historique des aliments" style="transition-delay:40ms">${icons.book}</button>
-      <button class="fab fab-mini" id="fab-scan" aria-label="Scanner un code-barre" style="transition-delay:80ms">${icons.barcode}</button>
-      <button class="fab fab-mini" id="fab-quick" aria-label="Ajout rapide" style="transition-delay:120ms">${icons.flame}</button>
+      <button class="fab fab-mini" id="fab-search" aria-label="Rechercher un aliment" style="transition-delay:0ms">${icons.search}</button>
+      <button class="fab fab-mini" id="fab-scan" aria-label="Scanner un code-barre" style="transition-delay:40ms">${icons.barcode}</button>
       <button class="fab" id="fab-nutrition" aria-label="Ajouter">${icons.plus}</button>
     </div>`);
     document.body.appendChild(wrap);
@@ -857,18 +924,14 @@ function ensureFab() {
     });
   }
   const main = wrap.querySelector('#fab-nutrition');
-  const quick = wrap.querySelector('#fab-quick');
   const scan = wrap.querySelector('#fab-scan');
-  const history = wrap.querySelector('#fab-history');
   const search = wrap.querySelector('#fab-search');
 
   const setOpen = (open) => wrap.classList.toggle('fab-open', open);
 
   main.onclick = () => setOpen(!wrap.classList.contains('fab-open'));
-  quick.onclick = () => { setOpen(false); openAddMealSheet(currentRerender); };
   scan.onclick = () => { setOpen(false); openBarcodeSheet(currentRerender); };
-  history.onclick = () => { setOpen(false); openHistorySheet(currentRerender); };
-  search.onclick = () => { setOpen(false); openFoodDatabaseSheet(currentRerender); };
+  search.onclick = () => { setOpen(false); openFoodSearchSheet(currentRerender); };
 }
 
 export function render(container) {

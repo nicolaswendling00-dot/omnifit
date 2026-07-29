@@ -122,15 +122,34 @@ store.addStepsLog(todayISO(), 12500);
 activity.render(pages.activity);
 assert(pages.activity.querySelector('.steps-hero').textContent.includes('12'), 'Pas affichés dans le hero');
 
-console.log('== Recettes ==');
-store.saveRecipe({ id: 'rec1', name: 'Bowl protéiné', prot: 40, carbs: 50, fat: 10, fiber: 8 });
-assert(store.userData.recipes.length === 1, 'saveRecipe ajoute une recette');
-document.getElementById('fab-nutrition').click();   // ouvre le menu FAB
-document.getElementById('fab-quick').click();       // ajout rapide
-const mealSheet = document.querySelector('.sheet');
-assert(mealSheet.querySelectorAll('#m-cat button').length === 4, 'Ajout repas : 4 types (PDéj/Déj/Dîner/Snack)');
+console.log('== Saisie aliments (loupe / FAB 2 boutons) ==');
+// FAB : uniquement scan + loupe
+document.getElementById('fab-nutrition').click();
+assert(document.getElementById('fab-scan') && document.getElementById('fab-search'), 'FAB : scan + loupe');
+assert(!document.getElementById('fab-history') && !document.getElementById('fab-quick'), 'FAB : plus d\'historique/flamme séparés');
+// Loupe : recherche unifiée
+document.getElementById('fab-search').click();
+const fsSheet = document.querySelector('.sheet');
+assert(fsSheet.querySelector('#fs-search') && fsSheet.querySelector('#fs-quick'), 'Loupe : recherche + flamme (ajout rapide)');
+const fsTabs = [...fsSheet.querySelectorAll('#fs-tabs button')].map((b) => b.dataset.tab).join(',');
+assert(fsTabs === 'history,all,recipes', 'Loupe : onglets Historique/Tous/Recettes');
+assert(fsSheet.querySelector('#fs-tabs button.active').dataset.tab === 'history', 'Loupe : Historique par défaut');
+// flamme -> ouvre l'éditeur repas (ajout rapide)
+fsSheet.querySelector('#fs-quick').click();
+const mealSheet = [...document.querySelectorAll('.sheet')].find((s) => s.querySelector('#m-cat'));
+assert(mealSheet && mealSheet.querySelectorAll('#m-cat button').length === 4, 'Ajout repas : 4 types (PDéj/Déj/Dîner/Snack)');
 assert(mealSheet.querySelector('#m-fiber'), 'Ajout repas : champ fibres optionnel');
-assert(mealSheet.querySelector('.recipe-chip'), 'Ajout repas : recettes rapides proposées');
+clearOverlays();
+
+console.log('== Recettes (composition par aliments) ==');
+store.saveRecipe({ id: 'rec1', name: 'Bowl protéiné', prot: 40, carbs: 50, fat: 10, fiber: 8, ingredients: [{ name: 'Riz', weight: 100, prot: 3, carbs: 28, fat: 0, fiber: 0 }] });
+assert(store.userData.recipes.length === 1, 'saveRecipe ajoute une recette');
+// La recette apparaît dans loupe -> Recettes
+document.getElementById('fab-nutrition').click();
+document.getElementById('fab-search').click();
+const fs2 = document.querySelector('.sheet');
+fs2.querySelector('#fs-tabs button[data-tab="recipes"]').click();
+assert([...fs2.querySelectorAll('#fs-list .hist-item')].some((i) => i.textContent.includes('Bowl protéiné')), 'Recette visible dans loupe -> Recettes');
 clearOverlays();
 store.deleteRecipe('rec1');
 assert(store.userData.recipes.length === 0, 'deleteRecipe fonctionne');
@@ -437,25 +456,19 @@ assert(/prefers-reduced-motion/.test(cssTx), 'Transitions : respect de prefers-r
 assert(/#page-home \{[^}]*overflow: hidden/.test(cssTx), 'Accueil : page non scrollable (overflow hidden)');
 assert(/\.home-fit \{[^}]*height: calc/.test(cssTx), 'Accueil : hauteur verrouillee');
 
-// Historique : selecteur de repas + ajout direct avec la quantite precedente
+// Historique : désormais un onglet de la loupe. Clic sur une entrée -> éditeur pré-rempli.
 store.addNutritionLog('2020-05-01', { name: 'Boulgour (250 g)', baseName: 'Boulgour', meal: 'Déjeuner', prot: 6.5, carbs: 70, fat: 0.8, fiber: 1, kcal: 313, per100: { prot: 2.6, carbs: 28, fat: 0.3, fiber: 0.4 }, weight: 250 });
 store.saveUserData({ settings: { lastMealType: 'Dîner' } });
 nutrition.render(pages.nutrition);
 document.getElementById('fab-nutrition').click();
-document.getElementById('fab-history').click();
+document.getElementById('fab-search').click();
 const histSheet = document.querySelector('.sheet');
-assert(histSheet && histSheet.querySelectorAll('#h-cat button').length === 4, 'Historique : 4 boutons de repas en haut');
-const histActive = [...histSheet.querySelectorAll('#h-cat button')].find((b) => b.classList.contains('active'));
-assert(histActive && histActive.dataset.v === 'Dîner', 'Historique : repas par defaut = dernier utilise');
-// On cible l'entree « Riz » (l'historique liste d'abord les aliments les plus recents)
+assert(histSheet.querySelector('#fs-tabs button.active').dataset.tab === 'history', 'Loupe : onglet Historique actif par défaut');
 const histItem = [...histSheet.querySelectorAll('.hist-item')].find((it) => it.textContent.includes('Boulgour'));
-assert(histItem && histItem.textContent.includes('250 g'), 'Historique : quantite precedente affichee');
-const beforeN = (store.userData.nutrition.byDate[todayISO()] || { meals: [] }).meals.length;
-histItem.querySelector('[data-quick]').click();
-const addedMeal = store.userData.nutrition.byDate[todayISO()].meals.slice(-1)[0];
-assert(store.userData.nutrition.byDate[todayISO()].meals.length === beforeN + 1, 'Historique : + ajoute directement');
-assert(addedMeal.weight === 250, 'Historique : meme quantite que la fois precedente');
-assert(addedMeal.meal === 'Dîner', 'Historique : ajoute au repas selectionne');
+assert(histItem && histItem.textContent.includes('250 g'), 'Historique : quantité précédente affichée');
+histItem.click();
+const editSheet = [...document.querySelectorAll('.sheet')].find((s) => s.querySelector('#m-name'));
+assert(editSheet && editSheet.querySelector('#m-name').value.includes('Boulgour'), 'Historique : clic -> éditeur pré-rempli');
 clearOverlays();
 
 // Graphe de poids : cercle creux pour les jours lisses
@@ -481,11 +494,12 @@ assert(foodsMod.FOOD_CATEGORIES.includes('Fruits') && foodsMod.FOOD_CATEGORIES.i
 const nfab = pages.nutrition;
 nutrition.render(nfab);
 document.getElementById('fab-nutrition').click();
-assert(document.getElementById('fab-search'), 'FAB : 4e bouton loupe present');
+assert(document.getElementById('fab-search'), 'FAB : bouton loupe present');
 document.getElementById('fab-search').click();
 const fdSheet = document.querySelector('.sheet');
-assert(fdSheet && fdSheet.querySelector('#fd-search'), 'Base aliments : barre de recherche');
-assert(fdSheet.querySelectorAll('#fd-list .hist-item').length > 50, 'Base aliments : liste affichee');
+assert(fdSheet && fdSheet.querySelector('#fs-search'), 'Loupe : barre de recherche');
+fdSheet.querySelector('#fs-tabs button[data-tab="all"]').click();
+assert(fdSheet.querySelectorAll('#fs-list .hist-item').length > 50, 'Loupe/Tous : base d\'aliments affichée');
 clearOverlays();
 // Animation LP
 const uiCel = await import('./utils/ui.js');
