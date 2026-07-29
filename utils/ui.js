@@ -265,6 +265,10 @@ export function openSheet({ title, content, onClose = null, headerAction = null 
   const setY = (px) => { sheet.style.transform = `translate3d(0, ${px}px, 0)`; };
 
   sheet.addEventListener('touchstart', (e) => {
+    // Un geste qui démarre sur un champ de saisie (textarea/input/zone éditable)
+    // ne doit PAS être capté par le glisser-pour-fermer : sinon l'appui long et
+    // le menu « Coller » d'iOS sont bloqués.
+    if (e.target.closest('textarea, input, [contenteditable="true"], .no-sheet-drag')) { startY = null; return; }
     if (sheet.scrollTop > 0) { startY = null; return; }
     startY = e.touches[0].clientY; dy = 0; dragging = false;
   }, { passive: true });

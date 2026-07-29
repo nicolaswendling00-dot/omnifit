@@ -156,21 +156,33 @@ async function importStepsFromClipboard(rerender) {
 function openStepsPasteSheet(rerender) {
   const form = el(`<div>
     <p class="muted" style="font-size:0.82rem;line-height:1.5;margin-bottom:10px">
-      Colle ici le texte copié par ton raccourci (appui long dans le champ → <b>Coller</b>), puis touche <b>Importer</b>.
+      Touche <b>Coller le presse-papier</b>, ou fais un appui long dans le champ → <b>Coller</b>, puis <b>Importer</b>.
     </p>
-    <textarea id="sp-input" rows="5" placeholder="2026-07-22:8200&#10;2026-07-23:9100&#10;…" class="field-input-solo" style="width:100%;font-family:monospace;font-size:0.9rem;line-height:1.5;resize:vertical"></textarea>
+    <button class="btn btn-secondary btn-block" id="sp-paste" style="margin-bottom:8px">${icons.copy} Coller le presse-papier</button>
+    <textarea id="sp-input" rows="5" placeholder="2026-07-22:8200&#10;2026-07-23:9100&#10;…" class="field-input-solo no-sheet-drag" style="width:100%;font-family:monospace;font-size:0.9rem;line-height:1.5;resize:vertical"></textarea>
     <button class="btn btn-primary btn-block" id="sp-import" style="margin-top:12px">${icons.download} Importer</button>
     <button class="btn btn-ghost btn-block btn-sm" id="sp-help" style="margin-top:8px">Comment configurer le raccourci ?</button>
   </div>`);
   const sheet = openSheet({ title: 'Importer les pas', content: form });
   const input = form.querySelector('#sp-input');
 
+  // Bouton « Coller » : un tap est un geste utilisateur direct, ce qu'iOS exige
+  // pour lire le presse-papier — plus fiable que l'appui long en PWA.
+  form.querySelector('#sp-paste').addEventListener('click', async () => {
+    try {
+      const t = await navigator.clipboard.readText();
+      if (t) { input.value = t; toast('Presse-papier collé', 'success'); }
+      else { toast('Presse-papier vide', 'error'); }
+    } catch (_) {
+      toast('Colle à la main : appui long dans le champ', 'error');
+      try { input.focus(); } catch (__) { /* noop */ }
+    }
+  });
+
   // Pré-remplissage best-effort (si le presse-papier est finalement lisible).
   navigator.clipboard.readText().then((t) => {
     if (t && !input.value) { input.value = t; }
   }).catch(() => { /* ignoré : l'utilisateur collera à la main */ });
-
-  setTimeout(() => { try { input.focus(); } catch (_) { /* noop */ } }, 60);
 
   form.querySelector('#sp-import').addEventListener('click', () => {
     const entries = parseStepsPayload(input.value);
