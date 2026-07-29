@@ -1,7 +1,7 @@
 // OmniFit — PAGE 3 : Activité (pas)
 import { store, todayISO, parseStepsPayload } from '../utils/storage.js';
 import { calculateTrend } from '../utils/math.js';
-import { el, icons, openModal, toast, ringSVG, fmtDateShort, haptic } from '../utils/ui.js';
+import { el, icons, openModal, openSheet, toast, ringSVG, fmtDateShort, haptic } from '../utils/ui.js';
 
 let stepsChart = null;
 let viewDays = 7;
@@ -118,24 +118,8 @@ function monthStats() {
   return { weekAvg, record, activeDays, trend };
 }
 
-// Import des pas depuis le presse-papier (rempli par un raccourci iOS lisant
-// l'app Santé). Accepte un nombre seul (→ aujourd'hui) ou plusieurs jours au
-// format « AAAA-MM-JJ:pas » (une ligne ou séparés par « ; »).
-async function importStepsFromClipboard(rerender) {
-  let text = '';
-  try {
-    text = await navigator.clipboard.readText();
-  } catch (_) {
-    // Lecture refusée (permission / geste utilisateur) → on montre le guide.
-    openStepsGuide(rerender);
-    return;
-  }
-  const entries = parseStepsPayload(text);
-  if (!entries.length) {
-    // Presse-papier vide ou non reconnu → guide, avec saisie manuelle possible.
-    openStepsGuide(rerender);
-    return;
-  }
+// Applique une liste d'entrées de pas et notifie.
+function applyStepsEntries(entries, rerender) {
   for (const { date, count } of entries) store.addStepsLog(date, count);
   haptic();
   const todayEntry = entries.find((e) => e.date === todayISO());
@@ -146,6 +130,55 @@ async function importStepsFromClipboard(rerender) {
     'success',
   );
   rerender();
+}
+
+// Import des pas. On tente d'abord la lecture automatique du presse-papier ; si
+// iOS la bloque (fréquent en PWA), on ouvre un champ où l'utilisateur colle
+// directement — méthode fiable, plutôt que d'afficher un guide.
+async function importStepsFromClipboard(rerender) {
+  let text = '';
+  try {
+    text = await navigator.clipboard.readText();
+  } catch (_) {
+    text = '';
+  }
+  const entries = parseStepsPayload(text);
+  if (entries.length) {
+    applyStepsEntries(entries, rerender);
+    return;
+  }
+  // Lecture auto vide ou refusée → champ de collage manuel (fiable sur iOS).
+  openStepsPasteSheet(rerender);
+}
+
+// Champ de collage : l'utilisateur colle le texte du raccourci (appui long →
+// Coller) puis valide. On tente de pré-remplir automatiquement si possible.
+function openStepsPasteSheet(rerender) {
+  const form = el(`<div>
+    <p class="muted" style="font-size:0.82rem;line-height:1.5;margin-bottom:10px">
+      Colle ici le texte copié par ton raccourci (appui long dans le champ → <b>Coller</b>), puis touche <b>Importer</b>.
+    </p>
+    <textarea id="sp-input" rows="5" placeholder="2026-07-22:8200&#10;2026-07-23:9100&#10;…" class="field-input-solo" style="width:100%;font-family:monospace;font-size:0.9rem;line-height:1.5;resize:vertical"></textarea>
+    <button class="btn btn-primary btn-block" id="sp-import" style="margin-top:12px">${icons.download} Importer</button>
+    <button class="btn btn-ghost btn-block btn-sm" id="sp-help" style="margin-top:8px">Comment configurer le raccourci ?</button>
+  </div>`);
+  const sheet = openSheet({ title: 'Importer les pas', content: form });
+  const input = form.querySelector('#sp-input');
+
+  // Pré-remplissage best-effort (si le presse-papier est finalement lisible).
+  navigator.clipboard.readText().then((t) => {
+    if (t && !input.value) { input.value = t; }
+  }).catch(() => { /* ignoré : l'utilisateur collera à la main */ });
+
+  setTimeout(() => { try { input.focus(); } catch (_) { /* noop */ } }, 60);
+
+  form.querySelector('#sp-import').addEventListener('click', () => {
+    const entries = parseStepsPayload(input.value);
+    if (!entries.length) { toast('Rien à importer — colle le texte du raccourci', 'error'); return; }
+    sheet.close();
+    applyStepsEntries(entries, rerender);
+  });
+  form.querySelector('#sp-help').addEventListener('click', () => { sheet.close(); openStepsGuide(rerender); });
 }
 
 // Guide de configuration du raccourci iOS (affiché si le presse-papier est vide
