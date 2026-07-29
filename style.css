@@ -1033,3 +1033,11 @@ body.shape-8bit .gr-progress i, body.shape-8bit .progress-bar > div {
 .segment-scroll { display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 6px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
 .segment-scroll::-webkit-scrollbar { display: none; }
 .segment-scroll button { flex: 0 0 auto; white-space: nowrap; padding: 6px 12px; }
+
+/* Champ de collage des pas : garantir la sélection et le menu contextuel iOS
+   (certaines règles globales peuvent gêner l'appui long en PWA). */
+#sp-input {
+  -webkit-user-select: text !important; user-select: text !important;
+  -webkit-touch-callout: default !important;
+  touch-action: auto !important;
+}

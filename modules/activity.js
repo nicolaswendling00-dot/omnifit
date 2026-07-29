@@ -167,16 +167,20 @@ function openStepsPasteSheet(rerender) {
   const input = form.querySelector('#sp-input');
 
   // Bouton « Coller » : un tap est un geste utilisateur direct, ce qu'iOS exige
-  // pour lire le presse-papier — plus fiable que l'appui long en PWA.
+  // pour lire le presse-papier. On importe DIRECTEMENT le contenu lu, sans
+  // dépendre du champ texte (qui peut être capricieux en PWA).
   form.querySelector('#sp-paste').addEventListener('click', async () => {
+    let t = '';
     try {
-      const t = await navigator.clipboard.readText();
-      if (t) { input.value = t; toast('Presse-papier collé', 'success'); }
-      else { toast('Presse-papier vide', 'error'); }
+      t = await navigator.clipboard.readText();
     } catch (_) {
-      toast('Colle à la main : appui long dans le champ', 'error');
-      try { input.focus(); } catch (__) { /* noop */ }
+      toast('Lecture refusée — colle à la main dans le champ', 'error');
+      return;
     }
+    const entries = parseStepsPayload(t);
+    if (!entries.length) { toast('Presse-papier vide ou non reconnu', 'error'); input.value = t || ''; return; }
+    sheet.close();
+    applyStepsEntries(entries, rerender);
   });
 
   // Pré-remplissage best-effort (si le presse-papier est finalement lisible).
