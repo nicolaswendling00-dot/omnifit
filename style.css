@@ -1056,3 +1056,17 @@ body.shape-8bit .gr-progress i, body.shape-8bit .progress-bar > div {
 .re-ing-name { font-weight: 700; font-size: 0.9rem; }
 .re-totals { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
 .re-tot-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem; padding: 2px 0; }
+
+/* Loupe : onglets Historique/Tous/Recettes à largeur égale (pleine largeur) */
+.fs-tabs-eq button { flex: 1 1 0; }
+/* Sélecteur de repas dans la loupe : 4 boutons égaux */
+.segment-meals button { flex: 1 1 0; font-size: 0.72rem; padding: 8px 4px; }
+/* Liste d'aliments à hauteur FIXE : le menu ne change pas de taille selon le contenu */
+.fs-list-fixed { height: 46vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.fs-list-fixed .empty-state { padding-top: 32px; }
+/* Flash discret quand un aliment est ajouté sans fermer le menu */
+.hist-item.just-added { animation: addPulse 450ms var(--ease); }
+@keyframes addPulse {
+  0% { background: rgba(var(--accent-rgb), 0.28); }
+  100% { background: var(--surface-2); }
+}

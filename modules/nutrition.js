@@ -330,7 +330,7 @@ function openAddMealSheet(rerender, prefill = null) {
       </div>
     </div>
 
-    <label class="check-row" style="margin:10px 0 12px"><input type="checkbox" id="m-save-recipe"> <span>Enregistrer comme aliment (recette /100g)</span></label>
+
     <button class="btn btn-primary btn-block" id="m-add">${pf.editId ? icons.check + ' Enregistrer' : icons.plus + ' Ajouter'}</button>
   </div>`);
 
@@ -422,10 +422,6 @@ function openAddMealSheet(rerender, prefill = null) {
     } else {
       store.addNutritionLog(selectedDate, payload);
       rememberMealType(cat);
-    }
-    if (form.querySelector('#m-save-recipe').checked) {
-      store.saveRecipe({ id: crypto.randomUUID(), name: bn, prot: v.per100.prot, carbs: v.per100.carbs, fat: v.per100.fat, fiber: v.per100.fiber });
-      toast('Aliment enregistré', 'success');
     }
     haptic();
     // Quête validée : le pilier nutrition passe de non-atteint à atteint
@@ -811,16 +807,26 @@ function openFoodSearchSheet(rerender, opts = {}) {
       <input id="fs-search" type="text" placeholder="Rechercher…" autocomplete="off" class="field-input-solo">
       <button class="fs-quick" id="fs-quick" aria-label="Ajout rapide" title="Ajout rapide">${icons.flame}</button>
     </div>
-    <div class="segment segment-scroll" id="fs-tabs" style="margin:10px 0 12px">${tabsHtml}</div>
-    <div id="fs-list"></div>
+    ${onPick ? '' : `<div class="segment segment-meals" id="fs-meal" style="margin-top:10px">
+      ${MEAL_TYPES.map((t) => `<button data-v="${t}" class="${t === cat ? 'active' : ''}">${t}</button>`).join('')}
+    </div>`}
+    <div class="segment fs-tabs-eq" id="fs-tabs" style="margin:10px 0 12px">${tabsHtml}</div>
+    <div id="fs-list" class="fs-list-fixed"></div>
   </div>`);
   const sheet = openSheet({ title: onPick ? 'Ajouter un aliment' : 'Aliments', content: form });
   const list = form.querySelector('#fs-list');
 
-  // Ajoute un aliment (per100 + poids) soit à la recette (onPick), soit ouvre l'éditeur repas.
-  const pick = (food) => {
-    sheet.close();
-    if (onPick) { onPick(food); return; }
+  // Retour visuel léger sans fermer le menu (pour enchaîner les ajouts).
+  const flashAdded = (elm) => {
+    if (!elm) return;
+    elm.classList.add('just-added');
+    setTimeout(() => elm.classList.remove('just-added'), 450);
+  };
+
+  // Ajoute un aliment. IMPORTANT : on NE ferme PAS la sheet, pour enchaîner.
+  const pick = (food, srcEl) => {
+    if (onPick) { onPick(food); flashAdded(srcEl); haptic(); return; }
+    // Mode repas : ouvre l'éditeur pour ajuster le poids (la sheet reste dessous).
     openAddMealSheet(rerender, { baseName: food.name, per100: food.per100, weight: food.weight || 100, meal: cat });
   };
 
@@ -833,7 +839,7 @@ function openFoodSearchSheet(rerender, opts = {}) {
       </div>
       <span class="hist-add">${icons.plus}</span>
     </button>`);
-    item.addEventListener('click', () => pick({ name, per100, weight: weight || 100 }));
+    item.addEventListener('click', () => pick({ name, per100, weight: weight || 100 }, item));
     return item;
   };
 
@@ -876,9 +882,8 @@ function openFoodSearchSheet(rerender, opts = {}) {
       </button>`);
       // Une recette est un total : on l'ajoute tel quel (poids "1 portion").
       item.addEventListener('click', () => {
-        sheet.close();
-        if (onPick) { onPick({ name: r.name, per100: { prot: r.prot, carbs: r.carbs, fat: r.fat, fiber: r.fiber || 0 }, weight: 100, isRecipe: true }); return; }
-        openAddMealSheet(rerender, { name: r.name, prot: r.prot, carbs: r.carbs, fat: r.fat, fiber: r.fiber });
+        if (onPick) { onPick({ name: r.name, per100: { prot: r.prot, carbs: r.carbs, fat: r.fat, fiber: r.fiber || 0 }, weight: 100, isRecipe: true }); flashAdded(item); haptic(); return; }
+        openAddMealSheet(rerender, { name: r.name, prot: r.prot, carbs: r.carbs, fat: r.fat, fiber: r.fiber, meal: cat });
       });
       list.appendChild(item);
     }
@@ -900,10 +905,20 @@ function openFoodSearchSheet(rerender, opts = {}) {
     draw();
     haptic();
   });
+  // Sélecteur de repas (mode repas uniquement) : choisit le repas ciblé.
+  const mealSeg = form.querySelector('#fs-meal');
+  if (mealSeg) {
+    mealSeg.addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      cat = b.dataset.v;
+      mealSeg.querySelectorAll('button').forEach((x) => x.classList.toggle('active', x === b));
+      haptic();
+    });
+  }
   form.querySelector('#fs-quick').addEventListener('click', () => {
-    sheet.close();
-    if (onPick) openAddMealSheet(rerender, { onPick }); // ajout rapide vers la recette
-    else openAddMealSheet(rerender);
+    // Ajout rapide : ouvre l'éditeur (la sheet loupe reste dessous, on n'enchaîne pas ici).
+    if (onPick) openAddMealSheet(rerender, { onPick });
+    else openAddMealSheet(rerender, { meal: cat });
   });
 }
 
