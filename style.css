@@ -497,7 +497,7 @@ body[data-page="1"] #fab-nutrition-wrap { display: flex; }
 
 /* Ajout repas — case POIDS mise en valeur (bas du formulaire) */
 .m-weight-box {
-  margin-top: 14px; padding: 12px 14px;
+  margin-top: 14px; margin-bottom: 14px; padding: 12px 14px;
   background: rgba(var(--accent-rgb), 0.08);
   border: 1.5px solid var(--accent);
   border-radius: 14px;
@@ -1078,3 +1078,9 @@ body.shape-8bit .gr-progress i, body.shape-8bit .progress-bar > div {
 .ra-ing-name { font-weight: 600; }
 .ra-mult { margin-bottom: 10px; }
 .ra-totals { border-top: 1px solid var(--border); padding-top: 10px; }
+
+/* Couleurs des macros dans .meal-macros : P orange, G bleu, L violet, F vert */
+.mac-p { color: #F59E0B; font-weight: 700; }
+.mac-g { color: #3AA0F0; font-weight: 700; }
+.mac-l { color: #9F7CFF; font-weight: 700; }
+.mac-f { color: #10B981; font-weight: 700; }

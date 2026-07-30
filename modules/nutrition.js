@@ -17,6 +17,15 @@ const C_FAT = '#8B5CF6';
 const C_FIBER = '#22C55E';
 
 const MEAL_TYPES = ['Petit-Déjeuner', 'Déjeuner', 'Dîner', 'Snack'];
+
+// Génère le texte coloré des macros : P orange, G bleu, L violet, F vert.
+// `opts.round` arrondit à 1 décimale. Les fibres n'apparaissent que si > 0.
+function macroLine(prot, carbs, fat, fiber, opts = {}) {
+  const r = opts.round ? (v) => Math.round((v || 0) * 10) / 10 : (v) => (v || 0);
+  let s = `<span class="mac-p">P ${r(prot)}</span> · <span class="mac-g">G ${r(carbs)}</span> · <span class="mac-l">L ${r(fat)}</span>`;
+  if (fiber != null && fiber > 0) s += ` · <span class="mac-f">F ${r(fiber)}</span>`;
+  return s;
+}
 // Dernier type de repas auquel on a ajouté quelque chose (persisté entre sessions
 // via les réglages) : sert de sélection par défaut dans l'historique.
 function lastMealType() {
@@ -323,7 +332,7 @@ function openAddMealSheet(rerender, prefill = null) {
         <input id="m-weight" type="number" inputmode="decimal" min="0" step="1" placeholder="0" value="${startWeight}"></label>
       <div class="m-weight-result">
         <span class="num" id="m-kcal">0 kcal</span>
-        <span class="m-weight-macros" id="m-macros">P 0 · G 0 · L 0</span>
+        <span class="m-weight-macros" id="m-macros">${macroLine(0, 0, 0, 0)}</span>
       </div>
     </div>
 
@@ -352,7 +361,7 @@ function openAddMealSheet(rerender, prefill = null) {
   const upd = () => {
     const v = scale();
     form.querySelector('#m-kcal').textContent = `${calcKcal(v.prot, v.carbs, v.fat)} kcal`;
-    form.querySelector('#m-macros').textContent = `P ${v.prot} · G ${v.carbs} · L ${v.fat}${v.fiber ? ` · Fib ${v.fiber}` : ''}`;
+    form.querySelector('#m-macros').innerHTML = macroLine(v.prot, v.carbs, v.fat, v.fiber);
   };
   ['#m-prot', '#m-carbs', '#m-fat', '#m-fiber', '#m-weight'].forEach((sel) => form.querySelector(sel).addEventListener('input', upd));
   upd();
@@ -496,7 +505,7 @@ function openRecipesSheet(rerender) {
       const item = el(`<div class="recipe-item">
         <div class="recipe-info">
           <div class="recipe-name">${r.name}</div>
-          <div class="meal-macros">${calcKcal(r.prot, r.carbs, r.fat)} kcal · P ${r.prot} · G ${r.carbs} · L ${r.fat}${nIng}</div>
+          <div class="meal-macros">${calcKcal(r.prot, r.carbs, r.fat)} kcal · ${macroLine(r.prot, r.carbs, r.fat, r.fiber)}${nIng}</div>
         </div>
         <div style="display:flex;gap:4px">
           <button class="icon-btn" data-edit aria-label="Modifier">${icons.edit}</button>
@@ -561,7 +570,7 @@ function openRecipeEditor(onSaved, existing = null) {
         const row = el(`<div class="re-ing">
           <div class="re-ing-info">
             <div class="re-ing-name">${ing.name}${ing.weight ? ` <span class="muted">(${ing.weight} g)</span>` : ''}</div>
-            <div class="meal-macros">${calcKcal(ing.prot, ing.carbs, ing.fat)} kcal · P ${round(ing.prot)} · G ${round(ing.carbs)} · L ${round(ing.fat)}</div>
+            <div class="meal-macros">${calcKcal(ing.prot, ing.carbs, ing.fat)} kcal · ${macroLine(ing.prot, ing.carbs, ing.fat, ing.fiber, { round: true })}</div>
           </div>
           <button class="icon-btn danger" data-rm aria-label="Retirer">${icons.trash}</button>
         </div>`);
@@ -775,9 +784,10 @@ function openBarcodeSheet(rerender, opts = {}) {
 // ingrédients, et un multiplicateur (×1 par défaut) qui multiplie toutes les
 // macros. Le bouton « Ajouter » enregistre la recette (× mult) dans le repas.
 // `getCat/setCat` synchronisent le repas courant avec la sheet loupe parente.
-function openRecipeAddSheet(rerender, recipe, getCat, setCat) {
+function openRecipeAddSheet(rerender, recipe, getCat, setCat, opts = {}) {
   let cat = (getCat && getCat()) || defaultMealType();
-  let mult = 1;
+  const editing = !!opts.editMealId;
+  let mult = opts.mult || 1;
   const ings = recipe.ingredients || [];
 
   const form = el(`<div>
@@ -791,11 +801,11 @@ function openRecipeAddSheet(rerender, recipe, getCat, setCat) {
         <span class="muted">${calcKcal(i.prot, i.carbs, i.fat)} kcal</span>
       </div>`).join('')}</div>` : '<div class="muted" style="font-size:0.8rem;margin-bottom:8px">Recette sans détail d\'ingrédients.</div>'}
     <label class="field ra-mult"><span>Multiplicateur (portions)</span>
-      <input id="ra-mult" type="number" inputmode="decimal" min="0.1" step="0.5" value="1"></label>
+      <input id="ra-mult" type="number" inputmode="decimal" min="0.1" step="0.5" value="${mult}"></label>
     <div class="ra-totals" id="ra-totals"></div>
-    <button class="btn btn-primary btn-block" id="ra-add" style="margin-top:14px">${icons.plus} Ajouter au repas</button>
+    <button class="btn btn-primary btn-block" id="ra-add" style="margin-top:14px">${editing ? icons.check + ' Enregistrer' : icons.plus + ' Ajouter au repas'}</button>
   </div>`);
-  const sheet = openSheet({ title: 'Ajouter la recette', content: form });
+  const sheet = openSheet({ title: editing ? 'Modifier la recette' : 'Ajouter la recette', content: form });
 
   const round = (v) => Math.round((v || 0) * 10) / 10;
   const scaled = () => ({
@@ -830,14 +840,20 @@ function openRecipeAddSheet(rerender, recipe, getCat, setCat) {
     const fiber = Math.round(s.fiber * 10) / 10;
     const goalMetBefore = nutritionGoalMet(selectedDate);
     const label = mult !== 1 ? `${recipe.name} ×${mult}` : recipe.name;
-    store.addNutritionLog(selectedDate, {
+    const payload = {
       name: label, baseName: recipe.name, meal: cat,
       prot, carbs, fat, fiber, kcal: calcKcal(prot, carbs, fat),
-      per100: { prot: 0, carbs: 0, fat: 0, fiber: 0 }, weight: 0, fromRecipe: recipe.id,
-    });
+      per100: { prot: 0, carbs: 0, fat: 0, fiber: 0 }, weight: 0, fromRecipe: recipe.id, recipeMult: mult,
+    };
+    if (editing) {
+      store.updateMeal(selectedDate, opts.editMealId, payload);
+      toast('Recette mise à jour', 'success');
+    } else {
+      store.addNutritionLog(selectedDate, payload);
+      toast(`${recipe.name} ajouté à ${cat}`, 'success');
+    }
     rememberMealType(cat);
     haptic();
-    toast(`${recipe.name} ajouté à ${cat}`, 'success');
     const btn = form.querySelector('#ra-add');
     sheet.close();
     if (!goalMetBefore && nutritionGoalMet(selectedDate)) celebrateLP(btn, { label: '+ LP' });
@@ -915,7 +931,7 @@ function openFoodSearchSheet(rerender, opts = {}) {
     const item = el(`<button class="hist-item">
       <div class="hist-info">
         <div class="hist-name">${name}</div>
-        <div class="meal-macros">100 g : ${kcal100} kcal${meta || ''}${per100.fiber ? ` · <span class="fiber-tag">${per100.fiber}g fibres</span>` : ''}</div>
+        <div class="meal-macros">100 g : ${kcal100} kcal · ${macroLine(per100.prot, per100.carbs, per100.fat, per100.fiber, { round: true })}${meta || ''}</div>
       </div>
       <span class="hist-add">${icons.plus}</span>
     </button>`);
@@ -944,7 +960,7 @@ function openFoodSearchSheet(rerender, opts = {}) {
     if (!items.length) { list.innerHTML = '<div class="empty-state">Aucun aliment trouvé</div>'; return; }
     list.innerHTML = '';
     for (const f of items.slice(0, 300)) {
-      list.appendChild(rowFood(f.n, { prot: f.p, carbs: f.g, fat: f.f, fiber: f.fb || 0 }, 100, ` · P ${f.p} · G ${f.g} · L ${f.f}`));
+      list.appendChild(rowFood(f.n, { prot: f.p, carbs: f.g, fat: f.f, fiber: f.fb || 0 }, 100, ''));
     }
   };
 
@@ -957,7 +973,7 @@ function openFoodSearchSheet(rerender, opts = {}) {
       const item = el(`<button class="hist-item">
         <div class="hist-info">
           <div class="hist-name">${r.name}</div>
-          <div class="meal-macros">${calcKcal(r.prot, r.carbs, r.fat)} kcal · P ${r.prot} · G ${r.carbs} · L ${r.fat}</div>
+          <div class="meal-macros">${calcKcal(r.prot, r.carbs, r.fat)} kcal · ${macroLine(r.prot, r.carbs, r.fat, r.fiber)}</div>
         </div>
         <span class="hist-add">${icons.plus}</span>
       </button>`);
@@ -1139,13 +1155,18 @@ export function render(container) {
         <div class="meal-item">
           <div>
             <div class="meal-name">${m.name}</div>
-            <div class="meal-macros">P ${m.prot} · G ${m.carbs} · L ${m.fat}${m.fiber ? ` · <span class="fiber-tag">${m.fiber}g fibres</span>` : ''}</div>
+            <div class="meal-macros">${macroLine(m.prot, m.carbs, m.fat, m.fiber)}</div>
           </div>
           <span class="meal-kcal">${m.kcal}</span>
         </div>
       </div>`);
       item.querySelector('.meal-item').addEventListener('click', () => {
         if (item.classList.contains('swiped')) return; // ne pas éditer quand la poubelle est ouverte
+        // Repas ajouté depuis une recette → on rouvre le menu recette (multiplicateur uniquement).
+        if (m.fromRecipe) {
+          const recipe = (store.userData.recipes || []).find((x) => x.id === m.fromRecipe);
+          if (recipe) { openRecipeAddSheet(rerender, recipe, () => m.meal, null, { editMealId: m.id, mult: m.recipeMult || 1 }); return; }
+        }
         openAddMealSheet(rerender, { editId: m.id, ...mealToEditable(m) });
       });
       item.querySelector('[data-del]').addEventListener('click', () => {
