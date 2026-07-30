@@ -466,9 +466,15 @@ const histSheet = document.querySelector('.sheet');
 assert(histSheet.querySelector('#fs-tabs button.active').dataset.tab === 'history', 'Loupe : onglet Historique actif par défaut');
 const histItem = [...histSheet.querySelectorAll('.hist-item')].find((it) => it.textContent.includes('Boulgour'));
 assert(histItem && histItem.textContent.includes('250 g'), 'Historique : quantité précédente affichée');
+// Sélectionner un repas puis cliquer : ajout DIRECT sans éditeur
+histSheet.querySelector('#fs-meal button[data-v="Snack"]').click();
+const beforeHist = (store.userData.nutrition.byDate[todayISO()] || { meals: [] }).meals.length;
 histItem.click();
-const editSheet = [...document.querySelectorAll('.sheet')].find((s) => s.querySelector('#m-name'));
-assert(editSheet && editSheet.querySelector('#m-name').value.includes('Boulgour'), 'Historique : clic -> éditeur pré-rempli');
+const afterHist = store.userData.nutrition.byDate[todayISO()].meals.length;
+assert(afterHist === beforeHist + 1, 'Historique : clic ajoute directement (sans menu)');
+const histAdded = store.userData.nutrition.byDate[todayISO()].meals.slice(-1)[0];
+assert(histAdded.meal === 'Snack' && histAdded.weight === 250, 'Historique : bon repas + quantité mémorisée');
+assert(![...document.querySelectorAll('.sheet')].some((s) => s.querySelector('#m-name')), 'Historique : aucun éditeur ouvert');
 clearOverlays();
 
 // Graphe de poids : cercle creux pour les jours lisses

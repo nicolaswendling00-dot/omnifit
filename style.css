@@ -497,7 +497,7 @@ body[data-page="1"] #fab-nutrition-wrap { display: flex; }
 
 /* Ajout repas — case POIDS mise en valeur (bas du formulaire) */
 .m-weight-box {
-  margin-top: 14px; margin-bottom: 14px; padding: 12px 14px;
+  margin-top: 14px; padding: 12px 14px;
   background: rgba(var(--accent-rgb), 0.08);
   border: 1.5px solid var(--accent);
   border-radius: 14px;
@@ -1070,3 +1070,11 @@ body.shape-8bit .gr-progress i, body.shape-8bit .progress-bar > div {
   0% { background: rgba(var(--accent-rgb), 0.28); }
   100% { background: var(--surface-2); }
 }
+
+/* Ajout d'une recette à un repas (récap + multiplicateur) */
+.ra-title { font-size: 1.05rem; font-weight: 800; margin-bottom: 8px; }
+.ra-ings { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; margin-bottom: 12px; }
+.ra-ing { display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; padding: 3px 0; }
+.ra-ing-name { font-weight: 600; }
+.ra-mult { margin-bottom: 10px; }
+.ra-totals { border-top: 1px solid var(--border); padding-top: 10px; }
