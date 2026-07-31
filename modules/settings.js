@@ -7,7 +7,7 @@ import { RANK_ORDER, RANK_META, DIV_LP, ONYX_LP, rankBadge, estimateRankFromLift
 import { openExercisePicker } from './workout.js';
 import { backfillNutritionGoals } from './nutrition.js';
 
-const VERSION = '4.0';
+const VERSION = '4.1';
 
 function toggleRow(label, key, sub = '') {
   const s = store.userData.settings;
@@ -113,6 +113,15 @@ export function render(container) {
       </div>
     </div>
 
+    <!-- 4 bis. ACTIVITÉ -->
+    <div class="card settings-section">
+      <h3>Activité</h3>
+      <div class="settings-row">
+        <div><div class="row-label">Synchro des pas</div><div class="row-sub">Récupérer les pas depuis l'app Santé</div></div>
+        <button class="btn btn-secondary btn-sm" id="btn-health-sync">${icons.steps}</button>
+      </div>
+    </div>
+
 
     <!-- 5. INTERFACE -->
     <div class="card settings-section">
@@ -187,6 +196,7 @@ export function render(container) {
   }
 
   root.querySelector('#btn-edit-profile').addEventListener('click', () => openProfileModal(rerender));
+  root.querySelector('#btn-health-sync').addEventListener('click', () => openHealthSyncModal());
   root.querySelector('#btn-rank-ladder').addEventListener('click', () => openRankLadderModal());
 
   const bindRange = (id, valId, key, fmt = (v) => v, parse = parseFloat) => {

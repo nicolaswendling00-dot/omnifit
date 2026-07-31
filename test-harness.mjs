@@ -83,7 +83,8 @@ assert(pages.activity.querySelector('#btn-import-steps'), 'Activité : bouton Im
 assert(!pages.activity.querySelector('.mono'), 'Activité : plus de .mono');
 
 settings.render(pages.settings);
-assert(pages.settings.querySelectorAll('.settings-section').length === 6, 'Réglages : 6 sections');
+assert(pages.settings.querySelectorAll('.settings-section').length === 7, 'Réglages : 7 sections');
+assert(pages.settings.querySelector('#btn-health-sync'), 'Réglages : synchro des pas accessible');
 assert(pages.settings.querySelector('#btn-export'), 'Réglages : bouton export');
 assert(!pages.settings.querySelector('#btn-vol-goals'), 'Réglages : objectifs de volume retirés (déplacés)');
 assert(/v\d+\.\d+/.test(pages.settings.textContent), 'Réglages : numéro de version affiché');
