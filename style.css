@@ -1099,3 +1099,185 @@ body.shape-8bit .gr-progress i, body.shape-8bit .progress-bar > div {
 .mac-g { color: #3AA0F0; font-weight: 700; }
 .mac-l { color: #9F7CFF; font-weight: 700; }
 .mac-f { color: #10B981; font-weight: 700; }
+
+/* ============================================================
+   v4.0 — REFONTE AMOLED
+   Direction inspirée des interfaces de compétition esport :
+   noir pur, surfaces neutres, AUCUNE ombre ni halo, aplats francs,
+   libellés en capitales à interlettrage large, titres très affirmés.
+   La palette reste celle d'OmniFit (cyan + violet) : seule la mise en
+   forme change. Tout est scopé à `body.shape-amoled` — les thèmes 8-bit
+   et clair ne sont pas touchés.
+   ============================================================ */
+
+body.shape-amoled {
+  --tracking-ui: 0.06em;   /* interlettrage des libellés en capitales */
+  --r-card: 14px;
+  --r-btn: 12px;
+  --r-modal: 18px;
+}
+
+/* Surfaces neutres : on quitte le bleu nuit pour un noir franc, qui fait
+   ressortir l'accent cyan au lieu de le noyer. */
+body.shape-amoled:not(.palette-light) {
+  --bg: #000000;
+  --surface: #0E0E10;
+  --surface-2: #08080A;
+  --header-bg: rgba(0, 0, 0, 0.92);
+  --text: #F2F3F5;
+  --text-2: #8A9099;
+  --border: rgba(var(--accent-rgb), 0.16);
+  /* Le relief vient des bordures, plus des ombres. */
+  --shadow-1: none;
+  --shadow-2: none;
+  --shadow-glow: none;
+}
+
+/* ---------- Typographie ---------- */
+/* Titre de page : grand, plein, sans dégradé — il pose la hiérarchie. */
+body.shape-amoled .page-title h1 {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  -webkit-text-fill-color: currentColor;
+  color: var(--text);
+}
+body.shape-amoled .page-title { align-items: flex-end; margin-bottom: calc(var(--space) * 0.9); }
+
+/* Intitulés de section : petites capitales espacées, en retrait. */
+body.shape-amoled .card > h3,
+body.shape-amoled .card-row > h3 {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-ui);
+  color: var(--text-2);
+}
+
+/* ---------- Boutons : aplats francs, capitales espacées ---------- */
+body.shape-amoled .btn {
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-ui);
+  font-weight: 700;
+  font-size: 0.8rem;
+  box-shadow: none;
+}
+body.shape-amoled .btn-block { font-size: 0.85rem; min-height: 54px; }
+/* Primaire : aplat d'accent, sans dégradé ni halo. Contraste maximal. */
+body.shape-amoled .btn-primary {
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: none;
+}
+body.shape-amoled .btn-secondary {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+body.shape-amoled .btn-ghost { background: transparent; color: var(--text-2); }
+body.shape-amoled .btn:active { transform: scale3d(0.98, 0.98, 1); }
+
+/* ---------- Cartes : trait fin, pas d'ombre ---------- */
+body.shape-amoled .card {
+  border: 1px solid rgba(var(--accent-rgb), 0.13);
+  box-shadow: none;
+}
+/* La carte « mise en avant » se distingue par un liseré d'accent en tête,
+   plutôt que par un halo diffus. */
+body.shape-amoled .card-glow {
+  position: relative;
+  overflow: hidden;
+  box-shadow: none;
+}
+body.shape-amoled .card-glow::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+
+/* ---------- Sélecteurs segmentés : l'actif est un aplat plein ---------- */
+body.shape-amoled .segment {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  gap: 2px;
+  padding: 2px;
+}
+body.shape-amoled .segment button {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.7rem;
+  font-weight: 700;
+  border-radius: calc(var(--r-btn) - 4px);
+}
+body.shape-amoled .segment button.active {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* ---------- Navigation : libellés micro, indicateur franc ---------- */
+body.shape-amoled #bottom-nav {
+  background: var(--bg);
+  border-top: 1px solid rgba(var(--accent-rgb), 0.14);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+body.shape-amoled .nav-btn {
+  font-size: 0.54rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  position: relative;
+}
+/* On remplace le halo lumineux par une barre d'onglet nette. */
+body.shape-amoled .nav-btn.active { color: var(--accent); text-shadow: none; }
+body.shape-amoled .nav-btn.active svg { filter: none; }
+body.shape-amoled .nav-btn.active::after {
+  content: '';
+  position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  width: 26px; height: 2px; background: var(--accent);
+}
+
+/* ---------- Statistiques d'accueil ---------- */
+body.shape-amoled .stat-head {
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-ui);
+  font-weight: 700;
+  font-size: 0.62rem;
+}
+body.shape-amoled .gr-rank-name {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 1.05rem;
+}
+
+/* ---------- Panneaux et fenêtres ---------- */
+body.shape-amoled .modal,
+body.shape-amoled .sheet {
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
+  box-shadow: none;
+}
+body.shape-amoled .scrim { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+body.shape-amoled .modal-header h3,
+body.shape-amoled .sheet-header h3 {
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-ui);
+  font-size: 0.85rem;
+  color: var(--text);
+}
+body.shape-amoled .toast {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+/* ---------- Badges et pastilles ---------- */
+body.shape-amoled .badge {
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+}

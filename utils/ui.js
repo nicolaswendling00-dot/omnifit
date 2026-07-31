@@ -281,14 +281,36 @@ export function openSheet({ title, content, onClose = null, headerAction = null 
   // a dépassé la moitié de la hauteur du panneau, il finit de se fermer ;
   // sinon il revient en place.
   let startY = null; let dy = 0; let dragging = false;
+  let activeScroller = null;
   const setY = (px) => { sheet.style.transform = `translate3d(0, ${px}px, 0)`; };
+
+  // Remonte de `node` jusqu'à la sheet pour trouver le conteneur qui défile
+  // réellement sous le doigt. Une sheet peut contenir ses propres listes à
+  // hauteur fixe (liste d'aliments, de recettes) : c'est leur scrollTop qui
+  // compte, pas celui du panneau.
+  const scrollerFor = (node) => {
+    let n = node;
+    while (n && n !== sheet.parentElement) {
+      if (n.scrollHeight - n.clientHeight > 1) {
+        const oy = getComputedStyle(n).overflowY;
+        if (oy === 'auto' || oy === 'scroll') return n;
+      }
+      if (n === sheet) break;
+      n = n.parentElement;
+    }
+    return sheet;
+  };
 
   sheet.addEventListener('touchstart', (e) => {
     // Un geste qui démarre sur un champ de saisie (textarea/input/zone éditable)
     // ne doit PAS être capté par le glisser-pour-fermer : sinon l'appui long et
     // le menu « Coller » d'iOS sont bloqués.
     if (e.target.closest('textarea, input, [contenteditable="true"], .no-sheet-drag')) { startY = null; return; }
-    if (sheet.scrollTop > 0) { startY = null; return; }
+    activeScroller = scrollerFor(e.target);
+    // Si la zone touchée est déjà défilée, le geste lui appartient : on ne
+    // capte pas le glisser-pour-fermer, sinon remonter dans une liste interne
+    // (recettes, aliments) referme le panneau au lieu de la faire défiler.
+    if (activeScroller.scrollTop > 0) { startY = null; return; }
     startY = e.touches[0].clientY; dy = 0; dragging = false;
   }, { passive: true });
 
@@ -299,6 +321,9 @@ export function openSheet({ title, content, onClose = null, headerAction = null 
       if (dragging) { sheet.style.transition = ''; setY(0); dragging = false; }
       return;
     }
+    // La liste interne a pu défiler entre-temps (doigt remonté puis redescendu) :
+    // on lui rend la main plutôt que de fermer le panneau.
+    if (!dragging && activeScroller && activeScroller.scrollTop > 0) { startY = null; return; }
     if (!dragging) {
       if (dy < 6) return;      // petit seuil pour ne pas gêner les taps
       dragging = true;
