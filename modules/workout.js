@@ -875,10 +875,24 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null, resum
         wxx.sets.splice(i, 1); // décocher = retirer la série
         renderExos();
       } else {
-        const w = parseFloat(row.querySelector('.sr-kg').value);
-        const r = parseInt(row.querySelector('.sr-reps').value, 10);
-        if (isNaN(w) || !r) { toast('Poids et reps requis', 'error'); return; }
-        wxx.sets.push({ weight: w, reps: r });
+        // Valider une série située après des lignes remplies mais non cochées
+        // (ex. on saisit la série 1 sans la valider, puis on valide la série 2) :
+        // on enregistre AUSSI ces lignes intermédiaires remplies, dans l'ordre,
+        // sinon le re-rendu effacerait leurs valeurs restées dans le DOM.
+        const card = row.closest('.exo-card');
+        const rows = [...card.querySelectorAll('.set-row')];
+        const captured = [];
+        for (const r of rows) {
+          const idx = +r.dataset.set;
+          if (idx < wxx.sets.length || idx > i) continue; // hors de la plage à valider
+          const kg = parseFloat(r.querySelector('.sr-kg').value);
+          const reps = parseInt(r.querySelector('.sr-reps').value, 10);
+          if (idx === i && (isNaN(kg) || !reps)) { toast('Poids et reps requis', 'error'); return; }
+          if (isNaN(kg) || !reps) continue; // ligne intermédiaire vide : ignorée
+          captured.push({ idx, weight: kg, reps });
+        }
+        captured.sort((a, b) => a.idx - b.idx);
+        for (const c of captured) wxx.sets.push({ weight: c.weight, reps: c.reps });
         haptic();
         renderExos();
         startRestTimer(wxx.exerciseId);

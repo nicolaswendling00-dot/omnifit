@@ -407,6 +407,11 @@ canvas { max-width: 100%; }
 /* --- v3 : sheet objectifs (compteur kcal toujours visible) --- */
 .macro-kcal-sticky { position: sticky; bottom: 0; display: flex; justify-content: space-between; align-items: center; padding: 11px 12px; margin: 6px calc(-1 * var(--space)) 0; background: var(--header-bg); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-top: 1px solid var(--border); }
 
+/* --- v4.1 : objectif calories avec boutons ±200 (mode Auto) --- */
+.cal-adjust-row { display: flex; align-items: stretch; gap: 8px; }
+.cal-adjust-row input { flex: 1 1 auto; min-width: 0; text-align: center; }
+.cal-adjust-row .cal-step { flex: 0 0 auto; min-width: 58px; padding: 0 12px; font-variant-numeric: tabular-nums; }
+
 /* --- v3 : recettes --- */
 .check-row { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--text-2); cursor: pointer; }
 .check-row input { width: 18px; height: 18px; accent-color: var(--accent); }

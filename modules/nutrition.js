@@ -194,8 +194,12 @@ function openMacroGoalsSheet(rerender) {
     } else if (mode === 'auto') {
       body.innerHTML = `
         <div class="muted" style="margin-bottom:12px">Poids de corps actuel : <b>${w} kg</b> · la répartition s'ajuste avec le poids.</div>
-        <label class="field" style="margin-bottom:12px"><span>Objectif calories</span>
-          <input id="mg-cal" type="number" inputmode="numeric" step="10" value="${s.calorieGoal}"></label>
+        <div class="field" style="margin-bottom:12px"><span>Objectif calories</span>
+          <div class="cal-adjust-row">
+            <button type="button" class="btn btn-secondary cal-step" id="mg-cal-minus">−200</button>
+            <input id="mg-cal" type="number" inputmode="numeric" step="10" value="${s.calorieGoal}">
+            <button type="button" class="btn btn-secondary cal-step" id="mg-cal-plus">+200</button>
+          </div></div>
         <div style="margin-bottom:12px">
           <div class="card-row"><span style="font-size:0.9rem">Prot · ×poids</span>
             <span class="num" id="mg-pm-val" style="color:${C_PROT}">${(s.protMult ?? 2.2).toFixed(1)}</span></div>
@@ -226,6 +230,25 @@ function openMacroGoalsSheet(rerender) {
         kcalEl.textContent = `${cal} kcal`;
       };
       body.querySelectorAll('input').forEach((i) => i.addEventListener('input', upd));
+      // Clic dans le champ calories : sélectionne tout le nombre pour pouvoir
+      // le remplacer directement (même geste que le champ poids d'un repas).
+      const calInput = body.querySelector('#mg-cal');
+      calInput.addEventListener('focus', () => {
+        setTimeout(() => {
+          try { calInput.select(); } catch (_) {
+            try { calInput.setSelectionRange(0, calInput.value.length); } catch (_) { /* noop */ }
+          }
+        }, 0);
+      });
+      // Boutons ±200 kcal : ajustent l'objectif par paliers ronds sans clavier.
+      const stepCal = (delta) => {
+        const cur = parseInt(calInput.value, 10) || 0;
+        calInput.value = Math.max(0, cur + delta);
+        upd();
+        haptic();
+      };
+      body.querySelector('#mg-cal-minus').addEventListener('click', () => stepCal(-200));
+      body.querySelector('#mg-cal-plus').addEventListener('click', () => stepCal(200));
       upd();
     } else {
       body.innerHTML = `

@@ -7,7 +7,7 @@ import { RANK_ORDER, RANK_META, DIV_LP, ONYX_LP, rankBadge, estimateRankFromLift
 import { openExercisePicker } from './workout.js';
 import { backfillNutritionGoals } from './nutrition.js';
 
-const VERSION = '4.1';
+const VERSION = '4.2';
 
 function toggleRow(label, key, sub = '') {
   const s = store.userData.settings;
