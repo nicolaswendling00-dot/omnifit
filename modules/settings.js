@@ -2,12 +2,12 @@
 import { store, parseStepsPayload } from '../utils/storage.js';
 import { harrisBenedict } from '../utils/math.js';
 import { EQUIPMENT_TYPES } from '../data/exercises.js';
-import { el, icons, openModal, toast, confirmModal, setIconSet } from '../utils/ui.js';
+import { el, esc, icons, openModal, toast, confirmModal, setIconSet } from '../utils/ui.js';
 import { RANK_ORDER, RANK_META, DIV_LP, ONYX_LP, rankBadge, estimateRankFromLift, getStandards, setRankStyle } from '../utils/ranks.js';
 import { openExercisePicker } from './workout.js';
 import { backfillNutritionGoals } from './nutrition.js';
 
-const VERSION = '3.51';
+const VERSION = '3.52';
 
 function toggleRow(label, key, sub = '') {
   const s = store.userData.settings;
@@ -31,7 +31,7 @@ function applyCalorieAuto() {
 function openProfileModal(rerender) {
   const p = store.userData.profile;
   const form = el(`<div class="field-stack">
-    <label class="field"><span>Nom</span><input id="p-name" type="text" value="${p.name}"></label>
+    <label class="field"><span>Nom</span><input id="p-name" type="text" value="${esc(p.name)}"></label>
     <label class="field"><span>Âge</span><input id="p-age" type="number" inputmode="numeric" min="10" max="100" value="${p.age}"></label>
     <label class="field"><span>Sexe</span>
       <select id="p-sex">${['M', 'F', 'Autre'].map((x) => `<option ${x === p.sex ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
@@ -77,7 +77,7 @@ export function render(container) {
         <div style="display:flex;align-items:center;gap:12px">
           <div class="avatar">${icons.user}</div>
           <div>
-            <h3 style="margin:0">${u.profile.name || 'Profil'}</h3>
+            <h3 style="margin:0">${u.profile.name ? esc(u.profile.name) : 'Profil'}</h3>
             <div class="muted">${u.profile.age} ans · ${u.profile.weight} kg · ${u.profile.height} cm</div>
           </div>
         </div>

@@ -52,6 +52,21 @@ export function el(html) {
   return t.content.firstElementChild;
 }
 
+// Échappe une chaîne destinée à être injectée en innerHTML. À utiliser pour
+// TOUT texte venant de l'utilisateur ou d'une source externe : noms d'aliments,
+// de recettes, d'exercices custom, notes de séance, produits Open Food Facts.
+// Sans ça, une apostrophe ou un « < » casse le rendu de la carte.
+// Couvre aussi les guillemets, car ces valeurs servent parfois d'attribut.
+export function esc(value) {
+  if (value == null) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export function haptic() {
   if (navigator.vibrate) navigator.vibrate(10);
 }
@@ -174,11 +189,14 @@ export function toast(message, type = 'info') {
 // ---------- Modal ----------
 export function openModal({ title, content, actions = [], onClose = null, wide = false }) {
   document.body.classList.add('overlay-open');
+  // Le titre est du texte brut chez tous les appelants (nom d'exercice, de
+  // recette, date…) : on l'échappe ici plutôt qu'à chaque site d'appel.
+  const t = esc(title);
   const scrim = el(`
     <div class="scrim">
-      <div class="modal ${wide ? 'modal-wide' : ''}" role="dialog" aria-modal="true" aria-label="${title}">
+      <div class="modal ${wide ? 'modal-wide' : ''}" role="dialog" aria-modal="true" aria-label="${t}">
         <div class="modal-header">
-          <h3>${title}</h3>
+          <h3>${t}</h3>
           <button class="icon-btn modal-close" aria-label="Fermer">${icons.close}</button>
         </div>
         <div class="modal-body"></div>
@@ -228,13 +246,14 @@ export function confirmModal(title, message, onConfirm, danger = false) {
 // headerAction (facultatif) : { icon, label, onClick } -> bouton en haut à droite.
 export function openSheet({ title, content, onClose = null, headerAction = null }) {
   document.body.classList.add('overlay-open');
+  const t = esc(title); // texte brut chez tous les appelants (cf. openModal)
   const scrim = el(`
     <div class="scrim sheet-scrim">
-      <div class="sheet" role="dialog" aria-modal="true" aria-label="${title}">
+      <div class="sheet" role="dialog" aria-modal="true" aria-label="${t}">
         <div class="sheet-handle"></div>
         <div class="sheet-header">
-          <h3>${title}</h3>
-          ${headerAction ? `<button class="icon-btn sheet-action" aria-label="${headerAction.label || 'Action'}">${headerAction.icon}</button>` : ''}
+          <h3>${t}</h3>
+          ${headerAction ? `<button class="icon-btn sheet-action" aria-label="${esc(headerAction.label || 'Action')}">${headerAction.icon}</button>` : ''}
         </div>
         <div class="sheet-body"></div>
       </div>
@@ -310,6 +329,26 @@ export function openSheet({ title, content, onClose = null, headerAction = null 
   document.body.appendChild(scrim);
   requestAnimationFrame(() => scrim.classList.add('visible'));
   return { close, body };
+}
+
+// ---------- Graphiques ----------
+// Crée un graphique en détruisant systématiquement l'instance précédente (sinon
+// Chart.js garde le canvas et ses écouteurs en mémoire à chaque re-rendu).
+// Chart.js est servi par un CDN : s'il n'a pas pu être chargé (premier lancement
+// hors ligne), on affiche un repli discret au lieu de laisser l'exception
+// remonter et casser le rendu de TOUTE la page.
+export function makeChart(canvas, config, previous = null) {
+  if (previous && typeof previous.destroy === 'function') {
+    try { previous.destroy(); } catch (_) { /* instance déjà morte */ }
+  }
+  if (!canvas) return null;
+  const Ctor = typeof Chart !== 'undefined' ? Chart : null;
+  if (!Ctor) {
+    const wrap = canvas.parentElement;
+    if (wrap) wrap.innerHTML = '<div class="empty-state">Graphique indisponible hors ligne</div>';
+    return null;
+  }
+  try { return new Ctor(canvas, config); } catch (_) { return null; }
 }
 
 // ---------- Anneau SVG de progression ----------

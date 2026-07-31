@@ -1,7 +1,7 @@
 // OmniFit — PAGE 3 : Activité (pas)
 import { store, todayISO, parseStepsPayload } from '../utils/storage.js';
 import { calculateTrend } from '../utils/math.js';
-import { el, icons, openModal, openSheet, toast, ringSVG, fmtDateShort, haptic } from '../utils/ui.js';
+import { el, icons, openModal, openSheet, toast, ringSVG, fmtDateShort, haptic, makeChart } from '../utils/ui.js';
 
 let stepsChart = null;
 let viewDays = 7;
@@ -10,10 +10,16 @@ const stepGoal = () => store.userData.settings.stepsGoal || 10000;
 // Objectif de pas figé par jour : augmenter l'objectif aujourd'hui ne dévalide pas
 // les jours passés qui avaient déjà atteint l'ancien objectif (même principe que
 // macroGoalsFor pour la nutrition).
+// N'écrit dans le stockage que si la valeur change réellement : `persist()`
+// sérialise tout le userData, et cette fonction est appelée une fois par jour
+// affiché (jusqu'à 180 fois par rendu du graphique).
 function stepGoalFor(date) {
   const live = stepGoal();
   const gbd = store.userData.steps.goalByDate;
-  if (date === todayISO()) { gbd[date] = live; store.persist(); return live; }
+  if (date === todayISO()) {
+    if (gbd[date] !== live) { gbd[date] = live; store.persist(); }
+    return live;
+  }
   if (gbd[date] != null) return gbd[date];
   gbd[date] = live;
   store.persist();
@@ -76,8 +82,7 @@ function renderChart(canvas) {
     ? days.map((d) => d.slice(8) + '/' + d.slice(5, 7))
     : days.map((d, i) => (i % 14 === 0 ? d.slice(8) + '/' + d.slice(5, 7) : ''));
 
-  if (stepsChart) stepsChart.destroy();
-  stepsChart = new Chart(canvas, {
+  stepsChart = makeChart(canvas, {
     type: 'bar',
     data: {
       labels,
@@ -97,7 +102,7 @@ function renderChart(canvas) {
         y: { min: 0, suggestedMax: 15000, ticks: { color: '#9CA3AF', font: { size: 9 } }, grid: { color: 'rgba(0,217,255,0.06)' } },
       },
     },
-  });
+  }, stepsChart);
 }
 
 function monthStats() {

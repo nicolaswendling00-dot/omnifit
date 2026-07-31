@@ -4,7 +4,7 @@
 import { store, todayISO } from '../utils/storage.js';
 import { EXERCISES, MUSCLES, muscleLabel, AKA } from '../data/exercises.js';
 import { formatTime, workoutMuscleVolume, weeklySetsByMuscle, muscleAttenuation } from '../utils/math.js';
-import { el, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, celebrateLP } from '../utils/ui.js';
+import { el, esc, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, celebrateLP, makeChart } from '../utils/ui.js';
 import { computeExerciseLP, computeExerciseLPDetailed, rankFromLP, rankBadge, getStandards } from '../utils/ranks.js';
 
 let volumeChart = null;
@@ -226,7 +226,7 @@ export function openExercisePicker(onPick, title = 'Ajouter un exercice') {
       const ranked = lpMap[e.id] !== undefined;
       const rk = ranked ? rankFromLP(lpMap[e.id]) : null;
       const chip = rk ? `<span class="rank-inline" title="${rk.name}${rk.division ? ' ' + rk.division : ''}">${rankBadge(rk.id, 46)}</span>` : '<span class="rank-inline muted" style="font-size:0.66rem">—</span>';
-      const b = el(`<button class="exo-search-item"><span>${(exerciseLookup(e.id) || e).name}</span>${chip}</button>`);
+      const b = el(`<button class="exo-search-item"><span>${esc((exerciseLookup(e.id) || e).name)}</span>${chip}</button>`);
       b.addEventListener('click', () => { const picked = exerciseLookup(e.id) || e; close(); onPick(picked); });
       list.appendChild(b);
     }
@@ -260,7 +260,7 @@ function openCustomExerciseModal(onSaved, existing = null) {
   }).join('');
 
   const form = el(`<div>
-    <label class="field"><span>Nom</span><input id="cx-name" type="text" placeholder="Mon exercice" value="${existing ? existing.name.replace(/"/g, '&quot;') : ''}"></label>
+    <label class="field"><span>Nom</span><input id="cx-name" type="text" placeholder="Mon exercice" value="${existing ? esc(existing.name) : ''}"></label>
     <h3 style="font-size:0.85rem;margin:8px 0 4px">Muscles principaux</h3>
     <div style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px 10px">${muscleRows('prim', existing ? existing.primaryMuscles : [])}</div>
     <h3 style="font-size:0.85rem;margin:12px 0 4px">Muscles secondaires</h3>
@@ -373,35 +373,45 @@ function openReorderSheet(labels, onDone) {
 // ============================================================
 // TIMER DE REPOS — barre sticky en haut, toujours visible
 // ============================================================
+// Le repos est calculé sur l'horloge murale (instant de fin), et non par
+// décrémentation d'un compteur : iOS gèle les setInterval quand la PWA passe en
+// arrière-plan, ce qui faisait revenir sur un timer figé à la valeur qu'il avait
+// au moment de quitter l'app. Même principe que le chrono de séance.
 function startRestTimer(exerciseId) {
   if (!sessionUI) return;
   clearInterval(restInterval);
   const bar = sessionUI.overlay.querySelector('#rest-topbar');
   let total = exoRestDuration(exerciseId);
+  let endsAt = Date.now() + total * 1000;
   restRemaining = total;
 
   bar.classList.add('active');
   bar.classList.remove('pulse');
   const render = () => {
     bar.querySelector('.rt-time').textContent = formatTime(restRemaining);
-    bar.querySelector('.progress-bar > div').style.width = `${(restRemaining / total) * 100}%`;
+    bar.querySelector('.progress-bar > div').style.width = `${Math.max(0, (restRemaining / total) * 100)}%`;
   };
   render();
 
+  const finish = () => {
+    stopRestTimer();
+    if (store.userData.settings.soundEnabled) { beep(880); setTimeout(() => beep(1100), 180); }
+    haptic();
+  };
+
   restInterval = setInterval(() => {
-    restRemaining--;
-    if (restRemaining <= 0) {
-      stopRestTimer();
-      if (store.userData.settings.soundEnabled) { beep(880); setTimeout(() => beep(1100), 180); }
-      haptic();
-      return;
-    }
+    restRemaining = Math.ceil((endsAt - Date.now()) / 1000);
+    if (restRemaining <= 0) { finish(); return; }
     render();
     if (restRemaining <= 5) bar.classList.add('pulse');
-  }, 1000);
+  }, 250);
 
   bar.querySelector('#rt-skip').onclick = () => stopRestTimer();
-  bar.querySelector('#rt-plus').onclick = () => { restRemaining += 30; total += 30; render(); };
+  bar.querySelector('#rt-plus').onclick = () => {
+    endsAt += 30000; total += 30;
+    restRemaining = Math.ceil((endsAt - Date.now()) / 1000);
+    render();
+  };
 }
 function stopRestTimer() {
   clearInterval(restInterval);
@@ -564,14 +574,14 @@ function openWorkoutDetail(w, highlightId = null) {
         <button class="icon-btn" id="wd-edit" aria-label="Modifier la séance">${icons.edit}</button>
       </div>
     </div>
-    ${w.notes ? `<div class="wd-note">${String(w.notes).replace(/</g, '&lt;')}</div>` : ''}
+    ${w.notes ? `<div class="wd-note">${esc(w.notes)}</div>` : ''}
     ${w.exercises.map((wx, i) => {
       const def = exerciseLookup(wx.exerciseId) || { name: wx.exerciseId };
       const hl = wx.exerciseId === highlightId;
       const imp = exoImprovementAt(wx.exerciseId, w);
       return `<div class="wd-exo${hl ? ' hl' : ''}" data-exo="${wx.exerciseId}">
         <div class="wd-exo-head">
-          <span class="wd-exo-name">${i + 1}. ${def.name} ${wx.ss ? `<span class="ss-chip">SS${wx.ss}</span>` : ''}</span>
+          <span class="wd-exo-name">${i + 1}. ${esc(def.name)} ${wx.ss ? `<span class="ss-chip">SS${wx.ss}</span>` : ''}</span>
           ${imp != null ? impBadge(imp, false) : '<span class="muted" style="font-size:0.68rem">nouveau</span>'}
         </div>
         <div class="wd-sets">
@@ -655,7 +665,7 @@ function openExoMenu(idx) {
     sheet.close();
 
     if (a === 'delete') {
-      confirmModal('Supprimer', `Retirer « ${def.name} » de la séance ?`, () => {
+      confirmModal('Supprimer', `Retirer « ${esc(def.name)} » de la séance ?`, () => {
         session.exercises.splice(idx, 1);
         sessionUI.renderExos();
       }, true);
@@ -826,7 +836,7 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null, resum
           <button class="exo-name-btn" data-detail="${idx}">
             <span class="exo-name-group">
               ${rk ? `<span class="rank-inline rank-inline-session">${rankBadge(rk.id, 76)}</span>` : ''}
-              <span>${def.name} ${wx.ss ? `<span class="ss-chip">SS${wx.ss}</span>` : ''} ${impBadge(imp)}</span>
+              <span>${esc(def.name)} ${wx.ss ? `<span class="ss-chip">SS${wx.ss}</span>` : ''} ${impBadge(imp)}</span>
             </span>
             ${icons.chevron}
           </button>
@@ -1039,9 +1049,9 @@ function showSummary(exercises, closeSession) {
       </div>`).join('')}
     </div>` : ''}
     ${lpRows.length ? `<h3 style="margin:2px 0 6px">Gains de LP</h3>
-      <div class="recap-list">${lpRows.map((r) => `<div class="recap-row"><span>${r.name}</span><span class="lp-gain-badge">+${r.gain} LP</span></div>`).join('')}</div>` : ''}
+      <div class="recap-list">${lpRows.map((r) => `<div class="recap-row"><span>${esc(r.name)}</span><span class="lp-gain-badge">+${r.gain} LP</span></div>`).join('')}</div>` : ''}
     ${progress.length ? `<h3 style="margin:14px 0 6px">Tu as progressé sur</h3>
-      <div class="recap-list">${progress.map((p) => `<div class="recap-row"><span>${p.name}</span>${impBadge(p.imp, false)}</div>`).join('')}</div>` : ''}
+      <div class="recap-list">${progress.map((p) => `<div class="recap-row"><span>${esc(p.name)}</span>${impBadge(p.imp, false)}</div>`).join('')}</div>` : ''}
     <h3 style="margin:14px 0 6px">Coefficients d'atténuation</h3>
     <div class="muted" style="font-size:0.72rem;margin-bottom:8px">Implication moyenne par muscle (1.0 = moteur principal) · Δ vs dernière séance</div>
     <table class="volume-table">
@@ -1054,11 +1064,11 @@ function showSummary(exercises, closeSession) {
       }).join('')}</tbody>
     </table>
     <button class="btn btn-secondary btn-block" id="sum-note" style="margin-top:14px">${icons.edit} <span id="sum-note-lbl">${session.notes ? 'Modifier la note' : 'Note de séance'}</span></button>
-    ${session.notes ? `<div class="wd-note" id="sum-note-preview" style="margin-top:8px">${session.notes}</div>` : '<div id="sum-note-preview"></div>'}
+    ${session.notes ? `<div class="wd-note" id="sum-note-preview" style="margin-top:8px">${esc(session.notes)}</div>` : '<div id="sum-note-preview"></div>'}
   </div>`);
 
   content.querySelector('#sum-note').addEventListener('click', () => {
-    const ta = el(`<textarea class="note-input" rows="4" placeholder="Ressenti, charges, douleurs…">${(session.notes || '').replace(/</g, '&lt;')}</textarea>`);
+    const ta = el(`<textarea class="note-input" rows="4" placeholder="Ressenti, charges, douleurs…">${esc(session.notes)}</textarea>`);
     openModal({
       title: 'Note de séance',
       content: ta,
@@ -1071,7 +1081,7 @@ function showSummary(exercises, closeSession) {
             persistSession();
             content.querySelector('#sum-note-lbl').textContent = session.notes ? 'Modifier la note' : 'Note de séance';
             content.querySelector('#sum-note-preview').outerHTML = session.notes
-              ? `<div class="wd-note" id="sum-note-preview" style="margin-top:8px">${session.notes.replace(/</g, '&lt;')}</div>`
+              ? `<div class="wd-note" id="sum-note-preview" style="margin-top:8px">${esc(session.notes)}</div>`
               : '<div id="sum-note-preview"></div>';
           },
         },
@@ -1171,7 +1181,7 @@ function openRoutineEditor(routine, rerender) {
     ? { ...routine, exercises: [...routine.exercises] }
     : { id: crypto.randomUUID(), name: '', exercises: [] };
   const form = el(`<div>
-    <label class="field"><span>Nom</span><input id="r-name" type="text" value="${r.name}" placeholder="Push A"></label>
+    <label class="field"><span>Nom</span><input id="r-name" type="text" value="${esc(r.name)}" placeholder="Push A"></label>
     <div id="r-exos"></div>
     <div style="display:flex;gap:8px;margin-top:4px">
       <button class="btn btn-secondary btn-sm" id="r-add" style="flex:1">${icons.plus} Exercice</button>
@@ -1185,7 +1195,7 @@ function openRoutineEditor(routine, rerender) {
     r.exercises.forEach((id, i) => {
       const def = exerciseLookup(id);
       const row = el(`<div class="card-row" style="padding:7px 0;border-bottom:1px solid rgba(0,217,255,0.08)">
-        <span style="font-size:0.9rem">${i + 1}. ${def ? def.name : id}</span>
+        <span style="font-size:0.9rem">${i + 1}. ${esc(def ? def.name : id)}</span>
         <button class="icon-btn danger" aria-label="Retirer" style="width:38px;height:38px">${icons.trash}</button>
       </div>`);
       row.querySelector('button').addEventListener('click', () => { r.exercises.splice(i, 1); renderList(); });
@@ -1454,12 +1464,11 @@ function renderVolumeDashboard(host, rerender) {
       y: { ticks: { color: '#9CA3AF', font: { size: 9, family: 'Inter' } }, grid: { color: 'rgba(0,217,255,0.06)' } },
     },
   };
-  if (volumeChart) volumeChart.destroy();
-  volumeChart = new Chart(card.querySelector('#vol-chart'), {
+  volumeChart = makeChart(card.querySelector('#vol-chart'), {
     type: 'bar',
     data: { labels: MUSCLES.map((m) => m.label), datasets: [{ data: MUSCLES.map((m) => Math.round(acc[m.id] || 0)), backgroundColor: 'rgba(0,217,255,0.55)', borderRadius: 5 }] },
     options: chartOpts,
-  });
+  }, volumeChart);
 
   // Graphe amélioration des séances — 2 dernières semaines, axe vertical fixé à [-100, 100] %
   const sorted = [...store.userData.workouts].sort((a, b) => a.date.localeCompare(b.date));
@@ -1470,8 +1479,7 @@ function renderVolumeDashboard(host, rerender) {
     const si = sessionImprovement(w);
     if (si != null) impPts.push({ date: w.date, v: Math.max(-100, Math.min(100, si)) });
   }
-  if (impChart) impChart.destroy();
-  impChart = new Chart(card.querySelector('#imp-chart'), {
+  impChart = makeChart(card.querySelector('#imp-chart'), {
     type: 'line',
     data: {
       labels: impPts.map((p) => p.date.slice(5)),
@@ -1484,7 +1492,7 @@ function renderVolumeDashboard(host, rerender) {
         y: { ...chartOpts.scales.y, min: -100, max: 100, ticks: { ...chartOpts.scales.y.ticks, callback: (v) => v + '%' } },
       },
     },
-  });
+  }, impChart);
 
   const vgBtn = card.querySelector('#vol-goals-btn');
   if (vgBtn && rerender) vgBtn.addEventListener('click', () => openVolumeGoalsModal(rerender));
@@ -1525,7 +1533,7 @@ function openExerciseBrowser() {
     for (const { e, name, lp } of items.slice(0, 150)) {
       const rk = lp !== undefined ? rankFromLP(lp) : null;
       const chip = rk ? `<span class="rank-inline" title="${rk.name}${rk.division ? ' ' + rk.division : ''}">${rankBadge(rk.id, 46)}</span>` : '<span class="rank-inline muted" style="font-size:0.66rem">non classé</span>';
-      const b = el(`<button class="exo-search-item"><span>${name}</span>${chip}</button>`);
+      const b = el(`<button class="exo-search-item"><span>${esc(name)}</span>${chip}</button>`);
       b.addEventListener('click', () => { openExerciseDetailSheet(e.id); });
       list.appendChild(b);
     }
@@ -1596,7 +1604,7 @@ function openMuscleChart(muscleId) {
   for (const [id, e] of exoRows) {
     const row = el(`<div class="mus-exo-row" data-exo="${id}">
       <div>
-        <div class="mus-exo-name">${e.name} ${e.primary ? '' : '<span class="badge violet" style="font-size:0.56rem">secondaire</span>'}</div>
+        <div class="mus-exo-name">${esc(e.name)} ${e.primary ? '' : '<span class="badge violet" style="font-size:0.56rem">secondaire</span>'}</div>
         <div class="muted">${e.sets} série${e.sets > 1 ? 's' : ''} · ${Math.round(e.vol).toLocaleString('fr-FR')} kg pondérés</div>
       </div>
       ${icons.chevron}
@@ -1605,7 +1613,18 @@ function openMuscleChart(muscleId) {
     listHost.appendChild(row);
   }
 
-  openModal({ title: `${muscleLabel(muscleId)}`, content, wide: true, actions: [{ label: 'Fermer', variant: 'btn-primary' }] });
+  // Ce graphique était recréé sans jamais être détruit : chaque ouverture
+  // laissait une instance Chart.js vivante. On le détruit à la fermeture.
+  let musChart = null;
+  openModal({
+    title: `${muscleLabel(muscleId)}`,
+    content,
+    wide: true,
+    actions: [{ label: 'Fermer', variant: 'btn-primary' }],
+    onClose: () => {
+      if (musChart) { try { musChart.destroy(); } catch (_) { /* déjà détruit */ } musChart = null; }
+    },
+  });
   if (!pts.length) return;
   const opts = {
     responsive: true, maintainAspectRatio: false,
@@ -1615,7 +1634,7 @@ function openMuscleChart(muscleId) {
       y: { min: -100, max: 100, ticks: { color: '#9CA3AF', font: { size: 9, family: 'Inter' }, callback: (v) => v + '%' }, grid: { color: 'rgba(0,217,255,0.06)' } },
     },
   };
-  new Chart(content.querySelector('#mus-chart'), {
+  musChart = makeChart(content.querySelector('#mus-chart'), {
     type: 'line',
     data: { labels: pts.map((p) => p.date.slice(5)), datasets: [{ data: pts.map((p) => p.v), borderColor: '#00D9FF', backgroundColor: 'rgba(0,217,255,0.15)', fill: true, tension: 0.3, pointRadius: 4 }] },
     options: opts,
@@ -1629,7 +1648,6 @@ export function render(container) {
   const rerender = () => render(container);
   pageRerender = rerender;
   const routines = store.userData.routines;
-  const recent = [...store.userData.workouts].reverse().slice(0, 5);
   const active = !!session;
 
   container.innerHTML = '';
@@ -1655,26 +1673,14 @@ export function render(container) {
   for (const r of routines) {
     const names = r.exercises.map((id) => (exerciseLookup(id) || { name: id }).name).join(' · ');
     const card = el(`<div class="card" style="background:var(--surface-2);padding:12px">
-      <div class="card-row"><h3 style="margin:0">${r.name}</h3>
+      <div class="card-row"><h3 style="margin:0">${esc(r.name)}</h3>
         <button class="icon-btn" aria-label="Modifier">${icons.edit}</button></div>
-      <div class="muted" style="margin:4px 0 10px">${names || 'Vide'}</div>
+      <div class="muted" style="margin:4px 0 10px">${names ? esc(names) : 'Vide'}</div>
       <button class="btn btn-primary btn-sm btn-block">Lancer</button>
     </div>`);
     card.querySelector('.icon-btn').addEventListener('click', () => openRoutineEditor(r, rerender));
     card.querySelector('.btn-primary').addEventListener('click', () => openSession(rerender, r));
     rlist.appendChild(card);
-  }
-
-  const recList = root.querySelector('#recent-list');
-  if (recList) {
-    for (const w of recent) {
-      const row = el(`<div class="steps-list-item" style="cursor:pointer">
-        <span>${w.date} · ${w.exercises.length} exos</span>
-        <span class="num" style="color:var(--accent)">${w.totalVolume.toLocaleString('fr-FR')} kg</span>
-      </div>`);
-      row.addEventListener('click', () => openWorkoutDetail(w));
-      recList.appendChild(row);
-    }
   }
 
   root.querySelector('#btn-new-session').addEventListener('click', () => openSession(rerender));

@@ -1,7 +1,7 @@
 // OmniFit — PAGE 1 : Nutrition (macros couleur, fibres, modes grammes/auto/%, repas typés, recettes)
 import { store, todayISO } from '../utils/storage.js';
 import { calcKcal, fiberGoalFromKcal } from '../utils/math.js';
-import { el, icons, openSheet, openModal, toast, ringSVG, confirmModal, fmtDateShort, haptic, celebrateLP } from '../utils/ui.js';
+import { el, esc, icons, openSheet, openModal, toast, ringSVG, confirmModal, fmtDateShort, haptic, celebrateLP } from '../utils/ui.js';
 import { startCameraStream, captureFrame, decodeBarcodeFromFile } from '../utils/barcode.js';
 import { fetchProductByBarcode } from '../utils/openfoodfacts.js';
 import { FOODS, FOOD_CATEGORIES } from '../data/foods.js';
@@ -75,11 +75,20 @@ export function macroGoals() {
 
 // Objectif figé par jour : les jours passés gardent l'objectif qu'ils avaient
 // (changer l'objectif aujourd'hui ne modifie plus l'historique).
+// Deux objectifs sont identiques si leurs quatre valeurs le sont. Sert à ne
+// PAS réécrire le stockage quand rien n'a changé : `persist()` sérialise tout
+// le userData, et macroGoalsFor est appelée à chaque rendu (ruban de dates).
+function sameGoal(a, b) {
+  if (!a || !b) return false;
+  return a.kcalGoal === b.kcalGoal && a.protG === b.protG
+    && a.carbsG === b.carbsG && a.fatG === b.fatG;
+}
+
 export function macroGoalsFor(date) {
   const day = store.userData.nutrition.byDate[date];
   const live = macroGoals();
   if (date === todayISO()) {
-    if (day) { day.goal = live; store.persist(); }
+    if (day && !sameGoal(day.goal, live)) { day.goal = live; store.persist(); }
     return live;
   }
   if (day) {
@@ -318,7 +327,7 @@ function openAddMealSheet(rerender, prefill = null) {
     <div class="segment segment-wrap" id="m-cat" style="margin-bottom:12px">
       ${MEAL_TYPES.map((t) => `<button data-v="${t}" class="${t === cat ? 'active' : ''}">${t}</button>`).join('')}
     </div>
-    <label class="field"><span>Nom de l'aliment</span><input id="m-name" type="text" placeholder="Poulet, riz basmati…" autocomplete="off" value="${baseName}"></label>
+    <label class="field"><span>Nom de l'aliment</span><input id="m-name" type="text" placeholder="Poulet, riz basmati…" autocomplete="off" value="${esc(baseName)}"></label>
     <div class="muted" style="font-size:0.78rem;margin:2px 0 8px">Valeurs nutritionnelles <b>pour 100 g</b></div>
     <div class="field-row">
       <label class="field"><span>Prot /100g</span><input id="m-prot" type="number" inputmode="decimal" min="0" placeholder="0" value="${per100.prot}"></label>
@@ -504,7 +513,7 @@ function openRecipesSheet(rerender) {
       const nIng = (r.ingredients && r.ingredients.length) ? ` · ${r.ingredients.length} aliment(s)` : '';
       const item = el(`<div class="recipe-item">
         <div class="recipe-info">
-          <div class="recipe-name">${r.name}</div>
+          <div class="recipe-name">${esc(r.name)}</div>
           <div class="meal-macros">${calcKcal(r.prot, r.carbs, r.fat)} kcal · ${macroLine(r.prot, r.carbs, r.fat, r.fiber)}${nIng}</div>
         </div>
         <div style="display:flex;gap:4px">
@@ -517,7 +526,7 @@ function openRecipesSheet(rerender) {
         openRecipeEditor(() => build(), r);
       });
       item.querySelector('[data-del]').addEventListener('click', () => {
-        confirmModal('Supprimer', `Supprimer la recette « ${r.name} » ?`, () => {
+        confirmModal('Supprimer', `Supprimer la recette « ${esc(r.name)} » ?`, () => {
           store.deleteRecipe(r.id);
           sheet.close();
           build();
@@ -569,7 +578,7 @@ function openRecipeEditor(onSaved, existing = null) {
       state.ingredients.forEach((ing, idx) => {
         const row = el(`<div class="re-ing">
           <div class="re-ing-info">
-            <div class="re-ing-name">${ing.name}${ing.weight ? ` <span class="muted">(${ing.weight} g)</span>` : ''}</div>
+            <div class="re-ing-name">${esc(ing.name)}${ing.weight ? ` <span class="muted">(${ing.weight} g)</span>` : ''}</div>
             <div class="meal-macros">${calcKcal(ing.prot, ing.carbs, ing.fat)} kcal · ${macroLine(ing.prot, ing.carbs, ing.fat, ing.fiber, { round: true })}</div>
           </div>
           <button class="icon-btn danger" data-rm aria-label="Retirer">${icons.trash}</button>
@@ -794,10 +803,10 @@ function openRecipeAddSheet(rerender, recipe, getCat, setCat, opts = {}) {
     <div class="segment segment-wrap" id="ra-cat" style="margin-bottom:12px">
       ${MEAL_TYPES.map((t) => `<button data-v="${t}" class="${t === cat ? 'active' : ''}">${t}</button>`).join('')}
     </div>
-    <div class="ra-title">${recipe.name}</div>
+    <div class="ra-title">${esc(recipe.name)}</div>
     ${ings.length ? `<div class="ra-ings">${ings.map((i) => `
       <div class="ra-ing">
-        <span class="ra-ing-name">${i.name}${i.weight ? ` <span class="muted">(${i.weight} g)</span>` : ''}</span>
+        <span class="ra-ing-name">${esc(i.name)}${i.weight ? ` <span class="muted">(${i.weight} g)</span>` : ''}</span>
         <span class="muted">${calcKcal(i.prot, i.carbs, i.fat)} kcal</span>
       </div>`).join('')}</div>` : '<div class="muted" style="font-size:0.8rem;margin-bottom:8px">Recette sans détail d\'ingrédients.</div>'}
     <label class="field ra-mult"><span>Multiplicateur (portions)</span>
@@ -930,7 +939,7 @@ function openFoodSearchSheet(rerender, opts = {}) {
     const kcal100 = calcKcal(per100.prot || 0, per100.carbs || 0, per100.fat || 0);
     const item = el(`<button class="hist-item">
       <div class="hist-info">
-        <div class="hist-name">${name}</div>
+        <div class="hist-name">${esc(name)}</div>
         <div class="meal-macros">100 g : ${kcal100} kcal · ${macroLine(per100.prot, per100.carbs, per100.fat, per100.fiber, { round: true })}${meta || ''}</div>
       </div>
       <span class="hist-add">${icons.plus}</span>
@@ -972,7 +981,7 @@ function openFoodSearchSheet(rerender, opts = {}) {
     for (const r of recipes) {
       const item = el(`<button class="hist-item">
         <div class="hist-info">
-          <div class="hist-name">${r.name}</div>
+          <div class="hist-name">${esc(r.name)}</div>
           <div class="meal-macros">${calcKcal(r.prot, r.carbs, r.fat)} kcal · ${macroLine(r.prot, r.carbs, r.fat, r.fiber)}</div>
         </div>
         <span class="hist-add">${icons.plus}</span>
@@ -1154,7 +1163,7 @@ export function render(container) {
         <button class="meal-del" data-del aria-label="Supprimer">${icons.trash}</button>
         <div class="meal-item">
           <div>
-            <div class="meal-name">${m.name}</div>
+            <div class="meal-name">${esc(m.name)}</div>
             <div class="meal-macros">${macroLine(m.prot, m.carbs, m.fat, m.fiber)}</div>
           </div>
           <span class="meal-kcal">${m.kcal}</span>

@@ -30,7 +30,9 @@ function goTo(index) {
 }
 
 document.querySelectorAll('.nav-btn').forEach((btn, i) => {
-  btn.addEventListener('click', () => goTo(i));
+  // Retaper l'onglet déjà actif ne relance pas le rendu : cela détruirait et
+  // recréerait les graphiques Chart.js pour rien (saccade visible).
+  btn.addEventListener('click', () => { if (i !== currentPage) goTo(i); });
 });
 
 // ---------- Swipe latéral ----------

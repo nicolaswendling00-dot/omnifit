@@ -1,7 +1,7 @@
 // OmniFit — PAGE 0 : Accueil (stats d'abord, poids ensuite, graphique en modal)
 import { store, todayISO } from '../utils/storage.js';
 import { calculateSMA } from '../utils/math.js';
-import { el, icons, openModal, toast, ringSVG, haptic } from '../utils/ui.js';
+import { el, icons, openModal, toast, ringSVG, haptic, makeChart } from '../utils/ui.js';
 import { macroGoals } from './nutrition.js';
 import { computeGlobalRank } from '../utils/globalRank.js';
 import { rankBadge, rankFromLP } from '../utils/ranks.js';
@@ -81,7 +81,17 @@ function openChartModal(rerender) {
     <h3 style="margin:14px 0 4px">Entrées récentes</h3>
     <div id="w-recent">${recent.length ? '' : '<div class="empty-state">Aucune pesée</div>'}</div>
   </div>`);
-  openModal({ title: 'Poids — 14 jours', content, wide: true, actions: [] });
+  // À la fermeture, on détruit le graphique : sans ça il garde une référence sur
+  // un canvas retiré du DOM (et ses écouteurs de redimensionnement).
+  openModal({
+    title: 'Poids — 14 jours',
+    content,
+    wide: true,
+    actions: [],
+    onClose: () => {
+      if (weightChart) { try { weightChart.destroy(); } catch (_) { /* déjà détruit */ } weightChart = null; }
+    },
+  });
   const draw = () => renderWeightChart(content.querySelector('#weight-chart'));
   content.querySelector('#btn-toggle-sma').addEventListener('click', (e) => {
     smaVisible = !smaVisible;
@@ -145,8 +155,7 @@ function renderWeightChart(canvas) {
     scales.y1 = { position: 'right', ticks: { color: '#FB923C', font: { size: 10, family: 'Inter' } }, grid: { drawOnChartArea: false } };
   }
 
-  if (weightChart) weightChart.destroy();
-  weightChart = new Chart(canvas, {
+  weightChart = makeChart(canvas, {
     type: 'line',
     data: { labels: days.map((d) => d.slice(8) + '/' + d.slice(5, 7)), datasets },
     options: {
@@ -154,7 +163,7 @@ function renderWeightChart(canvas) {
       plugins: { legend: { labels: { color: '#9CA3AF', boxWidth: 12, font: { size: 10, family: 'Inter' } } } },
       scales,
     },
-  });
+  }, weightChart);
 }
 
 function openGlobalRankModal(gr) {
