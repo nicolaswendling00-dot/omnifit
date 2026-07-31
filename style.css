@@ -1064,6 +1064,21 @@ body.shape-8bit .gr-progress i, body.shape-8bit .progress-bar > div {
 /* Liste d'aliments à hauteur FIXE : le menu ne change pas de taille selon le contenu */
 .fs-list-fixed { height: 46vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .fs-list-fixed .empty-state { padding-top: 32px; }
+/* Onglet Recettes : sélecteur « Mes recettes » / « Préenregistrées ».
+   Plus discret que les onglets principaux : c'est un sous-niveau. */
+.fs-rsrc button { font-size: 0.78rem; padding: 7px 4px; }
+/* En-tête de catégorie dans la liste des recettes préenregistrées */
+.fs-cat-head {
+  font-size: 0.68rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-2); padding: 12px 2px 5px; position: sticky; top: 0;
+  background: var(--surface); z-index: 1;
+}
+.fs-cat-head:first-child { padding-top: 4px; }
+/* Description d'une recette préenregistrée (liste des ingrédients en clair) */
+.hist-sub {
+  font-size: 0.72rem; color: var(--text-2); margin-top: 3px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 /* Flash discret quand un aliment est ajouté sans fermer le menu */
 .hist-item.just-added { animation: addPulse 450ms var(--ease); }
 @keyframes addPulse {

@@ -331,6 +331,14 @@ export function openSheet({ title, content, onClose = null, headerAction = null 
   return { close, body };
 }
 
+// Normalise une chaîne pour la recherche : minuscules, sans accents ni signes
+// diacritiques. Permet de trouver « Phở bò » en tapant « pho », ou « Petit-
+// Déjeuner » en tapant « dejeuner ». NFD sépare la lettre de son accent, que
+// l'on retire ensuite.
+export function normalizeStr(s) {
+  return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
+
 // ---------- Graphiques ----------
 // Crée un graphique en détruisant systématiquement l'instance précédente (sinon
 // Chart.js garde le canvas et ses écouteurs en mémoire à chaque re-rendu).

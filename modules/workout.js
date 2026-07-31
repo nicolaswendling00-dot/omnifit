@@ -4,7 +4,7 @@
 import { store, todayISO } from '../utils/storage.js';
 import { EXERCISES, MUSCLES, muscleLabel, AKA } from '../data/exercises.js';
 import { formatTime, workoutMuscleVolume, weeklySetsByMuscle, muscleAttenuation } from '../utils/math.js';
-import { el, esc, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, celebrateLP, makeChart } from '../utils/ui.js';
+import { el, esc, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, celebrateLP, makeChart, normalizeStr } from '../utils/ui.js';
 import { computeExerciseLP, computeExerciseLPDetailed, rankFromLP, rankBadge, getStandards } from '../utils/ranks.js';
 
 let volumeChart = null;
@@ -47,10 +47,6 @@ export function exerciseLookup(id) {
     ...(nameOv?.[id] ? { name: nameOv[id] } : null),
     ...(muscleOv ? { primaryMuscles: muscleOv.primaryMuscles, secondaryMuscles: muscleOv.secondaryMuscles } : null),
   };
-}
-// Normalisation pour recherche : minuscules, sans accents
-function normalizeStr(s) {
-  return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
 // Map LP de tous les exos (avec poids de corps + standards pour le raccourci Onyx)
 function lpMapAll() {

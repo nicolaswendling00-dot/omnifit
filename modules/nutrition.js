@@ -1,10 +1,11 @@
 // OmniFit — PAGE 1 : Nutrition (macros couleur, fibres, modes grammes/auto/%, repas typés, recettes)
 import { store, todayISO } from '../utils/storage.js';
 import { calcKcal, fiberGoalFromKcal } from '../utils/math.js';
-import { el, esc, icons, openSheet, openModal, toast, ringSVG, confirmModal, fmtDateShort, haptic, celebrateLP } from '../utils/ui.js';
+import { el, esc, icons, openSheet, openModal, toast, ringSVG, confirmModal, fmtDateShort, haptic, celebrateLP, normalizeStr } from '../utils/ui.js';
 import { startCameraStream, captureFrame, decodeBarcodeFromFile } from '../utils/barcode.js';
 import { fetchProductByBarcode } from '../utils/openfoodfacts.js';
 import { FOODS, FOOD_CATEGORIES } from '../data/foods.js';
+import { PRESET_RECIPES, presetToRecipe } from '../data/recipes.js';
 
 let selectedDate = todayISO();
 let currentRerender = null;
@@ -17,6 +18,16 @@ const C_FAT = '#8B5CF6';
 const C_FIBER = '#22C55E';
 
 const MEAL_TYPES = ['Petit-Déjeuner', 'Déjeuner', 'Dîner', 'Snack'];
+
+// Retrouve une recette par son id, qu'elle soit personnelle ou préenregistrée.
+// Indispensable pour rouvrir le menu multiplicateur d'un repas déjà ajouté :
+// `meal.fromRecipe` peut désormais pointer vers l'une ou l'autre des sources.
+function findRecipe(id) {
+  const mine = (store.userData.recipes || []).find((r) => r.id === id);
+  if (mine) return mine;
+  const preset = PRESET_RECIPES.find((r) => r.id === id);
+  return preset ? presetToRecipe(preset) : null;
+}
 
 // Génère le texte coloré des macros : P orange, G bleu, L violet, F vert.
 // `opts.round` arrondit à 1 décimale. Les fibres n'apparaissent que si > 0.
@@ -874,6 +885,7 @@ function openFoodSearchSheet(rerender, opts = {}) {
   const onPick = opts.onPick || null;         // mode "composer une recette" si défini
   const includeRecipes = opts.includeRecipes !== false && !onPick; // pas de recettes dans une recette
   let tab = 'history';                          // history | all | recipes
+  let recipeSource = 'mine';                    // mine | preset (onglet Recettes)
   let query = '';
   let cat = opts.mealDefault || lastMealType(); // repas ciblé (mode repas)
 
@@ -891,6 +903,10 @@ function openFoodSearchSheet(rerender, opts = {}) {
       ${MEAL_TYPES.map((t) => `<button data-v="${t}" class="${t === cat ? 'active' : ''}">${t}</button>`).join('')}
     </div>`}
     <div class="segment fs-tabs-eq" id="fs-tabs" style="margin:10px 0 12px">${tabsHtml}</div>
+    <div class="segment fs-tabs-eq fs-rsrc" id="fs-rsrc" style="display:none;margin:-4px 0 12px">
+      <button data-src="mine" class="active">Mes recettes</button>
+      <button data-src="preset">Préenregistrées</button>
+    </div>
     <div id="fs-list" class="fs-list-fixed"></div>
   </div>`);
   const sheet = openSheet({ title: onPick ? 'Ajouter un aliment' : 'Aliments', content: form });
@@ -951,7 +967,7 @@ function openFoodSearchSheet(rerender, opts = {}) {
 
   const drawHistory = (nq) => {
     const entries = store.nutritionEntryHistory();
-    const filtered = nq ? entries.filter((e) => (e.baseName || e.name || '').toLowerCase().includes(nq)) : entries;
+    const filtered = nq ? entries.filter((e) => normalizeStr(e.baseName || e.name || '').includes(nq)) : entries;
     if (!filtered.length) { list.innerHTML = `<div class="empty-state">${nq ? 'Aucun résultat' : 'Aucune entrée pour le moment.'}</div>`; return; }
     list.innerHTML = '';
     for (const e of filtered.slice(0, 200)) {
@@ -964,7 +980,7 @@ function openFoodSearchSheet(rerender, opts = {}) {
 
   const drawAll = (nq) => {
     let items = FOODS;
-    if (nq) items = items.filter((f) => f.n.toLowerCase().includes(nq));
+    if (nq) items = items.filter((f) => normalizeStr(f.n).includes(nq));
     items = items.slice().sort((a, b) => a.n.localeCompare(b.n, 'fr'));
     if (!items.length) { list.innerHTML = '<div class="empty-state">Aucun aliment trouvé</div>'; return; }
     list.innerHTML = '';
@@ -973,36 +989,109 @@ function openFoodSearchSheet(rerender, opts = {}) {
     }
   };
 
-  const drawRecipes = (nq) => {
+  // Ajout d'une recette en UN CLIC, sans passer par le menu multiplicateur.
+  // Le repas garde `fromRecipe` : le retoucher rouvre le menu avec le
+  // multiplicateur, pour ajuster la portion après coup.
+  const addRecipeDirect = (recipe, srcEl) => {
+    const prot = recipe.prot || 0; const carbs = recipe.carbs || 0;
+    const fat = recipe.fat || 0; const fiber = recipe.fiber || 0;
+    const goalMetBefore = nutritionGoalMet(selectedDate);
+    store.addNutritionLog(selectedDate, {
+      name: recipe.name, baseName: recipe.name, meal: cat,
+      prot, carbs, fat, fiber, kcal: calcKcal(prot, carbs, fat),
+      per100: { prot: 0, carbs: 0, fat: 0, fiber: 0 }, weight: 0,
+      fromRecipe: recipe.id, recipeMult: 1,
+    });
+    rememberMealType(cat);
+    flashAdded(srcEl);
+    haptic();
+    toast(`${recipe.name} ajouté à ${cat}`, 'success');
+    if (!goalMetBefore && nutritionGoalMet(selectedDate)) celebrateLP(srcEl, { label: '+ LP' });
+    rerender();
+  };
+
+  // Ligne de recette. `sub` = texte secondaire sous les macros (description
+  // pour les préenregistrées). `handler(recipe, itemEl)` = action au clic.
+  const rowRecipe = (r, sub, handler) => {
+    const item = el(`<button class="hist-item">
+      <div class="hist-info">
+        <div class="hist-name">${esc(r.name)}</div>
+        <div class="meal-macros">${calcKcal(r.prot, r.carbs, r.fat)} kcal · ${macroLine(r.prot, r.carbs, r.fat, r.fiber)}</div>
+        ${sub ? `<div class="hist-sub">${esc(sub)}</div>` : ''}
+      </div>
+      <span class="hist-add">${icons.plus}</span>
+    </button>`);
+    item.addEventListener('click', () => handler(r, item));
+    return item;
+  };
+
+  // Mode « composer une recette » : on renvoie la recette comme un aliment.
+  const pickRecipeAsFood = (r, item) => {
+    onPick({ name: r.name, per100: { prot: r.prot, carbs: r.carbs, fat: r.fat, fiber: r.fiber || 0 }, weight: 100, isRecipe: true });
+    flashAdded(item);
+    haptic();
+  };
+
+  const drawMyRecipes = (nq) => {
     let recipes = store.userData.recipes || [];
-    if (nq) recipes = recipes.filter((r) => r.name.toLowerCase().includes(nq));
-    if (!recipes.length) { list.innerHTML = `<div class="empty-state">${nq ? 'Aucune recette' : 'Aucune recette.<br>Crée-en depuis l\'onglet Recettes.'}</div>`; return; }
+    if (nq) recipes = recipes.filter((r) => normalizeStr(r.name).includes(nq));
+    if (!recipes.length) {
+      list.innerHTML = `<div class="empty-state">${nq ? 'Aucune recette' : 'Aucune recette personnelle.<br>Crée-en depuis le bouton Recettes,<br>ou pioche dans les préenregistrées.'}</div>`;
+      return;
+    }
     list.innerHTML = '';
     for (const r of recipes) {
-      const item = el(`<button class="hist-item">
-        <div class="hist-info">
-          <div class="hist-name">${esc(r.name)}</div>
-          <div class="meal-macros">${calcKcal(r.prot, r.carbs, r.fat)} kcal · ${macroLine(r.prot, r.carbs, r.fat, r.fiber)}</div>
-        </div>
-        <span class="hist-add">${icons.plus}</span>
-      </button>`);
-      // Clic sur une recette → menu récap + multiplicateur (mode repas),
-      // ou ajout à la recette en cours (mode onPick).
-      item.addEventListener('click', () => {
-        if (onPick) { onPick({ name: r.name, per100: { prot: r.prot, carbs: r.carbs, fat: r.fat, fiber: r.fiber || 0 }, weight: 100, isRecipe: true }); flashAdded(item); haptic(); return; }
-        openRecipeAddSheet(rerender, r, () => cat, (c) => { cat = c; });
-      });
-      list.appendChild(item);
+      // Clic → menu récap + multiplicateur (comportement historique).
+      list.appendChild(rowRecipe(r, '', onPick
+        ? pickRecipeAsFood
+        : () => openRecipeAddSheet(rerender, r, () => cat, (c) => { cat = c; })));
     }
   };
 
+  // Recettes préenregistrées : plats composés courants, groupés par catégorie,
+  // ajoutés en un seul clic au repas sélectionné.
+  const drawPresetRecipes = (nq) => {
+    const matching = PRESET_RECIPES.filter((p) => !nq
+      || normalizeStr(p.n).includes(nq)
+      || normalizeStr(p.c).includes(nq)
+      || normalizeStr(p.d).includes(nq));
+    if (!matching.length) { list.innerHTML = '<div class="empty-state">Aucune recette trouvée</div>'; return; }
+    list.innerHTML = '';
+    let lastCat = null;
+    for (const p of matching) {
+      if (p.c !== lastCat) {
+        lastCat = p.c;
+        list.appendChild(el(`<div class="fs-cat-head">${esc(p.c)}</div>`));
+      }
+      const r = presetToRecipe(p);
+      list.appendChild(rowRecipe(r, p.d, onPick ? pickRecipeAsFood : addRecipeDirect));
+    }
+  };
+
+  const drawRecipes = (nq) => {
+    if (recipeSource === 'preset') drawPresetRecipes(nq);
+    else drawMyRecipes(nq);
+  };
+
+  // Le sélecteur de source n'a de sens que dans l'onglet Recettes.
+  const srcSeg = form.querySelector('#fs-rsrc');
   const draw = () => {
-    const nq = query.trim().toLowerCase();
+    // Recherche insensible aux accents : « pho » doit trouver « Phở bò ».
+    const nq = normalizeStr(query.trim());
+    srcSeg.style.display = tab === 'recipes' ? '' : 'none';
     if (tab === 'history') drawHistory(nq);
     else if (tab === 'all') drawAll(nq);
     else drawRecipes(nq);
   };
   draw();
+
+  srcSeg.addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    recipeSource = b.dataset.src;
+    srcSeg.querySelectorAll('button').forEach((x) => x.classList.toggle('active', x === b));
+    draw();
+    haptic();
+  });
 
   form.querySelector('#fs-search').addEventListener('input', (e) => { query = e.target.value; draw(); });
   form.querySelector('#fs-tabs').addEventListener('click', (e) => {
@@ -1173,7 +1262,7 @@ export function render(container) {
         if (item.classList.contains('swiped')) return; // ne pas éditer quand la poubelle est ouverte
         // Repas ajouté depuis une recette → on rouvre le menu recette (multiplicateur uniquement).
         if (m.fromRecipe) {
-          const recipe = (store.userData.recipes || []).find((x) => x.id === m.fromRecipe);
+          const recipe = findRecipe(m.fromRecipe);
           if (recipe) { openRecipeAddSheet(rerender, recipe, () => m.meal, null, { editMealId: m.id, mult: m.recipeMult || 1 }); return; }
         }
         openAddMealSheet(rerender, { editId: m.id, ...mealToEditable(m) });
