@@ -407,6 +407,23 @@ canvas { max-width: 100%; }
 /* --- v3 : sheet objectifs (compteur kcal toujours visible) --- */
 .macro-kcal-sticky { position: sticky; bottom: 0; display: flex; justify-content: space-between; align-items: center; padding: 11px 12px; margin: 6px calc(-1 * var(--space)) 0; background: var(--header-bg); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-top: 1px solid var(--border); }
 
+/* --- v4.3 : carte Coach métabolique (maintenance + stagnation) --- */
+.coach-card { border-left: 3px solid var(--accent); }
+.coach-card.coach-good { border-left-color: var(--success); }
+.coach-card.coach-warn { border-left-color: var(--warning); }
+.coach-card.coach-neutral { border-left-color: var(--text-2); }
+.coach-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.coach-title { display: inline-flex; align-items: center; gap: 6px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-2); }
+.coach-title svg { width: 15px; height: 15px; color: var(--accent); }
+.coach-warn .coach-title svg { color: var(--warning); }
+.coach-good .coach-title svg { color: var(--success); }
+.coach-rate { font-size: 0.72rem; font-weight: 700; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.coach-msg { font-size: 0.92rem; line-height: 1.45; color: var(--text); }
+.coach-maint { font-size: 0.78rem; line-height: 1.4; color: var(--text-2); margin-top: 8px; }
+.coach-maint b { color: var(--accent); font-variant-numeric: tabular-nums; }
+.coach-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.coach-actions .coach-btn { flex: 1 1 auto; }
+
 /* --- v4.1 : objectif calories avec boutons ±200 (mode Auto) --- */
 .cal-adjust-row { display: flex; align-items: stretch; gap: 8px; }
 .cal-adjust-row input { flex: 1 1 auto; min-width: 0; text-align: center; }

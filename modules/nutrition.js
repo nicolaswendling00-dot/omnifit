@@ -1,6 +1,6 @@
 // OmniFit — PAGE 1 : Nutrition (macros couleur, fibres, modes grammes/auto/%, repas typés, recettes)
 import { store, todayISO } from '../utils/storage.js';
-import { calcKcal, fiberGoalFromKcal } from '../utils/math.js';
+import { calcKcal, fiberGoalFromKcal, metabolicInsight } from '../utils/math.js';
 import { el, esc, icons, openSheet, openModal, toast, ringSVG, confirmModal, fmtDateShort, haptic, celebrateLP, normalizeStr } from '../utils/ui.js';
 import { startCameraStream, captureFrame, decodeBarcodeFromFile } from '../utils/barcode.js';
 import { fetchProductByBarcode } from '../utils/openfoodfacts.js';
@@ -82,6 +82,39 @@ export function macroGoals() {
   const carbsG = s.carbsGoalG;
   const fatG = s.fatGoalG;
   return { protG, carbsG, fatG, kcalGoal: calcKcal(protG, carbsG, fatG) };
+}
+
+// Ajuste l'objectif calorique de ±delta kcal, en tenant compte du mode macro :
+//   - mode « grammes » : on porte l'écart sur les glucides (4 kcal/g), les
+//     autres macros ne bougent pas ;
+//   - modes « auto » / « % » : on décale directement calorieGoal (et on fige
+//     calorieAuto pour que la valeur tienne).
+// Horodate l'ajustement (lastCalorieAdjust) : le coach patiente ensuite ~10 j
+// avant de reproposer un changement, le temps que le poids réponde.
+export function applyCalorieDelta(delta) {
+  const s = store.userData.settings;
+  const stamp = { lastCalorieAdjust: { date: todayISO(), delta } };
+  if (s.macroMode === 'grams') {
+    const newCarbs = Math.max(0, Math.round((s.carbsGoalG + delta / 4) / 5) * 5);
+    store.saveUserData({ settings: { carbsGoalG: newCarbs, ...stamp } });
+  } else {
+    const newGoal = Math.max(0, Math.round((s.calorieGoal + delta) / 10) * 10);
+    store.saveUserData({ settings: { calorieGoal: newGoal, calorieAuto: false, ...stamp } });
+  }
+}
+
+// Cale l'objectif calorique sur une valeur cible (utilisé pour adopter la
+// maintenance mesurée). Même prise en compte du mode macro que ci-dessus.
+export function setCalorieGoal(kcal) {
+  const s = store.userData.settings;
+  const target = Math.max(0, Math.round(kcal / 10) * 10);
+  if (s.macroMode === 'grams') {
+    const fromPF = s.proteinGoal * 4 + s.fatGoalG * 9;
+    const carbs = Math.max(0, Math.round((target - fromPF) / 4 / 5) * 5);
+    store.saveUserData({ settings: { carbsGoalG: carbs } });
+  } else {
+    store.saveUserData({ settings: { calorieGoal: target, calorieAuto: false } });
+  }
 }
 
 // Objectif figé par jour : les jours passés gardent l'objectif qu'ils avaient
@@ -1141,6 +1174,125 @@ function openFoodSearchSheet(rerender, opts = {}) {
   });
 }
 
+// ============================================================
+// COACH MÉTABOLIQUE — carte d'insight (maintenance + stagnation)
+// ============================================================
+// Construit la table {date: kcal} des jours où des repas ont été loggés.
+function intakeByDateMap() {
+  const out = {};
+  const byDate = store.userData.nutrition.byDate || {};
+  for (const [d, day] of Object.entries(byDate)) {
+    if (day && day.meals && day.meals.length) out[d] = store.dayTotals(d).kcal;
+  }
+  return out;
+}
+
+// Formate la pente hebdomadaire : « +0.30 », « −0.45 », « 0.00 ».
+function fmtRate(kg) {
+  const s = kg > 0 ? '+' : kg < 0 ? '−' : '';
+  return `${s}${Math.abs(kg).toFixed(2)}`;
+}
+
+// Rend la carte Coach, ou null s'il n'y a pas encore assez de données.
+function renderCoachCard(rerender) {
+  const w = store.userData.weights;
+  const currentW = w.length ? w[w.length - 1].value : store.userData.profile.weight;
+  const ins = metabolicInsight({
+    weights: w,
+    intakeByDate: intakeByDateMap(),
+    goalType: store.userData.goal.type,
+    today: todayISO(),
+    bodyweight: currentW,
+    lastAdjustDate: (store.userData.settings.lastCalorieAdjust || {}).date || null,
+  });
+  if (ins.status === 'insufficient') return null;
+
+  const rate = ins.weeklyRateKg;
+  const rateStr = `${fmtRate(rate)} kg/sem`;
+  const absRate = Math.abs(rate).toFixed(2);
+  const dir = ins.direction;
+
+  let tone = 'neutral';
+  let msg = '';
+  let action = null; // { label, delta }
+
+  if (ins.status === 'on_track') {
+    tone = 'good';
+    msg = dir === 'down'
+      ? `Tu perds ${absRate} kg/sem — rythme idéal, tiens le cap.`
+      : `Tu prends ${absRate} kg/sem — bonne progression, continue.`;
+  } else if (ins.status === 'plateau') {
+    tone = 'warn';
+    msg = dir === 'down'
+      ? `Ton poids stagne (${rateStr} sur ${ins.daysSpan} j). Retire 200 kcal pour relancer la perte.`
+      : `Ta prise stagne (${rateStr} sur ${ins.daysSpan} j). Ajoute 200 kcal pour repartir.`;
+    action = { label: `${ins.suggestedDelta > 0 ? '+' : '−'}200 kcal`, delta: ins.suggestedDelta };
+  } else if (ins.status === 'overshoot') {
+    tone = 'warn';
+    msg = dir === 'down'
+      ? `Ton poids remonte (${rateStr}). Retire 200 kcal pour repasser en déficit.`
+      : `Tu perds du poids (${rateStr}). Ajoute 200 kcal pour repasser en surplus.`;
+    action = { label: `${ins.suggestedDelta > 0 ? '+' : '−'}200 kcal`, delta: ins.suggestedDelta };
+  } else if (ins.status === 'cooldown') {
+    tone = 'neutral';
+    const rest = Math.max(0, 10 - ins.daysSinceAdjust);
+    msg = `Ajustement récent — laisse encore ~${rest} j au poids pour répondre avant de réévaluer.`;
+  } else { // hold (objectif maintenance / recomposition)
+    tone = 'good';
+    msg = Math.abs(rate) < ins.stallThreshold
+      ? `Poids stable (${rateStr}) — tu es à ta maintenance, idéal pour une recomposition.`
+      : `Ton poids ${rate > 0 ? 'monte' : 'descend'} (${rateStr}). Ajuste si tu veux le stabiliser.`;
+  }
+
+  // Ligne maintenance (méthode Gouiffe) — dès qu'assez de jours loggés.
+  let maintLine = '';
+  if (ins.maintenanceEst) {
+    maintLine = store.userData.settings.calorieAuto
+      ? `Maintenance réelle estimée : <b>~${ins.maintenanceEst} kcal</b> — mesurée sur ta réponse pondérale, pas une formule.`
+      : `Maintenance estimée : <b>~${ins.maintenanceEst} kcal</b> (moyenne ${ins.avgIntake} kcal · ${rateStr}).`;
+  }
+
+  // Adopter la maintenance mesurée : seulement pour un objectif maintenance,
+  // et si elle diffère nettement de l'objectif courant.
+  const setMaint = (dir === 'hold' && ins.maintenanceEst
+    && Math.abs(ins.maintenanceEst - macroGoals().kcalGoal) > 100) ? ins.maintenanceEst : null;
+
+  const card = el(`<div class="card coach-card coach-${tone}">
+    <div class="coach-head">
+      <span class="coach-title">${icons.flame} Coach</span>
+      <span class="coach-rate">${rateStr} · ${ins.daysSpan} j</span>
+    </div>
+    <div class="coach-msg">${msg}</div>
+    ${maintLine ? `<div class="coach-maint">${maintLine}</div>` : ''}
+    <div class="coach-actions"></div>
+  </div>`);
+
+  const actionsHost = card.querySelector('.coach-actions');
+  if (action) {
+    const btn = el(`<button class="btn btn-primary btn-sm coach-btn">${icons.swap} ${action.label}</button>`);
+    btn.addEventListener('click', () => {
+      applyCalorieDelta(action.delta);
+      haptic();
+      toast(`Objectif ${action.delta > 0 ? 'augmenté' : 'réduit'} de 200 kcal`, 'success');
+      rerender();
+    });
+    actionsHost.appendChild(btn);
+  }
+  if (setMaint) {
+    const btn = el(`<button class="btn btn-secondary btn-sm coach-btn">${icons.check} Caler sur ~${setMaint}</button>`);
+    btn.addEventListener('click', () => {
+      setCalorieGoal(setMaint);
+      haptic();
+      toast(`Objectif calé sur ${setMaint} kcal`, 'success');
+      rerender();
+    });
+    actionsHost.appendChild(btn);
+  }
+  if (!actionsHost.children.length) actionsHost.remove();
+
+  return card;
+}
+
 // FAB global dans body (hors du conteneur transformé, sinon invisible sur iOS)
 // Menu déroulant : "+" principal déploie 2 mini-FAB (ajout rapide / scan code-barre).
 function ensureFab() {
@@ -1233,6 +1385,8 @@ export function render(container) {
 
       <div class="date-ribbon no-swipe" id="date-ribbon">${ribbon}</div>
 
+      <div id="coach-host"></div>
+
       <div class="card">
         <div class="card-row" style="margin-bottom:4px">
           <h3 style="margin:0">Repas</h3>
@@ -1245,6 +1399,14 @@ export function render(container) {
         </div>
       </div>
     </div>`));
+
+  // Carte Coach (maintenance + stagnation) : insérée sous le ruban de dates.
+  const coachHost = container.querySelector('#coach-host');
+  if (coachHost) {
+    const coachEl = renderCoachCard(rerender);
+    if (coachEl) coachHost.replaceWith(coachEl);
+    else coachHost.remove();
+  }
 
   const list = container.querySelector('#meal-list');
   // Regroupement par type de repas

@@ -524,5 +524,49 @@ assert(/\.macro-actions #btn-smooth \{[^}]*position: absolute/.test(cssMa), 'Mac
 // Puces de date largeur fixe
 assert(/\.date-chip \{[^}]*width: 58px/.test(cssMa), 'Dates : largeur fixe (independante du contenu)');
 
+console.log('== v4.3 : coach métabolique (maintenance + stagnation) ==');
+{
+  const anchor = '2026-08-02';
+  const dISO = (off) => { const d = new Date(Date.UTC(2026, 7, 2)); d.setUTCDate(d.getUTCDate() + off); return d.toISOString().slice(0, 10); };
+  // Génère des pesées et des apports sur la fenêtre
+  const flatWeights = []; const decWeights = []; const intake2500 = {}; const intake3300 = {};
+  for (let off = -20; off <= 0; off += 2) {
+    flatWeights.push({ date: dISO(off), value: 80 });                 // poids plat
+    decWeights.push({ date: dISO(off), value: 80.5 + (-off) * (0.5 / 7) }); // ancien + lourd → ~ -0.5 kg/sem
+  }
+  for (let off = -20; off <= -1; off++) { intake2500[dISO(off)] = 2500; intake3300[dISO(off)] = 3300; }
+
+  const mi = mathmod.metabolicInsight;
+
+  // Sèche + poids plat → plateau, −200
+  const cutPlateau = mi({ weights: flatWeights, intakeByDate: intake2500, goalType: 'Perte de poids', today: anchor, bodyweight: 80 });
+  assert(cutPlateau.status === 'plateau' && cutPlateau.suggestedDelta === -200, 'Coach : sèche + poids plat → plateau, -200 kcal');
+  assert(Math.abs(cutPlateau.maintenanceEst - 2500) <= 10, 'Coach : maintenance ≈ apport quand le poids est plat');
+
+  // Sèche + perte régulière → on track
+  const cutOk = mi({ weights: decWeights, intakeByDate: intake2500, goalType: 'Perte de poids', today: anchor, bodyweight: 80 });
+  assert(cutOk.status === 'on_track' && cutOk.weeklyRateKg < 0, 'Coach : sèche + perte régulière → on track');
+
+  // Maintenance empirique : mange 3300, perd ~0.5/sem → maintenance ≈ 3850
+  const maintCheck = mi({ weights: decWeights, intakeByDate: intake3300, goalType: 'Perte de poids', today: anchor, bodyweight: 80 });
+  assert(Math.abs(maintCheck.maintenanceEst - 3850) <= 40, 'Coach : maintenance = apport − pente×1100 (Gouiffe)');
+
+  // Prise + poids plat → plateau, +200
+  const bulk = mi({ weights: flatWeights, intakeByDate: intake2500, goalType: 'Prise de muscle', today: anchor, bodyweight: 80 });
+  assert(bulk.status === 'plateau' && bulk.suggestedDelta === 200, 'Coach : prise + poids plat → plateau, +200 kcal');
+
+  // Objectif maintenance (recomp) → jamais d'ajustement
+  const hold = mi({ weights: flatWeights, intakeByDate: intake2500, goalType: 'Recomposition', today: anchor, bodyweight: 80 });
+  assert(hold.status === 'hold' && hold.suggestedDelta === null, 'Coach : objectif maintenance → pas de détection/ajustement');
+
+  // Données insuffisantes → insufficient
+  const few = mi({ weights: [{ date: dISO(-2), value: 80 }, { date: dISO(0), value: 80 }], intakeByDate: {}, goalType: 'Perte de poids', today: anchor, bodyweight: 80 });
+  assert(few.status === 'insufficient', 'Coach : trop peu de pesées → insufficient');
+
+  // Cooldown : plateau mais ajustement récent → pas de nouvelle suggestion
+  const cd = mi({ weights: flatWeights, intakeByDate: intake2500, goalType: 'Perte de poids', today: anchor, bodyweight: 80, lastAdjustDate: dISO(-3) });
+  assert(cd.status === 'cooldown' && cd.suggestedDelta === null, 'Coach : ajustement récent → cooldown (anti-spam)');
+}
+
 console.log(`\n===== RÉSULTAT : ${pass} OK / ${fail} FAIL =====`);
 process.exit(fail ? 1 : 0);
