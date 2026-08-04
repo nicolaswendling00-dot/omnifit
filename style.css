@@ -264,10 +264,14 @@ input[type="range"] { width: 100%; accent-color: var(--accent); min-height: 34px
 /* Chaque bouton occupe une part égale (un tiers quand il y en a trois) et peut
    rétrécir : `flex: 1` seul garde la largeur du contenu comme plancher, ce qui
    faisait déborder les trois boutons de l'éditeur de routine. */
+/* `.btn` est un conteneur flex : text-overflow n'y a aucun effet sur le texte.
+   On laisse donc le libellé passer à la ligne (« Ajouter aux routines » est
+   trop long pour un demi-bouton en capitales espacées). */
 .modal-actions .btn {
   flex: 1 1 0; min-width: 0; padding-left: 8px; padding-right: 8px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  white-space: normal; line-height: 1.2; hyphens: auto;
 }
+body.shape-amoled .modal-actions .btn { font-size: 0.72rem; letter-spacing: 0.04em; }
 .confirm-text { color: var(--text-2); }
 
 .sheet-scrim { align-items: flex-end; padding: 0; }
@@ -485,6 +489,9 @@ canvas { max-width: 100%; }
 .exo-swipe-row .exo-search-item {
   position: relative; z-index: 1; margin-bottom: 0;
   transition: transform 180ms var(--ease);
+  /* Fond OPAQUE indispensable : `.exo-search-item` est transparent par défaut,
+     la poubelle placée dessous resterait donc visible en permanence. */
+  background: var(--bg);
 }
 .exo-del {
   position: absolute; top: 0; right: 0; bottom: 0; width: 70px; z-index: 0;
