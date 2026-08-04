@@ -242,6 +242,17 @@ export function confirmModal(title, message, onConfirm, danger = false) {
   });
 }
 
+// Ferme d'un coup toutes les fenêtres et panneaux ouverts.
+// Utile avant d'ouvrir un écran plein comme le mode séance : celui-ci passe
+// SOUS les panneaux (z-index inférieur), et l'utilisateur devrait sinon fermer
+// à la main la fiche ou la fenêtre depuis laquelle il vient.
+export function closeAllOverlays() {
+  // `.picker-overlay` (navigateur d'exercices, calendrier complet) compte aussi :
+  // il est en z-index 150 et recouvrirait la séance, qui est en 90.
+  document.querySelectorAll('.scrim, .picker-overlay').forEach((s) => s.remove());
+  document.body.classList.remove('overlay-open');
+}
+
 // ---------- Bottom Sheet ----------
 // headerAction (facultatif) : { icon, label, onClick } -> bouton en haut à droite.
 export function openSheet({ title, content, onClose = null, headerAction = null }) {

@@ -4,7 +4,7 @@
 import { store, todayISO } from '../utils/storage.js';
 import { EXERCISES, MUSCLES, muscleLabel, AKA } from '../data/exercises.js';
 import { formatTime, workoutMuscleVolume, weeklySetsByMuscle, muscleAttenuation } from '../utils/math.js';
-import { el, esc, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, fmtDateFull, celebrateLP, makeChart, normalizeStr } from '../utils/ui.js';
+import { el, esc, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, fmtDateFull, celebrateLP, makeChart, normalizeStr, closeAllOverlays } from '../utils/ui.js';
 import { computeExerciseLP, computeExerciseLPDetailed, rankFromLP, rankBadge, getStandards } from '../utils/ranks.js';
 
 let volumeChart = null;
@@ -678,8 +678,12 @@ function openExerciseDetailSheet(exerciseId) {
   });
 
   const hostH = form.querySelector('#ed-history');
+  // Séance retenue comme référence (colonne PRÉC) : on la met en évidence.
+  const refEntry = bestEntry(exerciseId);
+  const refId = refEntry && refEntry.workout ? refEntry.workout.id : null;
   for (const h of history) {
     const vol = exoVolume(h.wx);
+    const isRef = refId && h.w.id === refId;
     // Séries listées les unes sous les autres (au lieu d'une ligne « · »),
     // avec le marqueur W/D quand la série est un échauffement ou une dégressive.
     const labels = setLabels(h.wx.sets);
@@ -687,7 +691,8 @@ function openExerciseDetailSheet(exerciseId) {
       <span class="ed-set-n ${labels[i].cls}">${labels[i].text}</span>
       <span class="ed-set-v">${s.weight} kg × ${s.reps}</span>
     </div>`).join('');
-    const row = el(`<div class="ed-hist-item">
+    const row = el(`<div class="ed-hist-item${isRef ? ' ed-hist-best' : ''}">
+      ${isRef ? '<span class="ed-best-tag">Référence</span>' : ''}
       <div class="ed-hist-head">
         <span class="ed-hist-date">${fmtDateFull(h.w.date)}</span>
         <span style="display:flex;align-items:center;gap:6px">
@@ -770,6 +775,9 @@ function openWorkoutDetail(w, highlightId = null) {
   });
   content.querySelector('#wd-edit').addEventListener('click', () => {
     close();
+    // On vient souvent d'une fiche exercice restée ouverte derrière : sans ça,
+    // la séance s'ouvrirait sous elle et il faudrait la fermer à la main.
+    closeAllOverlays();
     if (pageRerender) openSession(pageRerender, null, w);
   });
 }
@@ -999,7 +1007,13 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null, resum
       const rk = exerciseRank(wx.exerciseId, lpMap);
       const labels = setLabels(wx.sets);
 
-      const rowCount = Math.max(wx.sets.length + 1, prevSets.length);
+      // Plus de ligne vide ajoutée d'office après la dernière série validée :
+      // on affiche autant de lignes qu'il y a de séries (ou de séries de
+      // référence à reproduire), et une ligne de plus par appui sur
+      // « Ajouter une série » (compteur `pending`, remis à zéro à la validation).
+      const pending = wx.pending || 0;
+      let rowCount = Math.max(wx.sets.length + pending, prevSets.length);
+      if (rowCount === 0) rowCount = 1; // exercice sans historique : une ligne pour démarrer
       let rowsHtml = '';
       for (let i = 0; i < rowCount; i++) {
         const confirmed = i < wx.sets.length;
@@ -1033,6 +1047,7 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null, resum
           <div class="set-thead"><span>SÉRIE</span><span>PRÉC</span><span>KG</span><span>RÉPS</span><span></span></div>
           ${rowsHtml}
         </div>
+        <button class="btn btn-ghost btn-sm sr-add" data-add="${idx}">${icons.plus} Ajouter une série</button>
       </div>`);
       exosHost.appendChild(card);
     });
@@ -1055,6 +1070,15 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null, resum
         row.querySelector('.sr-reps').value = prev.reps;
         haptic();
       }
+      return;
+    }
+    // « Ajouter une série » : ouvre une ligne vide sous les séries de l'exo
+    const addBtn = e.target.closest('.sr-add');
+    if (addBtn) {
+      const wxa = session.exercises[+addBtn.dataset.add];
+      wxa.pending = (wxa.pending || 0) + 1;
+      haptic();
+      renderExos();
       return;
     }
     // Clic sur le numéro de série → choix du type (normal / échauffement / dégressive)
@@ -1094,6 +1118,8 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null, resum
         }
         captured.sort((a, b) => a.idx - b.idx);
         for (const c of captured) wxx.sets.push({ weight: c.weight, reps: c.reps });
+        // Les lignes ouvertes manuellement viennent d'être consommées.
+        wxx.pending = Math.max(0, (wxx.pending || 0) - captured.length);
         haptic();
         renderExos();
         startRestTimer(wxx.exerciseId);
@@ -1745,12 +1771,80 @@ function openExerciseBrowser() {
     for (const { e, name, lp } of items.slice(0, 150)) {
       const rk = lp !== undefined ? rankFromLP(lp) : null;
       const chip = rk ? `<span class="rank-inline" title="${rk.name}${rk.division ? ' ' + rk.division : ''}">${rankBadge(rk.id, 46)}</span>` : '<span class="rank-inline muted" style="font-size:0.66rem">non classé</span>';
-      const b = el(`<button class="exo-search-item"><span>${esc(name)}</span>${chip}</button>`);
-      b.addEventListener('click', () => { openExerciseDetailSheet(e.id); });
-      list.appendChild(b);
+      // Un exercice custom est glissable vers la gauche pour révéler une
+      // poubelle (même geste que la suppression d'un repas ou d'une série).
+      // Les exercices de la base intégrée ne sont pas supprimables.
+      if (e.isCustom) {
+        const wrap = el(`<div class="exo-swipe-row" data-cx="${e.id}">
+          <button class="exo-del" data-del aria-label="Supprimer l'exercice">${icons.trash}</button>
+          <button class="exo-search-item"><span>${esc(name)}</span>${chip}</button>
+        </div>`);
+        wrap.querySelector('.exo-search-item').addEventListener('click', () => {
+          if (wrap.classList.contains('swiped')) return; // poubelle ouverte : on n'ouvre pas la fiche
+          openExerciseDetailSheet(e.id);
+        });
+        wrap.querySelector('[data-del]').addEventListener('click', () => {
+          confirmModal('Supprimer l\'exercice', `Supprimer définitivement « ${esc(name)} » ? Les séances déjà enregistrées le conserveront.`, () => {
+            const rest = (store.userData.settings.customExercises || []).filter((x) => x.id !== e.id);
+            store.saveUserData({ settings: { customExercises: rest } });
+            toast('Exercice supprimé', 'success');
+            draw(overlay.querySelector('#xb-search').value);
+          }, true);
+        });
+        list.appendChild(wrap);
+      } else {
+        const b = el(`<button class="exo-search-item"><span>${esc(name)}</span>${chip}</button>`);
+        b.addEventListener('click', () => { openExerciseDetailSheet(e.id); });
+        list.appendChild(b);
+      }
     }
   };
   draw();
+
+  // Glissement horizontal sur les exercices custom → révèle la poubelle.
+  (() => {
+    let row = null; let startX = 0; let startY = 0; let dx = 0; let mode = null;
+    let openRow = null;
+    const closeOpen = (except) => {
+      if (openRow && openRow !== except) {
+        openRow.querySelector('.exo-search-item').style.transform = '';
+        openRow.classList.remove('swiped');
+        openRow = null;
+      }
+    };
+    list.addEventListener('touchstart', (ev) => {
+      const r = ev.target.closest('.exo-swipe-row');
+      closeOpen(r);
+      if (!r) { row = null; return; }
+      row = r; startX = ev.touches[0].clientX; startY = ev.touches[0].clientY; dx = 0; mode = null;
+    }, { passive: true });
+    list.addEventListener('touchmove', (ev) => {
+      if (!row) return;
+      dx = ev.touches[0].clientX - startX;
+      const dy = ev.touches[0].clientY - startY;
+      if (mode === null) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        mode = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
+      }
+      if (mode !== 'h') return;
+      ev.preventDefault();
+      const base = row.classList.contains('swiped') ? -76 : 0;
+      const t = Math.max(-76, Math.min(0, base + dx));
+      row.querySelector('.exo-search-item').style.transform = `translateX(${t}px)`;
+    }, { passive: false });
+    list.addEventListener('touchend', () => {
+      if (!row || mode !== 'h') { row = null; mode = null; return; }
+      const content = row.querySelector('.exo-search-item');
+      const wasOpen = row.classList.contains('swiped');
+      const open = wasOpen ? dx < 40 : dx < -40;
+      if (open) { content.style.transform = 'translateX(-76px)'; row.classList.add('swiped'); openRow = row; }
+      else {
+        content.style.transform = ''; row.classList.remove('swiped');
+        if (openRow === row) openRow = null;
+      }
+      row = null; mode = null;
+    });
+  })();
   const searchInput = overlay.querySelector('#xb-search');
   searchInput.addEventListener('input', (e) => draw(e.target.value));
   overlay.querySelector('#xb-sort').addEventListener('click', (e) => {

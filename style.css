@@ -260,8 +260,14 @@ input[type="range"] { width: 100%; accent-color: var(--accent); min-height: 34px
 .scrim.visible .modal { transform: scale3d(1, 1, 1); }
 .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 8px 8px 18px; }
 .modal-body { padding: 6px 18px 14px; overflow-y: auto; }
-.modal-actions { display: flex; gap: 10px; padding: 14px 18px 18px; border-top: 1px solid var(--border); margin-top: 4px; }
-.modal-actions .btn { flex: 1; }
+.modal-actions { display: flex; gap: 8px; padding: 14px 18px 18px; border-top: 1px solid var(--border); margin-top: 4px; }
+/* Chaque bouton occupe une part égale (un tiers quand il y en a trois) et peut
+   rétrécir : `flex: 1` seul garde la largeur du contenu comme plancher, ce qui
+   faisait déborder les trois boutons de l'éditeur de routine. */
+.modal-actions .btn {
+  flex: 1 1 0; min-width: 0; padding-left: 8px; padding-right: 8px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .confirm-text { color: var(--text-2); }
 
 .sheet-scrim { align-items: flex-end; padding: 0; }
@@ -453,6 +459,39 @@ canvas { max-width: 100%; }
   font-size: 0.7rem; font-weight: 700; display: flex; align-items: center; justify-content: center;
 }
 .ed-set-v { font-size: 1rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+/* Séance retenue comme référence : cadre en dégradé violet → bleu.
+   Le dégradé est posé en fond, un fond plein masque l'intérieur, ne laissant
+   voir que le liseré (border-image ne suit pas les coins arrondis). */
+.ed-hist-item.ed-hist-best {
+  position: relative;
+  background:
+    linear-gradient(var(--surface-2), var(--surface-2)) padding-box,
+    linear-gradient(135deg, var(--accent-2), var(--accent)) border-box;
+  border: 2px solid transparent;
+  padding-top: 18px;
+}
+.ed-best-tag {
+  position: absolute; top: 0; left: 11px; transform: translateY(-50%);
+  font-size: 0.58rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--on-accent); padding: 2px 8px; border-radius: 4px;
+  background: linear-gradient(135deg, var(--accent-2), var(--accent));
+}
+
+/* Bouton « Ajouter une série » sous chaque exercice de la séance */
+.sr-add { width: 100%; margin-top: 6px; color: var(--accent); }
+
+/* Exercice custom glissable pour révéler la poubelle */
+.exo-swipe-row { position: relative; overflow: hidden; border-radius: 10px; touch-action: pan-y; margin-bottom: 6px; }
+.exo-swipe-row .exo-search-item {
+  position: relative; z-index: 1; margin-bottom: 0;
+  transition: transform 180ms var(--ease);
+}
+.exo-del {
+  position: absolute; top: 0; right: 0; bottom: 0; width: 70px; z-index: 0;
+  border: none; border-radius: 10px; background: var(--danger); color: #fff;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.exo-del svg { width: 22px; height: 22px; }
 
 /* --- v4.4 : détail de séance — carte d'exercice avec rang --- */
 .wd-exo-head { align-items: flex-start; }
