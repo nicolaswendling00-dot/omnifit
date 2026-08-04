@@ -5,9 +5,9 @@ import { EQUIPMENT_TYPES } from '../data/exercises.js';
 import { el, esc, icons, openModal, toast, confirmModal, setIconSet } from '../utils/ui.js';
 import { RANK_ORDER, RANK_META, DIV_LP, ONYX_LP, rankBadge, estimateRankFromLift, getStandards, setRankStyle } from '../utils/ranks.js';
 import { openExercisePicker } from './workout.js';
-import { backfillNutritionGoals } from './nutrition.js';
+import { backfillNutritionGoals, freezePastGoals } from './nutrition.js';
 
-const VERSION = '4.6';
+const VERSION = '4.7';
 
 function toggleRow(label, key, sub = '') {
   const s = store.userData.settings;
@@ -24,6 +24,9 @@ function toggleRow(label, key, sub = '') {
 function applyCalorieAuto() {
   const u = store.userData;
   if (u.settings.calorieAuto) {
+    // Le profil change → l'objectif auto change. On fige d'abord l'historique
+    // pour qu'il garde l'objectif réellement en vigueur jusqu'à maintenant.
+    freezePastGoals();
     store.saveUserData({ settings: { calorieGoal: harrisBenedict(u.profile, u.goal.type) } });
   }
 }

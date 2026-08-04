@@ -91,7 +91,25 @@ export function macroGoals() {
 //     calorieAuto pour que la valeur tienne).
 // Horodate l'ajustement (lastCalorieAdjust) : le coach patiente ensuite ~10 j
 // avant de reproposer un changement, le temps que le poids réponde.
+// Fige l'objectif ACTUEL sur tous les jours passés qui n'en ont pas encore.
+// À appeler AVANT toute modification de l'objectif calorique : sans ça, un jour
+// ancien jamais consulté se verrait attribuer le NOUVEL objectif lors de son
+// premier affichage, ce qui fausserait rétroactivement son écart calorique.
+export function freezePastGoals() {
+  const today = todayISO();
+  const live = macroGoals();
+  let changed = false;
+  for (const [date, day] of Object.entries(store.userData.nutrition.byDate || {})) {
+    if (date >= today) continue;          // aujourd'hui suit l'objectif courant
+    if (!day || day.goal) continue;       // déjà figé : on n'y touche jamais
+    day.goal = { ...live };
+    changed = true;
+  }
+  if (changed) store.persist();
+}
+
 export function applyCalorieDelta(delta) {
+  freezePastGoals(); // l'historique garde l'objectif en vigueur jusqu'ici
   const s = store.userData.settings;
   const stamp = { lastCalorieAdjust: { date: todayISO(), delta } };
   if (s.macroMode === 'grams') {
@@ -106,6 +124,7 @@ export function applyCalorieDelta(delta) {
 // Cale l'objectif calorique sur une valeur cible (utilisé pour adopter la
 // maintenance mesurée). Même prise en compte du mode macro que ci-dessus.
 export function setCalorieGoal(kcal) {
+  freezePastGoals();
   const s = store.userData.settings;
   const target = Math.max(0, Math.round(kcal / 10) * 10);
   if (s.macroMode === 'grams') {
@@ -319,6 +338,8 @@ function openMacroGoalsSheet(rerender) {
   });
 
   form.querySelector('#mg-save').addEventListener('click', () => {
+    // L'historique conserve l'objectif en vigueur avant cette modification.
+    freezePastGoals();
     if (mode === 'grams') {
       store.saveUserData({ settings: {
         macroMode: 'grams',

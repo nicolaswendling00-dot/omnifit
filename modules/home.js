@@ -176,6 +176,92 @@ function openGlobalRankModal(gr) {
   openModal({ title: 'Rang global', content, actions: [{ label: 'Fermer' }] });
 }
 
+// Couleurs macros, alignées sur l'onglet Nutrition
+const C_PROT = '#FB923C';
+const C_CARB = '#38BDF8';
+const C_FAT = '#8B5CF6';
+
+// Petite barre de macro : libellé, jauge colorée, valeur / objectif.
+function macroBar(label, done, goal, color) {
+  const pct = goal ? Math.min(100, Math.round((done / goal) * 100)) : 0;
+  return `<div class="hk-macro">
+    <div class="hk-macro-top"><span>${label}</span><span class="num">${Math.round(done)}<i>/${goal}g</i></span></div>
+    <div class="hk-macro-bar"><i style="width:${pct}%;background:${color}"></i></div>
+  </div>`;
+}
+
+// Courbe de poids tracée en fond de la carte : dernières pesées, normalisées
+// sur la hauteur disponible. Purement décorative (aria-hidden).
+function weightSparkline(weights) {
+  const pts = (weights || []).slice(-14).map((w) => w.value);
+  if (pts.length < 2) return '';
+  const min = Math.min(...pts); const max = Math.max(...pts);
+  const span = max - min || 1;
+  const W = 100; const H = 40;
+  const coords = pts.map((v, i) => {
+    const x = (i / (pts.length - 1)) * W;
+    const y = H - ((v - min) / span) * (H * 0.8) - H * 0.1;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const line = coords.join(' ');
+  const area = `0,${H} ${line} ${W},${H}`;
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+    <defs><linearGradient id="hw-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
+    </linearGradient></defs>
+    <polygon points="${area}" fill="url(#hw-grad)"/>
+    <polyline points="${line}" fill="none" stroke="var(--accent)" stroke-width="1.6"
+      stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" opacity="0.75"/>
+  </svg>`;
+}
+
+// Part de la journée écoulée (0–1), pour situer l'avancement des pas par
+// rapport à l'heure qu'il est.
+function dayProgress() {
+  const d = new Date();
+  return (d.getHours() * 60 + d.getMinutes()) / 1440;
+}
+
+// Piste de progression des pas tracée en fond : une ligne qui se remplit
+// jusqu'au drapeau d'arrivée, plus un repère à l'avancement de la journée
+// (on voit d'un coup d'œil si on est en avance ou en retard).
+function stepsTrack(ratio, timeRatio) {
+  const p = Math.max(0, Math.min(1, ratio || 0));
+  const t = Math.max(0, Math.min(1, timeRatio || 0));
+  const W = 100; const H = 40; const y = 26;
+  const x1 = 6; const x2 = 88;              // la ligne s'arrête avant le drapeau
+  const fill = x1 + (x2 - x1) * p;
+  const mark = x1 + (x2 - x1) * t;
+  const done = p >= 1;
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+    <line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="var(--text-2)" stroke-opacity="0.25"
+      stroke-width="2.5" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+    <line class="ha-fill" x1="${x1}" y1="${y}" x2="${fill.toFixed(1)}" y2="${y}"
+      stroke="url(#ha-grad)" stroke-width="2.5" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+    <defs><linearGradient id="ha-grad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="var(--accent)"/><stop offset="100%" stop-color="var(--accent-2)"/>
+    </linearGradient></defs>
+    <circle cx="${fill.toFixed(1)}" cy="${y}" r="2.6" fill="var(--accent)"/>
+    <line x1="${mark.toFixed(1)}" y1="${y - 5}" x2="${mark.toFixed(1)}" y2="${y + 5}"
+      stroke="var(--text-2)" stroke-opacity="0.5" stroke-width="1" stroke-dasharray="2 2" vector-effect="non-scaling-stroke"/>
+    <g transform="translate(${x2 + 2} ${y - 12})">
+      <line x1="0" y1="0" x2="0" y2="12" stroke="var(--text-2)" stroke-opacity="0.6" stroke-width="1" vector-effect="non-scaling-stroke"/>
+      <path d="M0 0 L7 2.5 L0 5 Z" fill="${done ? 'var(--success)' : 'var(--text-2)'}" fill-opacity="${done ? '1' : '0.6'}"/>
+    </g>
+  </svg>`;
+}
+
+// Variation de poids sur 7 jours (pesée la plus récente vs la plus proche de J-7)
+function weightDelta7(weights) {
+  if (!weights || weights.length < 2) return 0;
+  const last = weights[weights.length - 1];
+  const target = todayISO(-7);
+  let ref = weights[0];
+  for (const w of weights) { if (w.date <= target) ref = w; }
+  return Math.round((last.value - ref.value) * 10) / 10;
+}
+
 export function render(container) {
   const rerender = () => render(container);
   const { profile, goal, settings } = store.userData;
@@ -183,8 +269,11 @@ export function render(container) {
   const totals = store.dayTotals(today);
   const mg = macroGoals();
   const steps = store.userData.steps.byDate[today] || 0;
+  const stepsGoal = settings.stepsGoal || 10000;
   const water = store.userData.water.byDate[today] || 0;
   const prog = goalProgress();
+  const kcalLeft = Math.round(mg.kcalGoal - totals.kcal);
+  const wDelta = weightDelta7(store.userData.weights);
   const currentW = store.userData.weights.length
     ? store.userData.weights[store.userData.weights.length - 1].value
     : profile.weight;
@@ -210,53 +299,75 @@ export function render(container) {
         <div class="gr-progress"><i style="width:${Math.round(grProgress * 100)}%;background:${gr.rank.color}"></i></div>
       </div>
 
-      <div class="grid-2" style="margin-bottom:var(--space)">
-        <div class="card stat-card">
-          <div class="stat-head">${icons.flame} CALORIES</div>
-          <div class="stat-body">
-            ${ringSVG({ size: 54, stroke: 6, progress: totals.kcal / mg.kcalGoal, color: 'var(--accent)', label: `${Math.round((totals.kcal / mg.kcalGoal) * 100)}%` })}
-            <div class="num stat-big">${Math.round(totals.kcal)} <small>/ ${mg.kcalGoal}</small></div>
+      <div class="card stat-card home-kcal" id="home-kcal">
+        <div class="stat-head">${icons.flame} Calories</div>
+        <div class="hk-main">
+          <div class="hk-numbers">
+            <span class="num hk-big">${Math.round(totals.kcal)}</span>
+            <span class="hk-goal">/ ${mg.kcalGoal} kcal</span>
           </div>
+          ${ringSVG({ size: 58, stroke: 6, progress: totals.kcal / mg.kcalGoal, color: 'var(--accent)', label: `${Math.round((totals.kcal / mg.kcalGoal) * 100)}%` })}
         </div>
-        <div class="card stat-card">
-          <div class="stat-head">${icons.activity} PAS</div>
-          <div class="stat-body">
-            ${ringSVG({ size: 54, stroke: 6, progress: steps / (settings.stepsGoal || 10000), gradient: true, label: `${Math.round((steps / (settings.stepsGoal || 10000)) * 100)}%` })}
-            <div class="num stat-big">${steps.toLocaleString('fr-FR')} <small>/ ${(settings.stepsGoal || 10000).toLocaleString('fr-FR')}</small></div>
-          </div>
+        <div class="hk-remaining">${kcalLeft >= 0 ? `${kcalLeft} kcal restantes` : `${Math.abs(kcalLeft)} kcal au-dessus`}</div>
+        <div class="hk-macros">
+          ${macroBar('Prot', totals.prot, mg.protG, C_PROT)}
+          ${macroBar('Gluc', totals.carbs, mg.carbsG, C_CARB)}
+          ${macroBar('Lip', totals.fat, mg.fatG, C_FAT)}
         </div>
-        <div class="card stat-card">
-          <div class="stat-head">${icons.protein} PROTÉINES</div>
-          <div class="stat-body">
-            ${ringSVG({ size: 54, stroke: 6, progress: totals.prot / mg.protG, color: '#FB923C', label: `${Math.round((totals.prot / mg.protG) * 100)}%` })}
-            <div class="num stat-big">${Math.round(totals.prot)}<small>g / ${mg.protG}g</small></div>
-          </div>
-        </div>
-        <div class="card stat-card">
-          <div class="stat-head">${icons.water} EAU</div>
-          <div class="stat-body">
-            ${ringSVG({ size: 54, stroke: 6, progress: water / settings.waterGoal, color: '#38BDF8', label: `${Math.round((water / settings.waterGoal) * 100)}%` })}
-            <div>
-              <div class="num stat-big">${water.toFixed(1)}<small>L / ${settings.waterGoal}L</small></div>
-              <button class="btn btn-secondary btn-sm" id="btn-add-water" style="min-height:34px;padding:4px 10px;margin-top:4px">+0.25</button>
+      </div>
+
+      <div class="home-duo">
+        <div class="card stat-card home-weight" id="home-weight">
+          <div class="hw-bg">${weightSparkline(store.userData.weights)}</div>
+          <div class="hw-content">
+            <div class="stat-head">${icons.user} Poids</div>
+            <div class="hw-values">
+              <div>
+                <div class="num w-now">${currentW}<small>kg</small></div>
+                <div class="hw-label">Actuel</div>
+              </div>
+              <div class="hw-delta">
+                <div class="num ${wDelta > 0 ? 'up' : wDelta < 0 ? 'down' : ''}">${wDelta > 0 ? '+' : ''}${wDelta.toFixed(1)}</div>
+                <div class="hw-label">7 jours</div>
+              </div>
             </div>
+            <div class="hw-target">Cible <b>${goal.targetWeight} kg</b> · ${Math.round(prog * 100)}%</div>
+          </div>
+        </div>
+
+        <div class="card stat-card home-activity" id="home-activity">
+          <div class="ha-bg">${stepsTrack(steps / stepsGoal, dayProgress())}</div>
+          <div class="ha-content">
+            <div class="stat-head">${icons.activity} Activité</div>
+            <div class="ha-values">
+              <div>
+                <div class="num ha-big">${steps.toLocaleString('fr-FR')}</div>
+                <div class="hw-label">Pas</div>
+              </div>
+              <div>
+                <div class="num ha-goal">${stepsGoal.toLocaleString('fr-FR')}</div>
+                <div class="hw-label">Objectif</div>
+              </div>
+            </div>
+            <div class="ha-status">${steps >= stepsGoal ? 'Objectif atteint 🎯' : `${(stepsGoal - steps).toLocaleString('fr-FR')} pas restants`}</div>
           </div>
         </div>
       </div>
 
-      <div class="card card-glow">
-        <div class="weight-hero">
-          <div>
-            <div class="num w-now">${currentW} <small style="font-size:0.9rem;color:var(--text-2)">kg</small></div>
-            <div class="w-sub">${goal.type} · cible <b class="num" style="color:var(--accent)">${goal.targetWeight} kg</b></div>
-          </div>
-          ${ringSVG({ size: 74, stroke: 7, progress: prog, label: `${Math.round(prog * 100)}%` })}
+      <div class="card stat-card home-water" id="home-water">
+        <div class="hwa-left">
+          ${icons.water}
+          <span class="num hwa-val">${water.toFixed(2).replace(/0$/, '')}<small>L</small></span>
+          <span class="hwa-goal">/ ${settings.waterGoal} L</span>
         </div>
-        <div style="display:flex;gap:8px;margin-top:12px">
-          <button class="btn btn-primary btn-sm" id="btn-log-weight" style="flex:1">${icons.plus} Log poids</button>
-          <button class="btn btn-secondary btn-sm" id="btn-chart" style="flex:1">${icons.activity} Graphique</button>
-          <button class="icon-btn" id="btn-edit-goal" aria-label="Modifier l'objectif">${icons.edit}</button>
-        </div>
+        <div class="hwa-bar"><i style="width:${Math.min(100, Math.round((water / settings.waterGoal) * 100))}%"></i></div>
+        <button class="btn btn-secondary btn-sm" id="btn-add-water">+0.25</button>
+      </div>
+
+      <div class="home-actions">
+        <button class="btn btn-primary btn-sm" id="btn-log-weight">${icons.plus} Poids</button>
+        <button class="btn btn-secondary btn-sm" id="btn-chart">${icons.activity} Graphique</button>
+        <button class="btn btn-secondary btn-sm" id="btn-edit-goal">${icons.edit} Objectif</button>
       </div>
     </div>`));
 
@@ -264,9 +375,23 @@ export function render(container) {
   container.querySelector('#btn-edit-goal').addEventListener('click', () => openGoalModal(rerender));
   container.querySelector('#btn-log-weight').addEventListener('click', () => openLogWeightModal(rerender));
   container.querySelector('#btn-chart').addEventListener('click', () => openChartModal(rerender));
-  container.querySelector('#btn-add-water').addEventListener('click', () => {
+  container.querySelector('#btn-add-water').addEventListener('click', (e) => {
+    e.stopPropagation();
     store.addWater(today, 0.25);
     haptic();
     rerender();
   });
+  // La carte poids ouvre le graphique (raccourci vers le même écran que le bouton)
+  container.querySelector('#home-weight').addEventListener('click', () => openChartModal(rerender));
+
+  // La ligne de progression des pas se remplit à l'affichage plutôt que
+  // d'apparaître déjà pleine : le remplissage se « joue » sous les yeux.
+  const fill = container.querySelector('.ha-fill');
+  if (fill && typeof fill.animate === 'function') {
+    const x1 = fill.getAttribute('x1');
+    const x2 = fill.getAttribute('x2');
+    try {
+      fill.animate([{ x2: x1 }, { x2 }], { duration: 900, easing: 'cubic-bezier(0.4,0,0.2,1)', fill: 'backwards' });
+    } catch (_) { /* l'animation ne doit jamais empêcher l'affichage */ }
+  }
 }

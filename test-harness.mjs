@@ -51,8 +51,11 @@ const pages = {
 
 console.log('== Rendu des 5 pages (structure v3) ==');
 home.render(pages.home);
-assert(pages.home.querySelector('.weight-hero'), 'Accueil : carte poids');
+assert(pages.home.querySelector('.home-weight'), 'Accueil : carte poids');
+// Récap complet de la journée : calories, poids, activité, eau
 assert(pages.home.querySelectorAll('.stat-card').length === 4, 'Accueil : 4 cartes récap');
+assert(pages.home.querySelector('.home-kcal') && pages.home.querySelector('.home-activity'), 'Accueil : cartes calories et activité');
+assert(pages.home.querySelectorAll('.hk-macro').length === 3, 'Accueil : macros détaillées sous les calories');
 assert(pages.home.querySelector('#btn-chart') && !pages.home.querySelector('#weight-chart'), 'Accueil : graphique en modal seulement');
 
 nutrition.render(pages.nutrition);
@@ -622,6 +625,39 @@ console.log('== v4.4 : traduction, séance de référence, types de série, rang
   // Échauffements et dégressives exclus du score
   const avecW = score([{ weight: 40, reps: 10, kind: 'warmup' }, { weight: 100, reps: 8 }, { weight: 60, reps: 12, kind: 'drop' }]);
   assert(avecW.n === 1 && avecW.vol === 800, 'PRÉC : W et D exclus du calcul de la référence');
+}
+
+console.log('== v4.7 : les objectifs passés ne bougent plus ==');
+{
+  const hier = todayISO(-1);
+  const avantHier = todayISO(-2);
+  const auj = todayISO();
+  // Historique sans objectif figé, saisi alors que l'objectif valait 2500
+  store.userData.settings.macroMode = 'grams';
+  store.userData.settings.proteinGoal = 150;
+  store.userData.settings.carbsGoalG = 300;
+  store.userData.settings.fatGoalG = 80;
+  store.userData.nutrition.byDate[hier] = { meals: [{ id: 'h1', name: 'x', meal: 'Déjeuner', prot: 50, carbs: 100, fat: 30, fiber: 0, kcal: 870 }] };
+  store.userData.nutrition.byDate[avantHier] = { meals: [{ id: 'h2', name: 'y', meal: 'Déjeuner', prot: 40, carbs: 90, fat: 25, fiber: 0, kcal: 745 }] };
+  delete store.userData.nutrition.byDate[hier].goal;
+  delete store.userData.nutrition.byDate[avantHier].goal;
+  const avant = nutrition.macroGoals().kcalGoal;
+
+  // L'utilisateur baisse son objectif de 200 kcal
+  nutrition.applyCalorieDelta(-200);
+  const apres = nutrition.macroGoals().kcalGoal;
+  assert(apres === avant - 200, 'Objectif : la baisse de 200 kcal est appliquée');
+
+  const gHier = store.userData.nutrition.byDate[hier].goal;
+  const gAvantHier = store.userData.nutrition.byDate[avantHier].goal;
+  assert(gHier && gHier.kcalGoal === avant, 'Objectif : hier garde l\'ancien objectif');
+  assert(gAvantHier && gAvantHier.kcalGoal === avant, 'Objectif : avant-hier garde l\'ancien objectif');
+  assert(nutrition.macroGoalsFor(hier).kcalGoal === avant, 'Objectif : macroGoalsFor(hier) renvoie l\'ancien');
+  assert(nutrition.macroGoalsFor(auj).kcalGoal === apres, 'Objectif : aujourd\'hui suit le nouvel objectif');
+
+  // Un second changement ne doit pas réécrire ce qui est déjà figé
+  nutrition.applyCalorieDelta(-200);
+  assert(store.userData.nutrition.byDate[hier].goal.kcalGoal === avant, 'Objectif : un jour déjà figé n\'est jamais réécrit');
 }
 
 console.log(`\n===== RÉSULTAT : ${pass} OK / ${fail} FAIL =====`);

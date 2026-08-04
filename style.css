@@ -1067,7 +1067,99 @@ body.shape-8bit .gr-progress i, body.shape-8bit .progress-bar > div {
    cartes gardent leur taille naturelle (pas de hauteur forcée). */
 .home-fit .gr-card { padding: 12px 14px; }
 .home-fit .stat-card { padding: 12px; }
-.home-fit .card:last-child { padding: 14px; }
+
+/* ============================================================
+   v4.7 — ACCUEIL : récapitulatif complet de la journée
+   Rang, calories (+ macros), poids et activité, puis l'eau.
+   Les blocs se PARTAGENT la hauteur disponible (flex) : l'écran est
+   toujours rempli, jamais scrollable, quelle que soit la taille du
+   téléphone.
+   ============================================================ */
+.home-fit .page-title { flex: 0 0 auto; margin-bottom: 0; }
+.home-fit .gr-card,
+.home-fit .home-water,
+.home-fit .home-actions { flex: 0 0 auto; }
+/* Ces deux blocs absorbent l'espace restant, dans un rapport stable. */
+.home-fit .home-kcal { flex: 1 1 0; min-height: 0; }
+.home-fit .home-duo { flex: 1.25 1 0; min-height: 0; }
+
+/* --- Calories --- */
+.home-kcal { display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+.hk-main { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.hk-numbers { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.hk-big { font-size: clamp(1.7rem, 8vw, 2.4rem); line-height: 1; }
+.hk-goal { font-size: 0.8rem; color: var(--text-2); font-weight: 600; }
+.hk-remaining { font-size: 0.76rem; color: var(--text-2); }
+.hk-macros { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 2px; }
+.hk-macro-top { display: flex; justify-content: space-between; align-items: baseline; gap: 4px; font-size: 0.66rem; color: var(--text-2); margin-bottom: 3px; }
+.hk-macro-top .num { font-size: 0.72rem; }
+.hk-macro-top i { font-style: normal; color: var(--text-2); font-weight: 500; }
+.hk-macro-bar { height: 4px; border-radius: 3px; background: rgba(var(--accent-rgb), 0.14); overflow: hidden; }
+.hk-macro-bar i { display: block; height: 100%; border-radius: 3px; transition: width var(--dur-med) var(--ease); }
+
+/* --- Duo poids / activité --- */
+.home-duo { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.home-weight, .home-activity {
+  position: relative; overflow: hidden; cursor: pointer;
+  display: flex; flex-direction: column; min-height: 0;
+}
+/* Graphique et piste tracés EN FOND, sous le contenu chiffré. */
+.hw-bg, .ha-bg { position: absolute; inset: auto 0 0 0; height: 62%; opacity: 0.5; pointer-events: none; }
+.hw-bg svg, .ha-bg svg { width: 100%; height: 100%; display: block; }
+.ha-bg { opacity: 0.9; }
+.hw-content, .ha-content { position: relative; z-index: 1; display: flex; flex-direction: column; height: 100%; gap: 4px; }
+.hw-values, .ha-values { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; margin-top: auto; }
+.hw-label { font-size: 0.6rem; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 1px; }
+.w-now { font-size: clamp(1.3rem, 6vw, 1.7rem); line-height: 1; }
+.w-now small { font-size: 0.6em; color: var(--text-2); margin-left: 2px; }
+.hw-delta { text-align: right; }
+.hw-delta .num { font-size: 1.05rem; color: var(--text-2); }
+.hw-delta .num.down { color: var(--success); }
+.hw-delta .num.up { color: var(--warning); }
+.hw-target, .ha-status { font-size: 0.68rem; color: var(--text-2); margin-top: 4px; }
+.hw-target b { color: var(--accent); }
+.ha-big { font-size: clamp(1.3rem, 6vw, 1.7rem); line-height: 1; }
+.ha-goal { font-size: 1.05rem; color: var(--text-2); }
+
+/* --- Eau : une ligne compacte --- */
+.home-water { display: flex; align-items: center; gap: 10px; padding: 10px 12px !important; }
+.hwa-left { display: flex; align-items: baseline; gap: 5px; flex: 0 0 auto; }
+.hwa-left svg { width: 16px; height: 16px; color: #38BDF8; align-self: center; }
+.hwa-val { font-size: 1rem; }
+.hwa-val small { font-size: 0.66em; color: var(--text-2); }
+.hwa-goal { font-size: 0.7rem; color: var(--text-2); }
+.hwa-bar { flex: 1; height: 5px; border-radius: 3px; background: rgba(56, 189, 248, 0.16); overflow: hidden; }
+.hwa-bar i { display: block; height: 100%; background: #38BDF8; border-radius: 3px; transition: width var(--dur-med) var(--ease); }
+.home-water .btn { flex: 0 0 auto; min-height: 34px; padding: 4px 10px; }
+
+/* --- Actions --- */
+.home-actions { display: flex; gap: 8px; }
+.home-actions .btn { flex: 1 1 0; min-width: 0; white-space: nowrap; }
+
+/* Les cartes ne laissent jamais fuir leur contenu : sur un écran court, c'est
+   la mise en page ci-dessous qui se resserre, pas le texte qui déborde. */
+.home-fit .card { overflow: hidden; }
+
+/* --- Écrans courts (iPhone SE et assimilés) ---
+   On récupère de la hauteur sur les blocs fixes et les espacements, et on
+   masque les lignes secondaires, pour que tout continue de tenir sans scroll. */
+@media (max-height: 720px) {
+  .home-fit { gap: 8px; }
+  .home-fit .page-title { display: none; }
+  .home-fit .gr-card { padding: 9px 12px; }
+  .home-fit .gr-badge svg { width: 40px; height: 40px; }
+  .home-fit .gr-rank-name { font-size: 0.95rem; }
+  .home-fit .gr-progress { margin: 7px 0 0; }
+  .home-fit .stat-card { padding: 9px 10px; }
+  .home-fit .stat-head { font-size: 0.56rem; margin-bottom: 3px; }
+  .hk-remaining { display: none; }
+  .hk-macros { gap: 7px; }
+  .hk-macro-top { font-size: 0.6rem; }
+  .home-water { padding: 7px 10px !important; }
+  .home-actions .btn { min-height: 34px; font-size: 0.68rem; }
+  .hw-target, .ha-status { font-size: 0.62rem; margin-top: 2px; }
+  .hw-bg, .ha-bg { height: 55%; }
+}
 
 /* ============================================================
    TRANSITIONS & MICRO-INTERACTIONS
