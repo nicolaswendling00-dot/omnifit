@@ -407,6 +407,70 @@ canvas { max-width: 100%; }
 /* --- v3 : sheet objectifs (compteur kcal toujours visible) --- */
 .macro-kcal-sticky { position: sticky; bottom: 0; display: flex; justify-content: space-between; align-items: center; padding: 11px 12px; margin: 6px calc(-1 * var(--space)) 0; background: var(--header-bg); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-top: 1px solid var(--border); }
 
+/* --- v4.4 : exercice custom — rattachement à un exercice de référence --- */
+.cx-ref { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-btn); padding: 12px; margin-bottom: 12px; }
+
+/* --- v4.4 : types de série (Normal / W échauffement / D dégressive) --- */
+:root { --sk-warmup: #F59E0B; --sk-drop: #38BDF8; }
+/* Le numéro devient un bouton : on garde l'aspect texte, sans habillage. */
+.set-row .sr-n {
+  background: none; border: none; padding: 0; font-family: inherit; cursor: pointer;
+  min-width: 28px; line-height: 1;
+}
+/* `.set-row .sr-n` fixe déjà une couleur plus bas dans la feuille : on qualifie
+   donc au même niveau pour que le marqueur W/D l'emporte. */
+.set-row .sr-n.sk-warmup, .wd-set-n.sk-warmup, .ed-set-n.sk-warmup { color: var(--sk-warmup); }
+.set-row .sr-n.sk-drop, .wd-set-n.sk-drop, .ed-set-n.sk-drop { color: var(--sk-drop); }
+.wd-set-n.sk-warmup, .ed-set-n.sk-warmup { background: rgba(245, 158, 11, 0.16); }
+.wd-set-n.sk-drop, .ed-set-n.sk-drop { background: rgba(56, 189, 248, 0.16); }
+/* Feuille de choix du type */
+.set-kind-list { display: flex; flex-direction: column; gap: 8px; }
+.set-kind-btn {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-btn);
+  color: var(--text); font-family: inherit; font-size: 0.95rem; font-weight: 600;
+  padding: 12px 14px; min-height: 52px; cursor: pointer; text-align: left;
+}
+.set-kind-btn.active { border-color: var(--accent); background: rgba(var(--accent-rgb), 0.10); }
+.set-kind-badge {
+  width: 30px; height: 30px; border-radius: 8px; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 0.9rem;
+  background: rgba(var(--accent-rgb), 0.14); color: var(--accent);
+}
+.set-kind-badge.sk-warmup { background: rgba(245, 158, 11, 0.18); color: var(--sk-warmup); }
+.set-kind-badge.sk-drop { background: rgba(56, 189, 248, 0.18); color: var(--sk-drop); }
+
+/* --- v4.4 : historique d'exercice — séries empilées --- */
+.ed-hist-item { padding: 11px; border-radius: 10px; background: var(--surface-2); margin-bottom: 8px; }
+.ed-hist-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.ed-hist-date { font-weight: 700; font-size: 0.85rem; }
+.ed-sets { display: flex; flex-direction: column; gap: 5px; }
+.ed-set { display: flex; align-items: center; gap: 10px; }
+.ed-set-n {
+  width: 22px; height: 22px; border-radius: 6px; flex: none;
+  background: rgba(var(--accent-rgb), 0.12); color: var(--accent);
+  font-size: 0.7rem; font-weight: 700; display: flex; align-items: center; justify-content: center;
+}
+.ed-set-v { font-size: 1rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* --- v4.4 : détail de séance — carte d'exercice avec rang --- */
+.wd-exo-head { align-items: flex-start; }
+.wd-exo-rank { flex: none; display: flex; align-items: center; }
+.wd-exo-title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.wd-exo-sub { font-size: 0.72rem; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.wd-exo-meta { flex: none; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+
+/* --- v4.4 : routines — exercices empilés + actions qui ne débordent plus --- */
+.routine-exos { list-style: decimal inside; margin: 6px 0 10px; padding: 0; }
+.routine-exos li {
+  font-size: 0.84rem; color: var(--text-2); padding: 3px 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Les boutons de l'éditeur passent à la ligne au lieu de sortir du cadre. */
+.routine-editor-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.routine-editor-actions .btn { flex: 1 1 140px; min-width: 0; }
+
 /* --- v4.3 : carte Coach métabolique (maintenance + stagnation) --- */
 .coach-card { border-left: 3px solid var(--accent); }
 .coach-card.coach-good { border-left-color: var(--success); }

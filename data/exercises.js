@@ -378,3 +378,80 @@ export const AKA = {
   manMaker: ['Man Maker'],
   devilPress: ['Devil Press'],
 };
+
+// ============================================================
+// NOMS FRANÇAIS
+// ============================================================
+// Les exercices sont affichés en français, MAIS les termes passés dans l'usage
+// courant en salle restent tels quels : traduire « Hack Squat », « Face Pull »
+// ou « Hip Thrust » nuirait à la reconnaissance plutôt que d'aider.
+// Un exercice absent de cette table garde donc son nom d'origine, volontairement.
+//
+// L'ancien nom anglais est automatiquement versé dans AKA (voir plus bas) :
+// chercher « bench press » trouve toujours « Développé couché ».
+const NAME_FR = {
+  // Pectoraux
+  benchPress: 'Développé couché', inclineBench: 'Développé incliné',
+  declineBench: 'Développé décliné', dbBenchPress: 'Développé couché haltères',
+  dbInclinePress: 'Développé incliné haltères', dbFly: 'Écartés haltères',
+  cableFly: 'Écartés poulie', pushUp: 'Pompes', machinePress: 'Développé machine',
+  // Dos
+  pullUp: 'Tractions pronation', chinUp: 'Tractions supination',
+  latPulldown: 'Tirage vertical', barbellRow: 'Rowing barre',
+  seatedCableRow: 'Tirage horizontal poulie', deadlift: 'Soulevé de terre',
+  straightArmPulldown: 'Pull-over poulie haute', shrugs: 'Shrugs barre',
+  machineRow: 'Rowing machine', invertedRow: 'Rowing inversé',
+  // Épaules
+  overheadPress: 'Développé militaire', dbShoulderPress: 'Développé épaules haltères',
+  lateralRaise: 'Élévations latérales', cableLateralRaise: 'Élévations latérales poulie',
+  frontRaise: 'Élévations frontales', rearDeltFly: 'Oiseau (deltoïde postérieur)',
+  uprightRow: 'Rowing menton', machineShoulderPress: 'Développé épaules machine',
+  // Biceps
+  barbellCurl: 'Curl barre', ezBarCurl: 'Curl barre EZ', dbCurl: 'Curl haltères',
+  hammerCurl: 'Curl marteau', inclineCurl: 'Curl incliné', preacherCurl: 'Curl pupitre',
+  concentrationCurl: 'Curl concentration', cableCurl: 'Curl poulie',
+  // Triceps
+  closeGripBench: 'Développé couché prise serrée', tricepsDips: 'Dips sur banc',
+  skullCrusher: 'Barre au front', cablePushdown: 'Extension triceps poulie',
+  ropePushdown: 'Extension triceps corde', kickback: 'Kickback triceps',
+  diamondPushUp: 'Pompes diamant',
+  // Avant-bras
+  wristCurl: 'Curl poignets', reverseWristCurl: 'Curl poignets inversé',
+  reverseCurl: 'Curl inversé', farmersWalk: 'Marche du fermier',
+  platePinch: 'Pince disque', deadHang: 'Suspension à la barre',
+  wristRoller: 'Enrouleur de poignet', gripper: 'Pince de force',
+  // Quadriceps
+  legPress: 'Presse à cuisses', bulgarianSplitSquat: 'Squat bulgare',
+  walkingLunge: 'Fentes marchées', stepUp: 'Montées sur banc',
+  smithSquat: 'Squat à la Smith', pauseSquat: 'Squat avec pause',
+  wallSit: 'Chaise murale',
+  // Ischios
+  romanianDeadlift: 'Soulevé de terre roumain', stiffLegDeadlift: 'Soulevé de terre jambes tendues',
+  lyingLegCurl: 'Leg Curl allongé', seatedLegCurl: 'Leg Curl assis',
+  // Fessiers
+  gluteBridge: 'Pont fessier', cableKickback: 'Kickback poulie',
+  sumoDeadlift: 'Soulevé de terre sumo', abduction: 'Abduction des hanches',
+  curtsyLunge: 'Fente croisée', bandWalk: 'Marche élastique',
+  // Mollets
+  standingCalfRaise: 'Mollets debout', seatedCalfRaise: 'Mollets assis',
+  donkeyCalfRaise: 'Mollets donkey', tibialisRaise: 'Extension des tibiaux',
+  // Abdos / lombaires
+  plank: 'Gainage (planche)', sidePlank: 'Gainage latéral', cableCrunch: 'Crunch poulie',
+  hangingLegRaise: 'Relevés de jambes suspendu', lyingLegRaise: 'Relevés de jambes au sol',
+  abWheel: 'Roulette abdominale', backExtension: 'Extension lombaire',
+  weightedBackExtension: 'Extension lombaire lestée',
+  // Full body
+  burpee: 'Burpees', kbClean: 'Clean kettlebell', kbSnatch: 'Snatch kettlebell',
+  bearCrawl: 'Marche de l\'ours', jumpSquat: 'Squat sauté',
+};
+
+// Applique les noms français et conserve l'ancien nom anglais comme synonyme de
+// recherche. Fait ici (et non dans chaque appel à ex()) pour garder la table de
+// traduction lisible d'un seul tenant.
+for (const e of EXERCISES) {
+  const fr = NAME_FR[e.id];
+  if (!fr || fr === e.name) continue;
+  const syn = AKA[e.id] || (AKA[e.id] = []);
+  if (!syn.includes(e.name)) syn.push(e.name);
+  e.name = fr;
+}

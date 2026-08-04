@@ -427,6 +427,16 @@ export function fmtDateShort(iso) {
   return dt.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' });
 }
 
+// Date complète en français : « 3 août 2026 ». Format retenu partout où une
+// date est affichée telle quelle (au lieu du brut « 2026-08-03 »).
+export function fmtDateFull(iso) {
+  if (!iso) return '';
+  const [y, m, d] = String(iso).split('-').map(Number);
+  if (!y || !m || !d) return String(iso);
+  const dt = new Date(y, m - 1, d);
+  return dt.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
 export function fmtDateLong(iso) {
   const [y, m, d] = iso.split('-').map(Number);
   const dt = new Date(y, m - 1, d);

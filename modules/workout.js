@@ -4,7 +4,7 @@
 import { store, todayISO } from '../utils/storage.js';
 import { EXERCISES, MUSCLES, muscleLabel, AKA } from '../data/exercises.js';
 import { formatTime, workoutMuscleVolume, weeklySetsByMuscle, muscleAttenuation } from '../utils/math.js';
-import { el, esc, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, celebrateLP, makeChart, normalizeStr } from '../utils/ui.js';
+import { el, esc, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, fmtDateFull, celebrateLP, makeChart, normalizeStr } from '../utils/ui.js';
 import { computeExerciseLP, computeExerciseLPDetailed, rankFromLP, rankBadge, getStandards } from '../utils/ranks.js';
 
 let volumeChart = null;
@@ -49,11 +49,22 @@ export function exerciseLookup(id) {
   };
 }
 // Map LP de tous les exos (avec poids de corps + standards pour le raccourci Onyx)
+// Table { idCustom: { refId, coef } } : permet de classer un exercice custom
+// via les standards d'un exercice de référence, pondérés par un coefficient.
+export function customRefMap() {
+  const out = {};
+  for (const e of (store.userData.settings.customExercises || [])) {
+    if (e.refExercise && e.refCoef > 0) out[e.id] = { refId: e.refExercise, coef: e.refCoef };
+  }
+  return out;
+}
+
 function lpMapAll() {
   return computeExerciseLP(store.userData.workouts, {
     bodyweight: store.userData.profile && store.userData.profile.weight,
     weights: store.userData.weights,
     standards: getStandards(),
+    customRefs: customRefMap(),
   });
 }
 // Rang d'un exo. Retourne null si l'exo n'a JAMAIS été réalisé (pas de rang affiché).
@@ -76,6 +87,8 @@ const CAT_SYN = {
 };
 function exoKeywords(e) {
   const parts = [(exerciseLookup(e.id) || e).name, e.category, CAT_SYN[e.category] || '', ...(AKA[e.id] || [])];
+  // Les exercices créés par l'utilisateur répondent à « custom » / « perso ».
+  if (e.isCustom) parts.push('custom perso personnalise mes exercices');
   for (const m of [...e.primaryMuscles, ...e.secondaryMuscles]) {
     parts.push(m.m, muscleLabel(m.m), MUSCLE_SYN[m.m] || '');
   }
@@ -98,6 +111,31 @@ function exoRestDuration(exerciseId) {
   return (s.restByExercise && s.restByExercise[exerciseId]) || s.restTimerDefault;
 }
 
+// ---------- Types de série ----------
+// Une série est normale par défaut. Elle peut être marquée « échauffement »
+// (W, orange) ou « dégressive » (D, bleu clair). Ces deux types ne reflètent
+// pas la performance réelle : ils sont EXCLUS du calcul de la séance de
+// référence affichée dans la colonne PRÉC.
+const SET_KINDS = [
+  { id: 'normal', label: 'Normal', short: '', cls: '' },
+  { id: 'warmup', label: 'Échauffement', short: 'W', cls: 'sk-warmup' },
+  { id: 'drop', label: 'Dégressive', short: 'D', cls: 'sk-drop' },
+];
+const isWorkSet = (s) => !s || (s.kind !== 'warmup' && s.kind !== 'drop');
+
+// Étiquettes des séries : les normales sont numérotées séquentiellement, les
+// autres portent leur lettre. On obtient « 1 · W · 2 » plutôt que « 1 · W · 3 »,
+// qui laisserait croire à une série manquante.
+function setLabels(sets) {
+  let n = 0;
+  return (sets || []).map((s) => {
+    const k = SET_KINDS.find((x) => x.id === (s && s.kind)) || SET_KINDS[0];
+    if (k.short) return { text: k.short, cls: k.cls };
+    n += 1;
+    return { text: String(n), cls: '' };
+  });
+}
+
 // Volume total d'un exo dans un workout
 const exoVolume = (wx) => wx.sets.reduce((a, s) => a + s.weight * s.reps, 0);
 
@@ -108,6 +146,55 @@ function lastEntry(exerciseId) {
     if (wx && wx.sets.length) return { workout: store.userData.workouts[i], wx };
   }
   return null;
+}
+
+// ---------- Séance de référence (colonne PRÉC) ----------
+// On n'affiche plus la DERNIÈRE séance, mais la MEILLEURE du dernier mois.
+// « Meilleure » = à la fois plus de séries et des charges plus lourdes : on
+// score donc chaque séance sur son volume de travail (Σ poids × reps), qui
+// combine naturellement les deux — 4×80 kg bat 3×80 kg, et 3×90 kg bat 3×80 kg.
+// À volume égal, la charge maximale départage (une séance plus lourde à volume
+// identique est la meilleure référence), puis la date (la plus récente gagne).
+// Les séries d'échauffement et dégressives sont exclues : elles gonfleraient le
+// volume sans refléter la performance.
+const REFERENCE_WINDOW_DAYS = 30;
+
+function workSets(wx) {
+  return (wx && wx.sets ? wx.sets : []).filter(isWorkSet);
+}
+
+// Meilleure prestation de l'exo sur les 30 derniers jours → { workout, wx, sets }
+// `sets` ne contient que les séries de travail, prêtes à servir de référence.
+function bestEntry(exerciseId, refDate = null) {
+  const end = refDate || todayISO();
+  const start = todayISO(-REFERENCE_WINDOW_DAYS);
+  let best = null;
+  for (const w of store.userData.workouts) {
+    if (w.date > end || w.date < start) continue;
+    const wx = w.exercises.find((x) => x.exerciseId === exerciseId);
+    if (!wx) continue;
+    const sets = workSets(wx);
+    if (!sets.length) continue;
+    const volume = sets.reduce((a, s) => a + s.weight * s.reps, 0);
+    const maxWeight = sets.reduce((a, s) => Math.max(a, s.weight), 0);
+    const cand = { workout: w, wx, sets, volume, maxWeight };
+    if (!best
+      || cand.volume > best.volume
+      || (cand.volume === best.volume && cand.maxWeight > best.maxWeight)
+      || (cand.volume === best.volume && cand.maxWeight === best.maxWeight && cand.workout.date > best.workout.date)) {
+      best = cand;
+    }
+  }
+  // Rien dans la fenêtre : on retombe sur la dernière séance connue, pour ne
+  // pas laisser la colonne PRÉC vide après une longue interruption.
+  if (!best) {
+    const last = lastEntry(exerciseId);
+    if (!last) return null;
+    const sets = workSets(last.wx);
+    if (!sets.length) return null;
+    return { workout: last.workout, wx: last.wx, sets, fallback: true };
+  }
+  return best;
 }
 
 // Coefficient d'amélioration exo : volume courant vs dernier volume (%)
@@ -255,13 +342,62 @@ function openCustomExerciseModal(onSaved, existing = null) {
     </div>`;
   }).join('');
 
+  // Référence de classement : un exercice custom n'a pas de standard de force.
+  // On le rattache à un exercice connu, pondéré par un coefficient (ex. un leg
+  // curl unilatéral vaut ~0.5× un leg curl classique), pour en déduire un rang.
+  let refId = existing && existing.refExercise ? existing.refExercise : null;
+  let refCoef = existing && existing.refCoef > 0 ? existing.refCoef : 1;
+  const refName = () => {
+    if (!refId) return 'Aucun (pas de rang)';
+    const d = exerciseLookup(refId);
+    return d ? d.name : refId;
+  };
+
   const form = el(`<div>
     <label class="field"><span>Nom</span><input id="cx-name" type="text" placeholder="Mon exercice" value="${existing ? esc(existing.name) : ''}"></label>
+
+    <div class="cx-ref">
+      <div class="row-label" style="margin-bottom:2px">Classement (rang)</div>
+      <div class="row-sub" style="margin-bottom:8px">Rattache cet exercice à un mouvement connu pour lui attribuer un rang.</div>
+      <button type="button" class="btn btn-secondary btn-block" id="cx-ref-btn" style="justify-content:space-between">
+        <span id="cx-ref-label">${esc(refName())}</span>${icons.chevron}
+      </button>
+      <div id="cx-coef-wrap" style="${refId ? '' : 'display:none'};margin-top:10px">
+        <div class="card-row">
+          <span style="font-size:0.85rem">Coefficient</span>
+          <span class="num" id="cx-coef-val" style="color:var(--accent)">×${refCoef.toFixed(2)}</span>
+        </div>
+        <input id="cx-coef" type="range" min="0.2" max="5" step="0.05" value="${refCoef}">
+        <div class="muted" id="cx-coef-hint" style="font-size:0.72rem;line-height:1.4;margin-top:4px"></div>
+      </div>
+    </div>
+
     <h3 style="font-size:0.85rem;margin:8px 0 4px">Muscles principaux</h3>
     <div style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px 10px">${muscleRows('prim', existing ? existing.primaryMuscles : [])}</div>
     <h3 style="font-size:0.85rem;margin:12px 0 4px">Muscles secondaires</h3>
     <div style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px 10px">${muscleRows('sec', existing ? existing.secondaryMuscles : [])}</div>
   </div>`);
+
+  const coefWrap = form.querySelector('#cx-coef-wrap');
+  const coefInput = form.querySelector('#cx-coef');
+  const coefHint = form.querySelector('#cx-coef-hint');
+  const updHint = () => {
+    form.querySelector('#cx-coef-val').textContent = `×${refCoef.toFixed(2)}`;
+    const d = refId ? exerciseLookup(refId) : null;
+    coefHint.textContent = d
+      ? `100 kg ici comptent comme ${Math.round(100 / refCoef)} kg en ${d.name}.`
+      : '';
+  };
+  updHint();
+  coefInput.addEventListener('input', () => { refCoef = parseFloat(coefInput.value) || 1; updHint(); });
+  form.querySelector('#cx-ref-btn').addEventListener('click', () => {
+    openExercisePicker((exo) => {
+      refId = exo.id;
+      form.querySelector('#cx-ref-label').textContent = refName();
+      coefWrap.style.display = '';
+      updHint();
+    }, 'Exercice de référence');
+  });
 
   openModal({
     title: existing ? 'Modifier l\'exercice' : 'Créer un exercice',
@@ -288,7 +424,9 @@ function openCustomExerciseModal(onSaved, existing = null) {
             if (existing.isCustom) {
               // Exercice custom : on modifie directement l'entrée dans customExercises
               const list = (store.userData.settings.customExercises || []).map((e) =>
-                e.id === existing.id ? { ...e, name, primaryMuscles: primary, secondaryMuscles: secondary } : e);
+                e.id === existing.id
+                  ? { ...e, name, primaryMuscles: primary, secondaryMuscles: secondary, refExercise: refId, refCoef }
+                  : e);
               store.saveUserData({ settings: { customExercises: list } });
             } else {
               // Exercice de la base intégrée : on stocke une surcouche (nom + muscles),
@@ -307,6 +445,7 @@ function openCustomExerciseModal(onSaved, existing = null) {
               name, category: 'Custom', isCustom: true,
               primaryMuscles: primary, secondaryMuscles: secondary,
               difficulty: 'Custom', equipment: 'Other',
+              refExercise: refId, refCoef,
             };
             store.saveUserData({ settings: { customExercises: [...(store.userData.settings.customExercises || []), exo] } });
             if (onSaved) onSaved(exo);
@@ -494,7 +633,7 @@ function openExerciseDetailSheet(exerciseId) {
     ${best1rm ? `<div class="orm-card">
       <div class="orm-head">Meilleure série</div>
       <div class="orm-value">${best1rm.weight} kg × ${best1rm.reps}</div>
-      <div class="orm-sub">${best1rm.date}</div>
+      <div class="orm-sub">${fmtDateFull(best1rm.date)}</div>
     </div>` : ''}
     <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px">
       ${def.primaryMuscles.map((m) => `<span class="badge">${muscleLabel(m.m)} ${m.p}%</span>`).join('')}
@@ -541,15 +680,22 @@ function openExerciseDetailSheet(exerciseId) {
   const hostH = form.querySelector('#ed-history');
   for (const h of history) {
     const vol = exoVolume(h.wx);
-    const row = el(`<div class="steps-list-item" style="gap:8px">
-      <div>
-        <div style="font-weight:600;font-size:0.82rem">${h.w.date}</div>
-        <div class="muted">${h.wx.sets.map((s) => `${s.weight}×${s.reps}`).join(' · ')}</div>
+    // Séries listées les unes sous les autres (au lieu d'une ligne « · »),
+    // avec le marqueur W/D quand la série est un échauffement ou une dégressive.
+    const labels = setLabels(h.wx.sets);
+    const setsHtml = h.wx.sets.map((s, i) => `<div class="ed-set">
+      <span class="ed-set-n ${labels[i].cls}">${labels[i].text}</span>
+      <span class="ed-set-v">${s.weight} kg × ${s.reps}</span>
+    </div>`).join('');
+    const row = el(`<div class="ed-hist-item">
+      <div class="ed-hist-head">
+        <span class="ed-hist-date">${fmtDateFull(h.w.date)}</span>
+        <span style="display:flex;align-items:center;gap:6px">
+          <span class="num" style="color:var(--accent);font-size:0.85rem">${vol.toLocaleString('fr-FR')} kg</span>
+          <button class="icon-btn" aria-label="Voir la séance" style="width:38px;height:38px">${icons.history}</button>
+        </span>
       </div>
-      <div style="display:flex;align-items:center;gap:6px">
-        <span class="num" style="color:var(--accent);font-size:0.85rem">${vol.toLocaleString('fr-FR')} kg</span>
-        <button class="icon-btn" aria-label="Voir la séance" style="width:38px;height:38px">${icons.history}</button>
-      </div>
+      <div class="ed-sets">${setsHtml}</div>
     </div>`);
     row.querySelector('.icon-btn').addEventListener('click', () => openWorkoutDetail(h.w, exerciseId));
     hostH.appendChild(row);
@@ -560,6 +706,7 @@ function openExerciseDetailSheet(exerciseId) {
 // Vue d'une séance complète (séries empilées, coefficient d'amélioration, exos cliquables)
 function openWorkoutDetail(w, highlightId = null) {
   const sessImp = sessionImprovement(w);
+  const lpMap = lpMapAll();
   const content = el(`<div>
     <div class="wd-top">
       <span class="muted">${formatTime(w.totalTime || 0)}</span>
@@ -575,13 +722,26 @@ function openWorkoutDetail(w, highlightId = null) {
       const def = exerciseLookup(wx.exerciseId) || { name: wx.exerciseId };
       const hl = wx.exerciseId === highlightId;
       const imp = exoImprovementAt(wx.exerciseId, w);
+      const rk = exerciseRank(wx.exerciseId, lpMap);
+      const labels = setLabels(wx.sets);
+      const vol = exoVolume(wx);
       return `<div class="wd-exo${hl ? ' hl' : ''}" data-exo="${wx.exerciseId}">
         <div class="wd-exo-head">
-          <span class="wd-exo-name">${i + 1}. ${esc(def.name)} ${wx.ss ? `<span class="ss-chip">SS${wx.ss}</span>` : ''}</span>
-          ${imp != null ? impBadge(imp, false) : '<span class="muted" style="font-size:0.68rem">nouveau</span>'}
+          <span class="wd-exo-rank">${rk ? rankBadge(rk.id, 44) : ''}</span>
+          <span class="wd-exo-title">
+            <span class="wd-exo-name">${esc(def.name)}</span>
+            <span class="wd-exo-sub">
+              ${rk ? `<b style="color:${rk.color}">${rk.division ? `${rk.name} ${rk.division}` : rk.name}</b> · ` : ''}
+              ${wx.sets.length} série${wx.sets.length > 1 ? 's' : ''} · ${vol.toLocaleString('fr-FR')} kg
+            </span>
+          </span>
+          <span class="wd-exo-meta">
+            ${wx.ss ? `<span class="ss-chip">SS${wx.ss}</span>` : ''}
+            ${imp != null ? impBadge(imp, false) : '<span class="badge" style="font-size:0.58rem">nouveau</span>'}
+          </span>
         </div>
         <div class="wd-sets">
-          ${wx.sets.map((s, j) => `<div class="wd-set"><span class="wd-set-n">${j + 1}</span><span class="wd-set-v">${s.weight} kg × ${s.reps}</span></div>`).join('')}
+          ${wx.sets.map((s, j) => `<div class="wd-set"><span class="wd-set-n ${labels[j].cls}">${labels[j].text}</span><span class="wd-set-v">${s.weight} kg × ${s.reps}</span></div>`).join('')}
         </div>
       </div>`;
     }).join('')}
@@ -592,13 +752,13 @@ function openWorkoutDetail(w, highlightId = null) {
     if (exo) openExerciseDetailSheet(exo.dataset.exo);
   });
   const { close } = openModal({
-    title: `Séance du ${w.date}`,
+    title: `Séance du ${fmtDateFull(w.date)}`,
     content,
     wide: true,
     actions: [
       { label: 'Supprimer', variant: 'btn-danger', onClick: (body, closeModal) => {
         closeModal();
-        confirmModal('Supprimer la séance', `Supprimer définitivement la séance du ${w.date} ?`, () => {
+        confirmModal('Supprimer la séance', `Supprimer définitivement la séance du ${fmtDateFull(w.date)} ?`, () => {
           store.deleteWorkout(w.id);
           toast('Séance supprimée', 'success');
           if (pageRerender) pageRerender();
@@ -618,7 +778,7 @@ function openWorkoutDetail(w, highlightId = null) {
 function addSessionToRoutine(w) {
   const ids = w.exercises.map((wx) => wx.exerciseId);
   const input = el(`<div class="field-stack">
-    <label class="field"><span>Nom de la routine</span><input type="text" class="rt-name-input" placeholder="Push A" value="Séance du ${w.date}" autofocus></label>
+    <label class="field"><span>Nom de la routine</span><input type="text" class="rt-name-input" placeholder="Push A" value="Séance du ${fmtDateFull(w.date)}" autofocus></label>
     <div class="muted" style="font-size:0.75rem">${ids.length} exercice${ids.length > 1 ? 's' : ''} · les séries précédentes s'afficheront dans la colonne PRÉC quand tu lanceras la routine.</div>
   </div>`);
   openModal({
@@ -680,6 +840,34 @@ function openExoMenu(idx) {
     } else if (a === 'superset') {
       openSupersetSheet(idx);
     }
+  });
+}
+
+// Choix du type d'une série. Un appui sur un des trois boutons applique et
+// referme aussitôt (pas de validation supplémentaire).
+function openSetKindSheet(set, onDone) {
+  const current = set.kind || 'normal';
+  const form = el(`<div>
+    <div class="muted" style="font-size:0.78rem;line-height:1.5;margin-bottom:12px">
+      Les séries d'échauffement et dégressives ne comptent pas comme performance :
+      elles sont exclues de la séance de référence affichée en colonne PRÉC.
+    </div>
+    <div class="set-kind-list">
+      ${SET_KINDS.map((k) => `<button class="set-kind-btn ${k.cls} ${k.id === current ? 'active' : ''}" data-k="${k.id}">
+        <span class="set-kind-badge ${k.cls}">${k.short || '#'}</span>
+        <span>${k.label}</span>
+      </button>`).join('')}
+    </div>
+  </div>`);
+  const sheet = openSheet({ title: 'Type de série', content: form });
+  form.addEventListener('click', (e) => {
+    const b = e.target.closest('.set-kind-btn');
+    if (!b) return;
+    const k = b.dataset.k;
+    if (k === 'normal') delete set.kind; else set.kind = k;
+    haptic();
+    sheet.close();
+    if (onDone) onDone();
   });
 }
 
@@ -803,11 +991,13 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null, resum
     session.exercises.forEach((wx, idx) => {
       const def = exerciseLookup(wx.exerciseId);
       if (!def) return;
-      const last = lastEntry(wx.exerciseId);
-      const prevSets = last ? last.wx.sets : [];
+      // Référence = meilleure séance du dernier mois (séries de travail seules)
+      const best = bestEntry(wx.exerciseId);
+      const prevSets = best ? best.sets : [];
       const curVol = exoVolume(wx);
       const imp = exoImprovement(wx.exerciseId, curVol);
       const rk = exerciseRank(wx.exerciseId, lpMap);
+      const labels = setLabels(wx.sets);
 
       const rowCount = Math.max(wx.sets.length + 1, prevSets.length);
       let rowsHtml = '';
@@ -815,10 +1005,11 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null, resum
         const confirmed = i < wx.sets.length;
         const s = confirmed ? wx.sets[i] : null;
         const prev = prevSets[i];
+        const lab = confirmed ? labels[i] : { text: String(i + 1), cls: '' };
         rowsHtml += `<div class="set-row${confirmed ? ' done' : ''}" data-idx="${idx}" data-set="${i}">
           ${confirmed ? '<button class="sr-del" data-del aria-label="Supprimer la série">' + icons.trash + '</button>' : ''}
           <div class="sr-content">
-            <span class="sr-n">${i + 1}</span>
+            <button class="sr-n ${lab.cls}" data-kind="${i}" aria-label="Type de série">${lab.text}</button>
             <button class="sr-prev" data-prev="${i}" ${prev ? '' : 'disabled'}>${prev ? `${prev.weight} × ${prev.reps}` : '–'}</button>
             <input class="sr-kg" type="number" inputmode="decimal" step="0.5" min="0" value="${confirmed ? s.weight : ''}" placeholder="${prev ? prev.weight : ''}">
             <input class="sr-reps" type="number" inputmode="numeric" min="1" value="${confirmed ? s.reps : ''}" placeholder="${prev ? prev.reps : ''}">
@@ -857,13 +1048,23 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null, resum
       if (prevBtn.disabled) return;
       const row = prevBtn.closest('.set-row');
       const exoIdx = +row.dataset.idx; const i = +row.dataset.set;
-      const last = lastEntry(session.exercises[exoIdx].exerciseId);
-      const prev = last && last.wx.sets[i];
+      const ref = bestEntry(session.exercises[exoIdx].exerciseId);
+      const prev = ref && ref.sets[i];
       if (prev) {
         row.querySelector('.sr-kg').value = prev.weight;
         row.querySelector('.sr-reps').value = prev.reps;
         haptic();
       }
+      return;
+    }
+    // Clic sur le numéro de série → choix du type (normal / échauffement / dégressive)
+    const kindBtn = e.target.closest('.sr-n');
+    if (kindBtn) {
+      const row = kindBtn.closest('.set-row');
+      const exoIdx = +row.dataset.idx; const i = +row.dataset.set;
+      const wxk = session.exercises[exoIdx];
+      if (i >= wxk.sets.length) return; // série pas encore validée : rien à typer
+      openSetKindSheet(wxk.sets[i], () => { persistSession(); renderExos(); });
       return;
     }
     const checkBtn = e.target.closest('.sr-check');
@@ -1036,6 +1237,7 @@ function showSummary(exercises, closeSession) {
     bodyweight: store.userData.profile.weight,
     weights: store.userData.weights,
     standards: getStandards(),
+    customRefs: customRefMap(),
   });
   const lpRows = (detail.perWorkout[TEMP_ID] || []).map((r) => {
     const def = exerciseLookup(r.exerciseId) || { name: r.exerciseId };
@@ -1193,9 +1395,9 @@ function openRoutineEditor(routine, rerender) {
   const form = el(`<div>
     <label class="field"><span>Nom</span><input id="r-name" type="text" value="${esc(r.name)}" placeholder="Push A"></label>
     <div id="r-exos"></div>
-    <div style="display:flex;gap:8px;margin-top:4px">
-      <button class="btn btn-secondary btn-sm" id="r-add" style="flex:1">${icons.plus} Exercice</button>
-      <button class="btn btn-secondary btn-sm" id="r-reorder" style="flex:1">${icons.drag} Réorganiser</button>
+    <div class="routine-editor-actions">
+      <button class="btn btn-secondary btn-sm" id="r-add">${icons.plus} Exercice</button>
+      <button class="btn btn-secondary btn-sm" id="r-reorder">${icons.drag} Réorganiser</button>
     </div>
   </div>`);
 
@@ -1681,11 +1883,16 @@ export function render(container) {
 
   const rlist = root.querySelector('#routine-list');
   for (const r of routines) {
-    const names = r.exercises.map((id) => (exerciseLookup(id) || { name: id }).name).join(' · ');
+    // Exercices listés les uns sous les autres (plus lisible qu'une ligne
+    // à rallonge tronquée quand la routine en compte beaucoup).
+    const names = r.exercises.map((id) => (exerciseLookup(id) || { name: id }).name);
+    const listHtml = names.length
+      ? `<ol class="routine-exos">${names.map((n) => `<li>${esc(n)}</li>`).join('')}</ol>`
+      : '<div class="muted" style="margin:4px 0 10px">Vide</div>';
     const card = el(`<div class="card" style="background:var(--surface-2);padding:12px">
       <div class="card-row"><h3 style="margin:0">${esc(r.name)}</h3>
         <button class="icon-btn" aria-label="Modifier">${icons.edit}</button></div>
-      <div class="muted" style="margin:4px 0 10px">${names ? esc(names) : 'Vide'}</div>
+      ${listHtml}
       <button class="btn btn-primary btn-sm btn-block">Lancer</button>
     </div>`);
     card.querySelector('.icon-btn').addEventListener('click', () => openRoutineEditor(r, rerender));

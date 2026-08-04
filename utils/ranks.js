@@ -255,7 +255,13 @@ export function computeExerciseLPDetailed(workouts, opts = {}) {
       // Plancher StrengthLevel : le rang reflète aussi le niveau ACTUEL (pas seulement
       // l'historique de séances) — un exo déjà "Avancé/Élite" n'a pas besoin de des
       // dizaines de séances pour que le rang le reconnaisse.
-      const floor = bw ? standardBasedLP(wx.exerciseId, st.bestOrm, bw, std) : null;
+      // Exercice custom rattaché à une référence : on convertit sa performance en
+      // équivalent sur l'exercice de référence (coef 0.5 → 40 kg valent 80 kg),
+      // puis on applique les standards de CE dernier.
+      const ref = opts.customRefs && opts.customRefs[wx.exerciseId];
+      const floorId = ref && ref.refId ? ref.refId : wx.exerciseId;
+      const floorOrm = ref && ref.coef > 0 ? st.bestOrm / ref.coef : st.bestOrm;
+      const floor = bw ? standardBasedLP(floorId, floorOrm, bw, std) : null;
       if (floor != null) next = Math.max(next, floor);
 
       st.volSum += V; st.volCount += 1;

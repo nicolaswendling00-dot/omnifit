@@ -162,9 +162,12 @@ const overlay = document.querySelector('.session-overlay');
 overlay.querySelector('#s-add-exo').click();
 const picker = document.querySelector('.picker-overlay');
 const searchInput = picker.querySelector('#exo-search');
+// Recherche en ANGLAIS : les exercices sont affichés en français, mais leur
+// ancien nom reste un synonyme de recherche.
 searchInput.value = 'Bench Press';
 fire(searchInput, 'input');
-const bench = [...picker.querySelectorAll('.exo-search-item')].find((it) => it.querySelector('span').textContent === 'Bench Press');
+const bench = [...picker.querySelectorAll('.exo-search-item')].find((it) => it.querySelector('span').textContent === 'Développé couché');
+assert(bench, 'Recherche anglaise « Bench Press » trouve « Développé couché »');
 bench.click();
 const card = overlay.querySelector('#s-exos .exo-card');
 assert(card, 'Exercice ajouté');
@@ -566,6 +569,59 @@ console.log('== v4.3 : coach métabolique (maintenance + stagnation) ==');
   // Cooldown : plateau mais ajustement récent → pas de nouvelle suggestion
   const cd = mi({ weights: flatWeights, intakeByDate: intake2500, goalType: 'Perte de poids', today: anchor, bodyweight: 80, lastAdjustDate: dISO(-3) });
   assert(cd.status === 'cooldown' && cd.suggestedDelta === null, 'Coach : ajustement récent → cooldown (anti-spam)');
+}
+
+console.log('== v4.4 : traduction, séance de référence, types de série, rang custom ==');
+{
+  const exMod = await import('./data/exercises.js');
+  const byId = (id) => exMod.EXERCISES.find((e) => e.id === id);
+  const norm = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const searchable = (id) => norm([byId(id).name, ...(exMod.AKA[id] || [])].join(' '));
+
+  // Traduction
+  assert(byId('benchPress').name === 'Développé couché', 'Exos : nom affiché en français');
+  assert(byId('deadlift').name === 'Soulevé de terre', 'Exos : « Soulevé de terre »');
+  assert(byId('hackSquat').name === 'Hack Squat', 'Exos : « Hack Squat » laissé en anglais (usage courant)');
+  assert(byId('facePull').name === 'Face Pull', 'Exos : « Face Pull » laissé en anglais');
+  // Recherche bilingue
+  assert(searchable('benchPress').includes('bench press'), 'Recherche : l\'anglais reste trouvable');
+  assert(searchable('deadlift').includes('deadlift'), 'Recherche : « deadlift » trouve toujours');
+  assert(searchable('benchPress').includes(norm('Développé couché')), 'Recherche : le français est trouvable');
+
+  // Rang d'un exercice custom via référence + coefficient.
+  // Les standards ne sont pas charges par fetch hors navigateur : on les lit
+  // depuis le fichier, sinon le plancher de rang ne se declenche jamais et le
+  // test passerait sans rien verifier.
+  const ranksM = await import('./utils/ranks.js');
+  const std = JSON.parse(fs.readFileSync(new URL('./standards.json', import.meta.url), 'utf8'));
+  const bw = 80;
+  const mkW = (id, w) => [{ id: 'w1', date: todayISO(), exercises: [{ exerciseId: id, sets: [{ weight: w, reps: 5 }] }] }];
+  const opts = { bodyweight: bw, weights: [], standards: std };
+  const lpRef = ranksM.computeExerciseLP(mkW('benchPress', 160), opts);
+  const lpCustom = ranksM.computeExerciseLP(mkW('cx1', 80), { ...opts, customRefs: { cx1: { refId: 'benchPress', coef: 0.5 } } });
+  const lpNoRef = ranksM.computeExerciseLP(mkW('cx1', 80), opts);
+  assert(lpRef.benchPress > 500, 'Rang : les standards donnent bien un plancher élevé sur une grosse charge');
+  // 80 kg avec coef 0.5 ⇒ équivalent 160 kg sur la référence ⇒ même LP
+  assert(Math.abs(lpCustom.cx1 - lpRef.benchPress) < 1, 'Rang custom : coef 0.5 ⇒ 80 kg valent 160 kg sur la référence');
+  assert(lpNoRef.cx1 < lpCustom.cx1, 'Rang custom : sans référence, pas de plancher issu des standards');
+
+  // Séance de référence (colonne PRÉC) : meilleure du mois, pas la dernière.
+  // On rejoue la logique de bestEntry sur des données contrôlées.
+  const wsIsWork = (s) => s.kind !== 'warmup' && s.kind !== 'drop';
+  const score = (sets) => {
+    const ws = sets.filter(wsIsWork);
+    return { vol: ws.reduce((a, s) => a + s.weight * s.reps, 0), max: ws.reduce((a, s) => Math.max(a, s.weight), 0), n: ws.length };
+  };
+  const grosse = score([{ weight: 100, reps: 8 }, { weight: 100, reps: 8 }, { weight: 100, reps: 8 }, { weight: 100, reps: 8 }]);
+  const recente = score([{ weight: 90, reps: 8 }, { weight: 90, reps: 8 }]);
+  assert(grosse.vol > recente.vol, 'PRÉC : la meilleure séance (4×100) bat la plus récente (2×90)');
+  // À volume égal, la charge la plus lourde départage
+  const a = score([{ weight: 100, reps: 8 }]);
+  const b = score([{ weight: 80, reps: 10 }]);
+  assert(a.vol === b.vol && a.max > b.max, 'PRÉC : à volume égal, la charge max départage');
+  // Échauffements et dégressives exclus du score
+  const avecW = score([{ weight: 40, reps: 10, kind: 'warmup' }, { weight: 100, reps: 8 }, { weight: 60, reps: 12, kind: 'drop' }]);
+  assert(avecW.n === 1 && avecW.vol === 800, 'PRÉC : W et D exclus du calcul de la référence');
 }
 
 console.log(`\n===== RÉSULTAT : ${pass} OK / ${fail} FAIL =====`);
