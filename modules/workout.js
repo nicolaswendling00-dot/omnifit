@@ -5,6 +5,7 @@ import { store, todayISO } from '../utils/storage.js';
 import { EXERCISES, MUSCLES, muscleLabel, AKA } from '../data/exercises.js';
 import { formatTime, workoutMuscleVolume, weeklySetsByMuscle, muscleAttenuation } from '../utils/math.js';
 import { el, esc, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, fmtDateFull, celebrateLP, makeChart, normalizeStr, closeAllOverlays } from '../utils/ui.js';
+import { lineChartOptions, lineDataset } from '../utils/charts.js';
 import { computeExerciseLP, computeExerciseLPDetailed, rankFromLP, rankBadge, getStandards } from '../utils/ranks.js';
 
 let volumeChart = null;
@@ -1721,15 +1722,9 @@ function renderVolumeDashboard(host, rerender) {
     type: 'line',
     data: {
       labels: impPts.map((p) => p.date.slice(5)),
-      datasets: [{ data: impPts.map((p) => p.v), borderColor: '#22D3A6', backgroundColor: 'rgba(34,211,166,0.14)', fill: true, tension: 0.3, pointRadius: 3 }],
+      datasets: [lineDataset('Amélioration', impPts.map((p) => p.v), '#22D3A6')],
     },
-    options: {
-      ...chartOpts,
-      scales: {
-        x: chartOpts.scales.x,
-        y: { ...chartOpts.scales.y, min: -100, max: 100, ticks: { ...chartOpts.scales.y.ticks, callback: (v) => v + '%' } },
-      },
-    },
+    options: lineChartOptions({ yMin: -100, yMax: 100, ySuffix: '%', yTicks: 5, xTicks: 4 }),
   }, impChart);
 
   const vgBtn = card.querySelector('#vol-goals-btn');
@@ -1932,18 +1927,13 @@ function openMuscleChart(muscleId) {
     },
   });
   if (!pts.length) return;
-  const opts = {
-    responsive: true, maintainAspectRatio: false,
-    plugins: { legend: { display: false } },
-    scales: {
-      x: { ticks: { color: '#9CA3AF', font: { size: 8, family: 'Inter' } }, grid: { color: 'rgba(0,217,255,0.06)' } },
-      y: { min: -100, max: 100, ticks: { color: '#9CA3AF', font: { size: 9, family: 'Inter' }, callback: (v) => v + '%' }, grid: { color: 'rgba(0,217,255,0.06)' } },
-    },
-  };
   musChart = makeChart(content.querySelector('#mus-chart'), {
     type: 'line',
-    data: { labels: pts.map((p) => p.date.slice(5)), datasets: [{ data: pts.map((p) => p.v), borderColor: '#00D9FF', backgroundColor: 'rgba(0,217,255,0.15)', fill: true, tension: 0.3, pointRadius: 4 }] },
-    options: opts,
+    data: {
+      labels: pts.map((p) => p.date.slice(5)),
+      datasets: [lineDataset('Amélioration', pts.map((p) => p.v), '#00D9FF')],
+    },
+    options: lineChartOptions({ yMin: -100, yMax: 100, ySuffix: '%', yTicks: 5, xTicks: 4 }),
   });
 }
 

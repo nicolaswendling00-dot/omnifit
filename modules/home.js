@@ -2,7 +2,9 @@
 import { store, todayISO } from '../utils/storage.js';
 import { calculateSMA } from '../utils/math.js';
 import { el, icons, openModal, toast, ringSVG, haptic, makeChart } from '../utils/ui.js';
-import { macroGoals } from './nutrition.js';
+import { lineChartOptions, lineDataset } from '../utils/charts.js';
+import { goToPage, PAGE_NUTRITION, PAGE_ACTIVITY } from '../utils/nav.js';
+import { macroGoals, renderCoachCard } from './nutrition.js';
 import { computeGlobalRank } from '../utils/globalRank.js';
 import { rankBadge, rankFromLP } from '../utils/ranks.js';
 
@@ -72,19 +74,27 @@ function openLogWeightModal(rerender, prefill = null) {
 
 function openChartModal(rerender) {
   const recent = [...store.userData.weights].slice(-8).reverse();
+  const RANGES = [[30, '1 mois'], [90, '3 mois'], [365, '1 an'], [0, 'Tout']];
   const content = el(`<div>
-    <div class="chart-wrap" style="height:260px"><canvas id="weight-chart"></canvas></div>
+    <div class="segment" id="w-range" style="margin-bottom:10px">
+      ${RANGES.map(([v, lbl]) => `<button data-r="${v}" class="${v === weightRange ? 'active' : ''}">${lbl}</button>`).join('')}
+    </div>
+    <div class="chart-wrap" style="height:240px"><canvas id="weight-chart"></canvas></div>
     <div style="display:flex;gap:8px;margin-top:8px">
       <button class="btn btn-ghost btn-sm" id="btn-toggle-sma" style="flex:1">Tendance : ${smaVisible ? 'ON' : 'OFF'}</button>
       <button class="btn btn-ghost btn-sm" id="btn-toggle-cal" style="flex:1">Calories : ${caloriesVisible ? 'ON' : 'OFF'}</button>
+    </div>
+    <div class="w-modal-actions">
+      <button class="btn btn-primary btn-sm" id="btn-log-weight">${icons.plus} Ajouter une pesée</button>
+      <button class="btn btn-secondary btn-sm" id="btn-edit-goal">${icons.edit} Objectif</button>
     </div>
     <h3 style="margin:14px 0 4px">Entrées récentes</h3>
     <div id="w-recent">${recent.length ? '' : '<div class="empty-state">Aucune pesée</div>'}</div>
   </div>`);
   // À la fermeture, on détruit le graphique : sans ça il garde une référence sur
   // un canvas retiré du DOM (et ses écouteurs de redimensionnement).
-  openModal({
-    title: 'Poids — 14 jours',
+  const modal = openModal({
+    title: 'Poids',
     content,
     wide: true,
     actions: [],
@@ -93,6 +103,23 @@ function openChartModal(rerender) {
     },
   });
   const draw = () => renderWeightChart(content.querySelector('#weight-chart'));
+  content.querySelector('#w-range').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    weightRange = +b.dataset.r;
+    content.querySelectorAll('#w-range button').forEach((x) => x.classList.toggle('active', x === b));
+    draw();
+    haptic();
+  });
+  // Les actions poids vivent ici plutôt que sur l'accueil, qui reste un écran
+  // de lecture : on ouvre la carte Poids, on voit la courbe, on agit.
+  content.querySelector('#btn-log-weight').addEventListener('click', () => {
+    modal.close();
+    openLogWeightModal(rerender || (() => {}));
+  });
+  content.querySelector('#btn-edit-goal').addEventListener('click', () => {
+    modal.close();
+    openGoalModal(rerender || (() => {}));
+  });
   content.querySelector('#btn-toggle-sma').addEventListener('click', (e) => {
     smaVisible = !smaVisible;
     e.target.textContent = `Tendance : ${smaVisible ? 'ON' : 'OFF'}`;
@@ -115,55 +142,57 @@ function openChartModal(rerender) {
   draw();
 }
 
+// Plage affichée dans la fenêtre Poids (en jours). `0` = tout l'historique.
+let weightRange = 90;
+
 function renderWeightChart(canvas) {
-  const days = [...Array(14)].map((_, i) => todayISO(i - 13));
-  const map = Object.fromEntries(store.userData.weights.map((w) => [w.date, w.value]));
+  const all = store.userData.weights;
+  if (!all.length) { weightChart = makeChart(canvas, { type: 'line', data: { labels: [], datasets: [] } }, weightChart); return; }
+
+  // Plage : soit les N derniers jours, soit tout depuis la première pesée.
+  const first = all[0].date;
+  const start = weightRange ? todayISO(-weightRange + 1) : first;
+  const from = start < first ? first : start;
+  const nDays = Math.max(1, Math.round((new Date(todayISO()) - new Date(from)) / 86400000) + 1);
+  const days = [...Array(nDays)].map((_, i) => todayISO(i - nDays + 1));
+
+  const map = Object.fromEntries(all.map((w) => [w.date, w.value]));
   const values = days.map((d) => map[d] ?? null);
-  const known = store.userData.weights.map((w) => w.value);
-  const sma = calculateSMA(known, 5);
+
+  // Tendance lissée : moyenne mobile sur les pesées connues, reprojetée sur les
+  // jours. C'est elle qui montre la vraie direction, sans le bruit quotidien.
+  const sma = calculateSMA(all.map((w) => w.value), 5);
   const smaMap = {};
-  store.userData.weights.forEach((w, i) => { smaMap[w.date] = sma[i]; });
+  all.forEach((w, i) => { smaMap[w.date] = sma[i]; });
   const smaValues = days.map((d) => (smaMap[d] != null ? Math.round(smaMap[d] * 10) / 10 : null));
+
   const calValues = days.map((d) => {
     const t = store.dayTotals(d);
     return t.kcal ? Math.round(t.kcal) : null;
   });
-  // Jours dont l'objectif a été lissé : on les marque d'un cercle CREUX (au lieu
-  // d'un point plein) sur la courbe calories, sans changer la valeur affichée.
-  const smoothedFlags = days.map((d) => {
-    const day = store.userData.nutrition.byDate[d];
-    return !!(day && day.smoothed);
-  });
-  const calPointBg = days.map((_, i) => (smoothedFlags[i] ? 'transparent' : '#FB923C'));
-  const calPointBorder = days.map(() => '#FB923C');
-  const calPointRadius = days.map((_, i) => (smoothedFlags[i] ? 5 : 3));
-  const calPointBorderWidth = days.map((_, i) => (smoothedFlags[i] ? 2 : 1));
 
-  const datasets = [
-    { label: 'Poids (kg)', data: values, borderColor: '#00D9FF', backgroundColor: 'rgba(0,217,255,0.12)', borderWidth: 3, pointRadius: 4, pointBackgroundColor: '#00D9FF', tension: 0.3, spanGaps: true, yAxisID: 'y' },
-    { label: 'SMA-5', data: smaValues, borderColor: '#7C3AED', borderWidth: 2, borderDash: [6, 4], pointRadius: 0, tension: 0.35, spanGaps: true, hidden: !smaVisible, yAxisID: 'y' },
-  ];
+  const datasets = [lineDataset('Poids', values, '#00D9FF', { yAxisID: 'y' })];
+  if (smaVisible) {
+    datasets.push(lineDataset('Tendance', smaValues, '#7C3AED', { fill: false, borderWidth: 2, borderDash: [5, 4], yAxisID: 'y' }));
+  }
   if (caloriesVisible) {
-    datasets.push({ label: 'Calories', data: calValues, borderColor: '#FB923C', backgroundColor: 'rgba(251,146,60,0.12)', borderWidth: 2, pointRadius: calPointRadius, pointBackgroundColor: calPointBg, pointBorderColor: calPointBorder, pointBorderWidth: calPointBorderWidth, tension: 0.3, spanGaps: true, yAxisID: 'y1' });
+    datasets.push(lineDataset('Calories', calValues, '#FB923C', { fill: false, borderWidth: 2, yAxisID: 'y1' }));
   }
 
-  const scales = {
-    x: { ticks: { color: '#9CA3AF', font: { size: 9, family: 'Inter' } }, grid: { color: 'rgba(0,217,255,0.06)' } },
-    y: { position: 'left', ticks: { color: '#9CA3AF', font: { size: 10, family: 'Inter' } }, grid: { color: 'rgba(0,217,255,0.06)' } },
-  };
+  // Étiquettes : jour/mois sur les courtes plages, mois seul au-delà.
+  const labels = days.map((d) => (nDays > 120 ? d.slice(5, 7) + '/' + d.slice(2, 4) : d.slice(8) + '/' + d.slice(5, 7)));
+
+  const options = lineChartOptions({ legend: datasets.length > 1, ySuffix: ' kg', yTicks: 4, xTicks: 5 });
   if (caloriesVisible) {
-    scales.y1 = { position: 'right', ticks: { color: '#FB923C', font: { size: 10, family: 'Inter' } }, grid: { drawOnChartArea: false } };
+    options.scales.y1 = {
+      position: 'left',
+      grid: { display: false, drawBorder: false },
+      border: { display: false },
+      ticks: { color: '#FB923C', font: { size: 10, family: 'Inter' }, maxTicksLimit: 4, padding: 6 },
+    };
   }
 
-  weightChart = makeChart(canvas, {
-    type: 'line',
-    data: { labels: days.map((d) => d.slice(8) + '/' + d.slice(5, 7)), datasets },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { labels: { color: '#9CA3AF', boxWidth: 12, font: { size: 10, family: 'Inter' } } } },
-      scales,
-    },
-  }, weightChart);
+  weightChart = makeChart(canvas, { type: 'line', data: { labels, datasets }, options }, weightChart);
 }
 
 function openGlobalRankModal(gr) {
@@ -190,29 +219,52 @@ function macroBar(label, done, goal, color) {
   </div>`;
 }
 
-// Courbe de poids tracée en fond de la carte : dernières pesées, normalisées
-// sur la hauteur disponible. Purement décorative (aria-hidden).
-function weightSparkline(weights) {
-  const pts = (weights || []).slice(-14).map((w) => w.value);
+// Chemin lissé passant par une série de points (spline de Catmull-Rom convertie
+// en courbes de Bézier). Donne un tracé fluide, sans les angles d'une polyline.
+function smoothPath(pts) {
   if (pts.length < 2) return '';
-  const min = Math.min(...pts); const max = Math.max(...pts);
+  let d = `M ${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2] || p2;
+    const c1x = p1.x + (p2.x - p0.x) / 6;
+    const c1y = p1.y + (p2.y - p0.y) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6;
+    const c2y = p2.y - (p3.y - p1.y) / 6;
+    d += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)}, ${c2x.toFixed(2)} ${c2y.toFixed(2)}, ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
+  }
+  return d;
+}
+
+// Courbe de poids tracée en fond de la carte. On lisse D'ABORD les valeurs
+// (moyenne mobile) : le poids varie de plusieurs centaines de grammes d'un jour
+// à l'autre (eau, glycogène) et le tracé brut ressemblait à des pics. On veut
+// la tendance, pas le bruit. Purement décoratif (aria-hidden).
+function weightSparkline(weights) {
+  const raw = (weights || []).slice(-40).map((w) => w.value);
+  if (raw.length < 2) return '';
+  const smoothed = calculateSMA(raw, Math.min(5, Math.max(2, Math.round(raw.length / 4))));
+  const vals = smoothed.filter((v) => v != null);
+  if (vals.length < 2) return '';
+  const min = Math.min(...vals); const max = Math.max(...vals);
   const span = max - min || 1;
   const W = 100; const H = 40;
-  const coords = pts.map((v, i) => {
-    const x = (i / (pts.length - 1)) * W;
-    const y = H - ((v - min) / span) * (H * 0.8) - H * 0.1;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  });
-  const line = coords.join(' ');
-  const area = `0,${H} ${line} ${W},${H}`;
+  const pts = vals.map((v, i) => ({
+    x: (i / (vals.length - 1)) * W,
+    y: H - ((v - min) / span) * (H * 0.7) - H * 0.15,
+  }));
+  const line = smoothPath(pts);
+  const area = `${line} L ${W} ${H} L 0 ${H} Z`;
   return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
     <defs><linearGradient id="hw-grad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.35"/>
+      <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.32"/>
       <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
     </linearGradient></defs>
-    <polygon points="${area}" fill="url(#hw-grad)"/>
-    <polyline points="${line}" fill="none" stroke="var(--accent)" stroke-width="1.6"
-      stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" opacity="0.75"/>
+    <path d="${area}" fill="url(#hw-grad)"/>
+    <path d="${line}" fill="none" stroke="var(--accent)" stroke-width="1.8"
+      stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" opacity="0.8"/>
   </svg>`;
 }
 
@@ -299,6 +351,7 @@ export function render(container) {
         <div class="gr-progress"><i style="width:${Math.round(grProgress * 100)}%;background:${gr.rank.color}"></i></div>
       </div>
 
+      <div class="home-duo home-top-duo">
       <div class="card stat-card home-kcal" id="home-kcal">
         <div class="stat-head">${icons.flame} Calories</div>
         <div class="hk-main">
@@ -314,6 +367,8 @@ export function render(container) {
           ${macroBar('Gluc', totals.carbs, mg.carbsG, C_CARB)}
           ${macroBar('Lip', totals.fat, mg.fatG, C_FAT)}
         </div>
+      </div>
+      <div id="coach-host"></div>
       </div>
 
       <div class="home-duo">
@@ -363,26 +418,32 @@ export function render(container) {
         <div class="hwa-bar"><i style="width:${Math.min(100, Math.round((water / settings.waterGoal) * 100))}%"></i></div>
         <button class="btn btn-secondary btn-sm" id="btn-add-water">+0.25</button>
       </div>
-
-      <div class="home-actions">
-        <button class="btn btn-primary btn-sm" id="btn-log-weight">${icons.plus} Poids</button>
-        <button class="btn btn-secondary btn-sm" id="btn-chart">${icons.activity} Graphique</button>
-        <button class="btn btn-secondary btn-sm" id="btn-edit-goal">${icons.edit} Objectif</button>
-      </div>
     </div>`));
 
   container.querySelector('#gr-card').addEventListener('click', () => openGlobalRankModal(gr));
-  container.querySelector('#btn-edit-goal').addEventListener('click', () => openGoalModal(rerender));
-  container.querySelector('#btn-log-weight').addEventListener('click', () => openLogWeightModal(rerender));
-  container.querySelector('#btn-chart').addEventListener('click', () => openChartModal(rerender));
   container.querySelector('#btn-add-water').addEventListener('click', (e) => {
     e.stopPropagation();
     store.addWater(today, 0.25);
     haptic();
     rerender();
   });
-  // La carte poids ouvre le graphique (raccourci vers le même écran que le bouton)
+  // La carte Poids ouvre la fenêtre qui contient le graphique ET les actions.
   container.querySelector('#home-weight').addEventListener('click', () => openChartModal(rerender));
+  // Calories et Activité renvoient vers l'onglet correspondant : l'accueil est
+  // un résumé, le détail vit dans sa page.
+  container.querySelector('#home-kcal').addEventListener('click', () => goToPage(PAGE_NUTRITION));
+  container.querySelector('#home-activity').addEventListener('click', () => goToPage(PAGE_ACTIVITY));
+
+  // Coach métabolique : il vit sur l'accueil (et non plus dans Nutrition).
+  const coachHost = container.querySelector('#coach-host');
+  if (coachHost) {
+    const coachEl = renderCoachCard(rerender, { compact: true });
+    if (coachEl) coachHost.replaceWith(coachEl);
+    else coachHost.replaceWith(el(`<div class="card stat-card coach-card coach-empty">
+      <div class="coach-head"><span class="coach-title">${icons.flame} Coach</span></div>
+      <div class="coach-msg-empty">Pèse-toi régulièrement pendant ~2 semaines pour activer les conseils d'ajustement.</div>
+    </div>`));
+  }
 
   // La ligne de progression des pas se remplit à l'affichage plutôt que
   // d'apparaître déjà pleine : le remplissage se « joue » sous les yeux.

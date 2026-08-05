@@ -53,10 +53,14 @@ console.log('== Rendu des 5 pages (structure v3) ==');
 home.render(pages.home);
 assert(pages.home.querySelector('.home-weight'), 'Accueil : carte poids');
 // Récap complet de la journée : calories, poids, activité, eau
-assert(pages.home.querySelectorAll('.stat-card').length === 4, 'Accueil : 4 cartes récap');
+// Récap : calories, coach, poids, activité, eau
+assert(pages.home.querySelectorAll('.stat-card').length === 5, 'Accueil : 5 cartes récap');
 assert(pages.home.querySelector('.home-kcal') && pages.home.querySelector('.home-activity'), 'Accueil : cartes calories et activité');
 assert(pages.home.querySelectorAll('.hk-macro').length === 3, 'Accueil : macros détaillées sous les calories');
-assert(pages.home.querySelector('#btn-chart') && !pages.home.querySelector('#weight-chart'), 'Accueil : graphique en modal seulement');
+assert(pages.home.querySelector('.coach-card'), 'Accueil : coach déplacé sur l\'accueil');
+// Le graphique s'ouvre en touchant la carte Poids (plus de bouton dédié)
+assert(!pages.home.querySelector('#weight-chart'), 'Accueil : graphique en modal seulement');
+assert(!pages.home.querySelector('#btn-log-weight') && !pages.home.querySelector('#btn-edit-goal'), 'Accueil : actions poids déplacées dans la fenêtre');
 
 nutrition.render(pages.nutrition);
 assert(pages.nutrition.querySelector('.nutrition-header'), 'Nutrition : header sticky');
@@ -485,18 +489,24 @@ assert(histAdded.meal === 'Snack' && histAdded.weight === 250, 'Historique : bon
 assert(![...document.querySelectorAll('.sheet')].some((s) => s.querySelector('#m-name')), 'Historique : aucun éditeur ouvert');
 clearOverlays();
 
-// Graphe de poids : cercle creux pour les jours lisses
+// Graphe de poids : ouvert en touchant la carte Poids, courbe épurée
 store.userData.nutrition.byDate[todayISO()].smoothed = { delta: -150, from: '2020-05-01' };
+// Pesée ancienne : l'historique doit remonter bien au-delà d'une semaine
+store.userData.weights.unshift({ date: todayISO(-60), value: 78.2 });
 home.render(pages.home);
-pages.home.querySelector('#btn-chart').click();
+pages.home.querySelector('#home-weight').click();
 const chartModal = document.querySelector('.modal');
-chartModal.querySelector('#btn-toggle-cal').click();
-const calDs = lastChartCfg.data.datasets.find((d) => d.label === 'Calories');
-assert(calDs && Array.isArray(calDs.pointBackgroundColor), 'Graphe : couleurs de points par jour');
-const chartDays = [...Array(14)].map((_, i) => todayISO(i - 13));
-const iSm = chartDays.indexOf(todayISO());
-assert(calDs.pointBackgroundColor[iSm] === 'transparent', 'Graphe : jour lisse = cercle creux');
-assert(calDs.pointBorderColor[iSm] === '#FB923C', 'Graphe : contour du cercle creux visible');
+assert(chartModal && chartModal.querySelector('#weight-chart'), 'Poids : la carte ouvre la fenêtre du graphique');
+assert(chartModal.querySelector('#btn-log-weight') && chartModal.querySelector('#btn-edit-goal'), 'Poids : actions présentes dans la fenêtre');
+assert(chartModal.querySelectorAll('#w-range button').length === 4, 'Poids : plages 1 mois / 3 mois / 1 an / tout');
+// Style de courbe : aucun point, interpolation monotone, graduations sobres
+const wDs = lastChartCfg.data.datasets[0];
+assert(lastChartCfg.options.elements.point.radius === 0, 'Graphe : aucun point de donnée');
+assert(wDs.cubicInterpolationMode === 'monotone', 'Graphe : courbe lissée sans bosse parasite');
+assert(lastChartCfg.options.scales.y.ticks.maxTicksLimit <= 5, 'Graphe : graduations verticales simplifiées');
+assert(lastChartCfg.options.scales.x.grid.display === false, 'Graphe : pas de grille verticale');
+// Historique bien au-delà d'une semaine
+assert(lastChartCfg.data.labels.length > 14, 'Graphe : historique de poids au-delà de 2 semaines');
 clearOverlays();
 
 console.log('== v3.40 : loupe, base aliments, animation LP, macro centre ==');

@@ -1215,7 +1215,9 @@ function fmtRate(kg) {
 }
 
 // Rend la carte Coach, ou null s'il n'y a pas encore assez de données.
-function renderCoachCard(rerender) {
+// Affichée sur l'ACCUEIL (à côté des calories) : c'est là qu'on lit son résumé
+// du jour. `opts.compact` resserre la mise en forme pour la demi-largeur.
+export function renderCoachCard(rerender, opts = {}) {
   const w = store.userData.weights;
   const currentW = w.length ? w[w.length - 1].value : store.userData.profile.weight;
   const ins = metabolicInsight({
@@ -1278,10 +1280,10 @@ function renderCoachCard(rerender) {
   const setMaint = (dir === 'hold' && ins.maintenanceEst
     && Math.abs(ins.maintenanceEst - macroGoals().kcalGoal) > 100) ? ins.maintenanceEst : null;
 
-  const card = el(`<div class="card coach-card coach-${tone}">
+  const card = el(`<div class="card coach-card coach-${tone}${opts.compact ? ' stat-card coach-compact' : ''}">
     <div class="coach-head">
       <span class="coach-title">${icons.flame} Coach</span>
-      <span class="coach-rate">${rateStr} · ${ins.daysSpan} j</span>
+      <span class="coach-rate">${rateStr}</span>
     </div>
     <div class="coach-msg">${msg}</div>
     ${maintLine ? `<div class="coach-maint">${maintLine}</div>` : ''}
@@ -1406,8 +1408,6 @@ export function render(container) {
 
       <div class="date-ribbon no-swipe" id="date-ribbon">${ribbon}</div>
 
-      <div id="coach-host"></div>
-
       <div class="card">
         <div class="card-row" style="margin-bottom:4px">
           <h3 style="margin:0">Repas</h3>
@@ -1420,14 +1420,6 @@ export function render(container) {
         </div>
       </div>
     </div>`));
-
-  // Carte Coach (maintenance + stagnation) : insérée sous le ruban de dates.
-  const coachHost = container.querySelector('#coach-host');
-  if (coachHost) {
-    const coachEl = renderCoachCard(rerender);
-    if (coachEl) coachHost.replaceWith(coachEl);
-    else coachHost.remove();
-  }
 
   const list = container.querySelector('#meal-list');
   // Regroupement par type de repas

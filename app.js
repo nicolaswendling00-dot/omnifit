@@ -5,6 +5,7 @@ import { render as renderWorkout, resumeActiveSession, refreshActiveSession } fr
 import { render as renderActivity } from './modules/activity.js';
 import { render as renderSettings, applyTheme } from './modules/settings.js';
 import { setStandards } from './utils/ranks.js';
+import { setNavigator } from './utils/nav.js';
 import { store, parseStepsPayload } from './utils/storage.js';
 
 const PAGES = [
@@ -28,6 +29,10 @@ function goTo(index) {
   const page = PAGES[index];
   page.render(document.getElementById(page.id));
 }
+
+// Les pages peuvent demander un changement d'onglet (ex. la carte Calories de
+// l'accueil ouvre Nutrition) sans connaître cet orchestrateur.
+setNavigator(goTo);
 
 document.querySelectorAll('.nav-btn').forEach((btn, i) => {
   // Retaper l'onglet déjà actif ne relance pas le rendu : cela détruirait et
