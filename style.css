@@ -1103,16 +1103,6 @@ body.shape-8bit .gr-progress i, body.shape-8bit .progress-bar > div {
 .w-modal-actions { display: flex; gap: 8px; margin-top: 10px; }
 .w-modal-actions .btn { flex: 1 1 0; min-width: 0; }
 
-/* ---------- Liseré dégradé rose → bleu ----------
-   Marqueur visuel réutilisable, posé en tête d'une carte pour signaler ses
-   sections principales (repas du jour, calendrier d'entraînement…). */
-.grad-bar {
-  height: 3px; border-radius: 3px; flex: none;
-  background: linear-gradient(90deg, #F472B6, #38BDF8);
-  margin: -4px 0 12px;
-}
-.card > .grad-bar:first-child { margin-top: 0; }
-
 /* --- Répartition des macros en anneau --- */
 .hk-donut { display: flex; align-items: center; gap: 12px; margin-top: auto; }
 .hk-donut svg { width: clamp(64px, 22vw, 92px); height: auto; flex: none; }
@@ -1143,14 +1133,25 @@ body.shape-8bit .gr-progress i, body.shape-8bit .progress-bar > div {
 /* --- Choix au démarrage d'une séance --- */
 .ns-list { display: flex; flex-direction: column; gap: 10px; }
 .ns-item {
-  display: flex; flex-direction: column; gap: 3px; text-align: left; width: 100%;
+  display: flex; flex-direction: column; gap: 6px; text-align: left; width: 100%;
   background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-btn);
   color: var(--text); font-family: inherit; padding: 13px 14px; cursor: pointer;
 }
 .ns-item:active { border-color: var(--accent); }
 .ns-item-t { font-size: 0.95rem; font-weight: 800; }
-.ns-item-d { font-size: 0.74rem; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; }
-.ns-empty { border-style: dashed; }
+/* Exercices de la routine, listés les uns sous les autres */
+.ns-item-exos { display: flex; flex-direction: column; gap: 2px; }
+.ns-item-exos i {
+  font-style: normal; font-size: 0.76rem; color: var(--text-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Séance vide : une simple ligne, bien plus discrète qu'une routine */
+.ns-empty {
+  flex-direction: row; align-items: center; justify-content: center; gap: 8px;
+  border-style: dashed; padding: 10px 14px; min-height: 44px;
+  font-size: 0.85rem; font-weight: 700; color: var(--text-2);
+}
+.ns-empty svg { width: 17px; height: 17px; }
 
 /* --- Calories : le chiffre, puis les macros empilées --- */
 .home-kcal { display: flex; flex-direction: column; gap: 8px; }
@@ -1221,7 +1222,15 @@ body.shape-8bit .gr-progress i, body.shape-8bit .progress-bar > div {
 .hwa-goal { font-size: 0.7rem; color: var(--text-2); }
 .hwa-bar { flex: 1; height: 5px; border-radius: 3px; background: rgba(56, 189, 248, 0.16); overflow: hidden; }
 .hwa-bar i { display: block; height: 100%; background: #38BDF8; border-radius: 3px; transition: width var(--dur-med) var(--ease); }
+.home-water { cursor: pointer; }
 .home-water .btn { flex: 0 0 auto; min-height: 34px; padding: 4px 10px; }
+
+/* Fenêtre Eau : consommation du jour + réglage de l'objectif */
+.wtr-now { display: flex; align-items: baseline; gap: 6px; margin-bottom: 14px; }
+.wtr-val { font-size: 2.2rem; line-height: 1; color: #38BDF8; }
+.wtr-unit { font-size: 0.82rem; color: var(--text-2); }
+.wtr-quick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.wtr-quick .btn { padding: 6px 4px; min-width: 0; }
 
 /* --- Actions --- */
 .home-actions { display: flex; gap: 8px; }

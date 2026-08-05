@@ -1408,8 +1408,7 @@ export function render(container) {
 
       <div class="date-ribbon no-swipe" id="date-ribbon">${ribbon}</div>
 
-      <div class="card">
-        <div class="grad-bar"></div>
+      <div class="card card-glow">
         <div class="card-row" style="margin-bottom:4px">
           <h3 style="margin:0">Repas</h3>
           <div style="display:flex;gap:6px">

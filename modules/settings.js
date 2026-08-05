@@ -7,7 +7,7 @@ import { RANK_ORDER, RANK_META, DIV_LP, ONYX_LP, rankBadge, estimateRankFromLift
 import { openExercisePicker } from './workout.js';
 import { backfillNutritionGoals, freezePastGoals } from './nutrition.js';
 
-const VERSION = '5.0';
+const VERSION = '5.1';
 
 function toggleRow(label, key, sub = '') {
   const s = store.userData.settings;
@@ -107,16 +107,7 @@ export function render(container) {
       <button class="btn btn-secondary btn-block" id="btn-rank-ladder" style="margin-top:10px">${icons.book} Classement des rangs & calculateur</button>
     </div>
 
-    <!-- 4. NUTRITION -->
-    <div class="card settings-section">
-      <h3>Nutrition</h3>
-      <div class="settings-row" style="flex-direction:column;align-items:stretch">
-        <div class="card-row"><span class="row-label">Objectif eau</span><span class="num" id="water-val" style="color:var(--accent)">${s.waterGoal}L</span></div>
-        <input id="set-water" type="range" min="2" max="5" step="0.25" value="${s.waterGoal}">
-      </div>
-    </div>
-
-    <!-- 4 bis. ACTIVITÉ -->
+    <!-- 4. ACTIVITÉ -->
     <div class="card settings-section">
       <h3>Activité</h3>
       <div class="settings-row">
@@ -207,8 +198,8 @@ export function render(container) {
     inp.addEventListener('input', () => { root.querySelector(valId).textContent = fmt(inp.value); });
     inp.addEventListener('change', () => { store.saveUserData({ settings: { [key]: parse(inp.value) } }); });
   };
+  // L'objectif d'eau se règle depuis la carte Eau de l'accueil, là où on le lit.
   bindRange('#set-rest', '#rest-val', 'restTimerDefault', (v) => `${v}s`, (v) => parseInt(v, 10));
-  bindRange('#set-water', '#water-val', 'waterGoal', (v) => `${v}L`);
 
   root.querySelector('#seg-shape').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;

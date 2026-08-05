@@ -12,6 +12,52 @@ let weightChart = null;
 let smaVisible = true;
 let caloriesVisible = false;
 
+// Réglage de l'eau : consommation du jour et objectif, au même endroit que
+// l'affichage. Évite d'aller chercher le curseur dans les réglages.
+function openWaterModal(rerender) {
+  const today = todayISO();
+  const s = store.userData.settings;
+  const cur = store.userData.water.byDate[today] || 0;
+  const form = el(`<div>
+    <div class="wtr-now">
+      <span class="num wtr-val" id="wtr-val">${cur.toFixed(2).replace(/0$/, '')}</span>
+      <span class="wtr-unit">L bus aujourd'hui</span>
+    </div>
+    <div class="wtr-quick" id="wtr-quick">
+      ${[0.25, 0.5, 0.75, 1].map((v) => `<button class="btn btn-secondary btn-sm" data-add="${v}">+${v} L</button>`).join('')}
+    </div>
+    <button class="btn btn-ghost btn-sm btn-block" id="wtr-undo" style="margin-top:8px">${icons.swap} Retirer 0.25 L</button>
+    <div class="card-row" style="margin-top:18px">
+      <span class="row-label">Objectif quotidien</span>
+      <span class="num" id="wtr-goal-val" style="color:var(--accent)">${s.waterGoal} L</span>
+    </div>
+    <input id="wtr-goal" type="range" min="1" max="5" step="0.25" value="${s.waterGoal}">
+  </div>`);
+
+  const m = openModal({ title: 'Eau', content: form, actions: [{ label: 'Fermer' }], onClose: () => rerender && rerender() });
+
+  const refresh = () => {
+    const v = store.userData.water.byDate[today] || 0;
+    form.querySelector('#wtr-val').textContent = v.toFixed(2).replace(/0$/, '');
+  };
+  form.querySelector('#wtr-quick').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-add]'); if (!b) return;
+    store.addWater(today, parseFloat(b.dataset.add));
+    haptic();
+    refresh();
+  });
+  form.querySelector('#wtr-undo').addEventListener('click', () => {
+    const v = store.userData.water.byDate[today] || 0;
+    store.addWater(today, -Math.min(0.25, v)); // jamais de total négatif
+    haptic();
+    refresh();
+  });
+  const goal = form.querySelector('#wtr-goal');
+  goal.addEventListener('input', () => { form.querySelector('#wtr-goal-val').textContent = `${goal.value} L`; });
+  goal.addEventListener('change', () => { store.saveUserData({ settings: { waterGoal: parseFloat(goal.value) } }); });
+  return m;
+}
+
 // Choix de la phase en cours. Il n'y a volontairement PAS de poids cible :
 // on s'arrête quand on est satisfait de son physique, pas à un chiffre.
 // C'est cette phase qui pilote le coach (sens attendu de la variation de poids).
@@ -422,11 +468,13 @@ export function render(container) {
 
   container.querySelector('#gr-card').addEventListener('click', () => openGlobalRankModal(gr));
   container.querySelector('#btn-add-water').addEventListener('click', (e) => {
-    e.stopPropagation();
+    e.stopPropagation(); // le +0.25 reste un raccourci, il n'ouvre pas la fenêtre
     store.addWater(today, 0.25);
     haptic();
     rerender();
   });
+  // Toucher la carte Eau ouvre le détail et le réglage de l'objectif.
+  container.querySelector('#home-water').addEventListener('click', () => openWaterModal(rerender));
   // La carte Poids ouvre la fenêtre qui contient le graphique ET les actions.
   container.querySelector('#home-weight').addEventListener('click', () => openChartModal(rerender));
   // Calories et Activité renvoient vers l'onglet correspondant : l'accueil est
