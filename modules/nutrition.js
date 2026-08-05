@@ -900,7 +900,7 @@ function openRecipeAddSheet(rerender, recipe, getCat, setCat, opts = {}) {
     <label class="field ra-mult"><span>Multiplicateur (portions)</span>
       <input id="ra-mult" type="number" inputmode="decimal" min="0.1" step="0.5" value="${mult}"></label>
     <div class="ra-totals" id="ra-totals"></div>
-    <button class="btn btn-primary btn-block" id="ra-add" style="margin-top:14px">${editing ? icons.check + ' Enregistrer' : icons.plus + ' Ajouter au repas'}</button>
+    <button class="btn btn-primary btn-block" id="ra-add" style="margin-top:14px">${editing ? icons.check + ' Enregistrer' : icons.plus + ' Ajouter'}</button>
   </div>`);
   const sheet = openSheet({ title: editing ? 'Modifier la recette' : 'Ajouter la recette', content: form });
 
@@ -1409,6 +1409,7 @@ export function render(container) {
       <div class="date-ribbon no-swipe" id="date-ribbon">${ribbon}</div>
 
       <div class="card">
+        <div class="grad-bar"></div>
         <div class="card-row" style="margin-bottom:4px">
           <h3 style="margin:0">Repas</h3>
           <div style="display:flex;gap:6px">

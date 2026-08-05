@@ -918,6 +918,37 @@ function openSupersetSheet(idx) {
   });
 }
 
+// Choix au démarrage : partir d'une routine (les exercices sont déjà en place)
+// ou d'une séance vide. Évite d'avoir à passer par la liste des routines.
+function openStartSessionSheet(rerender) {
+  const routines = store.userData.routines || [];
+  const form = el(`<div class="ns-list">
+    ${routines.map((r) => {
+      const noms = r.exercises.map((id) => (exerciseLookup(id) || { name: id }).name).join(' · ');
+      return `<button class="ns-item" data-r="${r.id}">
+        <span class="ns-item-t">${esc(r.name)}</span>
+        <span class="ns-item-d">${r.exercises.length} exercice${r.exercises.length > 1 ? 's' : ''}${noms ? ` · ${esc(noms)}` : ''}</span>
+      </button>`;
+    }).join('')}
+    <button class="ns-item ns-empty" data-r="">
+      <span class="ns-item-t">${icons.plus} Séance vide</span>
+      <span class="ns-item-d">Commencer sans routine, ajouter les exercices au fur et à mesure</span>
+    </button>
+  </div>`);
+  const sheet = openSheet({ title: 'Nouvelle séance', content: form });
+  form.addEventListener('click', (e) => {
+    const b = e.target.closest('.ns-item');
+    if (!b) return;
+    const routine = b.dataset.r ? routines.find((r) => r.id === b.dataset.r) : null;
+    haptic();
+    sheet.close();
+    // La séance plein écran passe SOUS les panneaux (z-index inférieur) :
+    // on retire ceux-ci tout de suite plutôt que d'attendre l'animation.
+    closeAllOverlays();
+    openSession(rerender, routine);
+  });
+}
+
 // ============================================================
 // MODE SÉANCE
 // ============================================================
@@ -1555,6 +1586,7 @@ function renderTwoWeekCalendar(host) {
   start.setDate(start.getDate() - 7); // lundi il y a deux semaines
 
   const card = el(`<div class="card">
+    <div class="grad-bar"></div>
     <div class="card-row" style="margin-bottom:8px">
       <h3 style="margin:0">Calendrier</h3>
       <button class="btn btn-ghost btn-sm" id="cal-more">${icons.calendar} Voir plus</button>
@@ -1984,7 +2016,10 @@ export function render(container) {
     rlist.appendChild(card);
   }
 
-  root.querySelector('#btn-new-session').addEventListener('click', () => openSession(rerender));
+  root.querySelector('#btn-new-session').addEventListener('click', () => {
+    if (session) { openSession(rerender); return; } // reprise : pas de choix à faire
+    openStartSessionSheet(rerender);
+  });
   root.querySelector('#btn-new-routine').addEventListener('click', () => openRoutineEditor(null, rerender));
   const rtCard = root.querySelector('#routine-toggle').closest('.card');
   rtCard.classList.toggle('collapsed', !routinesOpen);

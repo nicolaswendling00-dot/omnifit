@@ -56,7 +56,10 @@ assert(pages.home.querySelector('.home-weight'), 'Accueil : carte poids');
 // Récap : calories, coach, poids, activité, eau
 assert(pages.home.querySelectorAll('.stat-card').length === 5, 'Accueil : 5 cartes récap');
 assert(pages.home.querySelector('.home-kcal') && pages.home.querySelector('.home-activity'), 'Accueil : cartes calories et activité');
-assert(pages.home.querySelectorAll('.hk-macro').length === 3, 'Accueil : macros détaillées sous les calories');
+// Répartition des macros en anneau : 3 arcs + fond
+assert(pages.home.querySelector('.hk-donut'), 'Accueil : répartition des macros en anneau');
+assert(pages.home.querySelectorAll('.hk-donut-legend span').length === 3, 'Accueil : légende P/G/L de l\'anneau');
+assert(!pages.home.querySelector('.hk-macro-bar'), 'Accueil : plus de barres de macro');
 assert(pages.home.querySelector('.coach-card'), 'Accueil : coach déplacé sur l\'accueil');
 // Le graphique s'ouvre en touchant la carte Poids (plus de bouton dédié)
 assert(!pages.home.querySelector('#weight-chart'), 'Accueil : graphique en modal seulement');
@@ -164,7 +167,12 @@ store.deleteRecipe('rec1');
 assert(store.userData.recipes.length === 0, 'deleteRecipe fonctionne');
 
 console.log('== Séance : résumé avec coefficients d\'atténuation ==');
+// Nouvelle séance : on choisit d'abord routine ou séance vide
 pages.workout.querySelector('#btn-new-session').click();
+const startSheet = [...document.querySelectorAll('.sheet')].find((s) => s.querySelector('.ns-list'));
+assert(startSheet, 'Séance : choix routine / séance vide au démarrage');
+assert(startSheet.querySelector('.ns-empty'), 'Séance : option « séance vide » proposée');
+startSheet.querySelector('.ns-empty').click();
 const overlay = document.querySelector('.session-overlay');
 overlay.querySelector('#s-add-exo').click();
 const picker = document.querySelector('.picker-overlay');
@@ -497,7 +505,9 @@ home.render(pages.home);
 pages.home.querySelector('#home-weight').click();
 const chartModal = document.querySelector('.modal');
 assert(chartModal && chartModal.querySelector('#weight-chart'), 'Poids : la carte ouvre la fenêtre du graphique');
-assert(chartModal.querySelector('#btn-log-weight') && chartModal.querySelector('#btn-edit-goal'), 'Poids : actions présentes dans la fenêtre');
+// Plus d'objectif de poids : on s'arrête quand on est satisfait, pas à un chiffre
+assert(chartModal.querySelector('#btn-log-weight'), 'Poids : ajout d\'une pesée dans la fenêtre');
+assert(!chartModal.querySelector('#btn-edit-goal'), 'Poids : plus de bouton objectif');
 assert(chartModal.querySelectorAll('#w-range button').length === 4, 'Poids : plages 1 mois / 3 mois / 1 an / tout');
 // Style de courbe : aucun point, interpolation monotone, graduations sobres
 const wDs = lastChartCfg.data.datasets[0];

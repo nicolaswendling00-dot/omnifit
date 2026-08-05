@@ -12,38 +12,35 @@ let weightChart = null;
 let smaVisible = true;
 let caloriesVisible = false;
 
-function goalProgress() {
-  const { goal, profile, weights } = store.userData;
-  const start = weights.length ? weights[0].value : profile.weight;
-  const current = weights.length ? weights[weights.length - 1].value : profile.weight;
-  const target = goal.targetWeight;
-  if (start === target) return 1;
-  return Math.min(1, Math.max(0, (current - start) / (target - start)));
-}
-
-function openGoalModal(rerender) {
+// Choix de la phase en cours. Il n'y a volontairement PAS de poids cible :
+// on s'arrête quand on est satisfait de son physique, pas à un chiffre.
+// C'est cette phase qui pilote le coach (sens attendu de la variation de poids).
+export function openGoalModal(rerender) {
   const { goal } = store.userData;
-  const form = el(`<div class="field-stack">
-    <label class="field"><span>Objectif</span>
-      <select id="g-type">${['Perte de poids', 'Prise de muscle', 'Recomposition'].map((t) => `<option ${t === goal.type ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
-    <label class="field"><span>Poids cible (kg)</span><input id="g-weight" type="number" step="0.1" inputmode="decimal" value="${goal.targetWeight}"></label>
+  const CHOIX = [
+    { v: 'Perte de poids', t: 'Sèche', d: 'Perdre du gras, poids en baisse régulière' },
+    { v: 'Recomposition', t: 'Maintenance', d: 'Poids stable, recomposition corporelle' },
+    { v: 'Prise de muscle', t: 'Prise de masse', d: 'Construire du muscle, poids en hausse' },
+  ];
+  const form = el(`<div class="goal-choices">
+    ${CHOIX.map((c) => `<button class="goal-choice${c.v === goal.type ? ' active' : ''}" data-v="${c.v}">
+      <span class="goal-choice-t">${c.t}</span>
+      <span class="goal-choice-d">${c.d}</span>
+    </button>`).join('')}
   </div>`);
-  openModal({
-    title: 'Objectif',
-    content: form,
-    actions: [
-      { label: 'Annuler' },
-      {
-        label: 'Enregistrer', variant: 'btn-primary',
-        onClick: (body) => {
-          store.saveUserData({ goal: {
-            type: body.querySelector('#g-type').value,
-            targetWeight: parseFloat(body.querySelector('#g-weight').value) || goal.targetWeight,
-          } });
-          rerender();
-        },
-      },
-    ],
+  const m = openModal({ title: 'Mon objectif', content: form, actions: [] });
+  form.addEventListener('click', (e) => {
+    const b = e.target.closest('.goal-choice');
+    if (!b) return;
+    // saveUserData fusionne en profondeur : on retire explicitement les restes
+    // de l'ancien objectif chiffré, qui n'a plus cours.
+    store.saveUserData({ goal: { type: b.dataset.v } });
+    delete store.userData.goal.targetWeight;
+    delete store.userData.goal.targetDate;
+    store.persist();
+    haptic();
+    m.close();
+    if (rerender) rerender();
   });
 }
 
@@ -86,7 +83,6 @@ function openChartModal(rerender) {
     </div>
     <div class="w-modal-actions">
       <button class="btn btn-primary btn-sm" id="btn-log-weight">${icons.plus} Ajouter une pesée</button>
-      <button class="btn btn-secondary btn-sm" id="btn-edit-goal">${icons.edit} Objectif</button>
     </div>
     <h3 style="margin:14px 0 4px">Entrées récentes</h3>
     <div id="w-recent">${recent.length ? '' : '<div class="empty-state">Aucune pesée</div>'}</div>
@@ -115,10 +111,6 @@ function openChartModal(rerender) {
   content.querySelector('#btn-log-weight').addEventListener('click', () => {
     modal.close();
     openLogWeightModal(rerender || (() => {}));
-  });
-  content.querySelector('#btn-edit-goal').addEventListener('click', () => {
-    modal.close();
-    openGoalModal(rerender || (() => {}));
   });
   content.querySelector('#btn-toggle-sma').addEventListener('click', (e) => {
     smaVisible = !smaVisible;
@@ -196,13 +188,23 @@ function renderWeightChart(canvas) {
 }
 
 function openGlobalRankModal(gr) {
-  const content = el(`<div>
-    <div class="grd-row"><span>Rang</span><b style="color:${gr.rank.color}">${gr.rank.division ? `${gr.rank.name} ${gr.rank.division}` : gr.rank.name}</b></div>
-    <div class="grd-row"><span>LP</span><b>${gr.lp}</b></div>
-    <div class="grd-row"><span>Série en cours</span><b>${gr.streak} j</b></div>
-    ${gr.lastSeasonPeak > 0 ? `<div class="grd-row"><span>Pic saison ${gr.season - 1}</span><b>${rankFromLP(gr.lastSeasonPeak).name}</b></div>` : ''}
+  const label = gr.rank.division ? `${gr.rank.name} ${gr.rank.division}` : gr.rank.name;
+  const pct = gr.rank.lpNeeded ? Math.round((gr.rank.lp / gr.rank.lpNeeded) * 100) : 100;
+  // Le badge en grand : c'est lui qu'on vient chercher, il doit dominer l'écran.
+  const content = el(`<div class="grd">
+    <div class="grd-hero">
+      ${rankBadge(gr.rank.id, 190)}
+      <div class="grd-name" style="color:${gr.rank.color}">${label}</div>
+      <div class="grd-lp">${gr.rank.lpNeeded ? `${gr.rank.lp} / ${gr.rank.lpNeeded} LP` : `${gr.rank.lp} LP`}</div>
+      ${gr.rank.lpNeeded ? `<div class="grd-bar"><i style="width:${pct}%;background:${gr.rank.color}"></i></div>` : '<div class="grd-ultime">Rang ultime atteint</div>'}
+    </div>
+    <div class="grd-stats">
+      <div class="grd-row"><span>LP totaux</span><b>${gr.lp}</b></div>
+      <div class="grd-row"><span>Série en cours</span><b>${gr.streak} j</b></div>
+      ${gr.lastSeasonPeak > 0 ? `<div class="grd-row"><span>Pic saison ${gr.season - 1}</span><b>${rankFromLP(gr.lastSeasonPeak).name}</b></div>` : ''}
+    </div>
   </div>`);
-  openModal({ title: 'Rang global', content, actions: [{ label: 'Fermer' }] });
+  openModal({ title: 'Rang global', content, wide: true, actions: [{ label: 'Fermer' }] });
 }
 
 // Couleurs macros, alignées sur l'onglet Nutrition
@@ -210,14 +212,58 @@ const C_PROT = '#FB923C';
 const C_CARB = '#38BDF8';
 const C_FAT = '#8B5CF6';
 
-// Ligne de macro : libellé à gauche, consommé/objectif à droite, jauge en
-// dessous sur toute la largeur. Empilées, elles se lisent d'un coup d'œil.
-function macroBar(label, done, goal, color) {
-  const pct = goal ? Math.min(100, Math.round((done / goal) * 100)) : 0;
-  return `<div class="hk-macro">
-    <div class="hk-macro-top"><span>${label}</span><span class="num">${Math.round(done)}<i>/${goal}g</i></span></div>
-    <div class="hk-macro-bar"><i style="width:${pct}%;background:${color}"></i></div>
-  </div>`;
+// Répartition des macros en anneau : chaque part correspond à la CONTRIBUTION
+// CALORIQUE du macronutriment (prot ×4, gluc ×4, lip ×9), pas à sa masse — un
+// gramme de lipide pèse deux fois plus dans l'assiette énergétique.
+// Dessiné en arcs SVG dans le style de l'app (anneau fin, couleurs macros).
+function macroDonut(prot, carbs, fat, size = 92) {
+  const kP = (prot || 0) * 4;
+  const kC = (carbs || 0) * 4;
+  const kF = (fat || 0) * 9;
+  const total = kP + kC + kF;
+  const stroke = 11;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const cx = size / 2;
+
+  const parts = [
+    { k: kP, color: C_PROT, label: 'P' },
+    { k: kC, color: C_CARB, label: 'G' },
+    { k: kF, color: C_FAT, label: 'L' },
+  ];
+
+  // Légende toujours présente (0 % si rien n'est consommé) : la carte garde
+  // ainsi la même taille tout au long de la journée.
+  const pct = (k) => (total ? Math.round((k / total) * 100) : 0);
+  const legend = `<div class="hk-donut-legend">
+      <span style="color:${C_PROT}">P ${pct(kP)}%</span>
+      <span style="color:${C_CARB}">G ${pct(kC)}%</span>
+      <span style="color:${C_FAT}">L ${pct(kF)}%</span>
+    </div>`;
+
+  // Rien de consommé : anneau creux, pas de camembert trompeur.
+  if (!total) {
+    return `<div class="hk-donut">
+      <svg viewBox="0 0 ${size} ${size}" role="img" aria-label="Répartition des macros">
+        <circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="rgba(var(--accent-rgb),0.14)" stroke-width="${stroke}"/>
+      </svg>${legend}</div>`;
+  }
+
+  let offset = 0;
+  const arcs = parts.filter((p) => p.k > 0).map((p) => {
+    const len = (p.k / total) * c;
+    const seg = `<circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="${p.color}"
+      stroke-width="${stroke}" stroke-dasharray="${len.toFixed(2)} ${(c - len).toFixed(2)}"
+      stroke-dashoffset="${(-offset).toFixed(2)}" transform="rotate(-90 ${cx} ${cx})"/>`;
+    offset += len;
+    return seg;
+  }).join('');
+
+  return `<div class="hk-donut">
+    <svg viewBox="0 0 ${size} ${size}" role="img" aria-label="Répartition calorique des macros">
+      <circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="rgba(var(--accent-rgb),0.10)" stroke-width="${stroke}"/>
+      ${arcs}
+    </svg>${legend}</div>`;
 }
 
 // Chemin lissé passant par une série de points (spline de Catmull-Rom convertie
@@ -337,11 +383,7 @@ export function render(container) {
           <span class="num hk-big">${Math.round(totals.kcal)}</span>
           <span class="hk-goal">/ ${mg.kcalGoal} kcal</span>
         </div>
-        <div class="hk-macros">
-          ${macroBar('Prot', totals.prot, mg.protG, C_PROT)}
-          ${macroBar('Gluc', totals.carbs, mg.carbsG, C_CARB)}
-          ${macroBar('Lip', totals.fat, mg.fatG, C_FAT)}
-        </div>
+        ${macroDonut(totals.prot, totals.carbs, totals.fat)}
       </div>
       <div id="coach-host"></div>
       </div>
@@ -396,11 +438,18 @@ export function render(container) {
   const coachHost = container.querySelector('#coach-host');
   if (coachHost) {
     const coachEl = renderCoachCard(rerender, { compact: true });
-    if (coachEl) coachHost.replaceWith(coachEl);
-    else coachHost.replaceWith(el(`<div class="card stat-card coach-card coach-empty">
+    const card = coachEl || el(`<div class="card stat-card coach-card coach-empty">
       <div class="coach-head"><span class="coach-title">${icons.flame} Coach</span></div>
-      <div class="coach-msg-empty">Pèse-toi régulièrement pendant ~2 semaines pour activer les conseils d'ajustement.</div>
-    </div>`));
+      <div class="coach-msg-empty">Pèse-toi pendant 5 jours pour activer les conseils d'ajustement.</div>
+    </div>`);
+    // Toucher le coach ouvre le choix de phase (sèche / maintenance / prise) :
+    // c'est ce réglage qui détermine ses conseils.
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.coach-btn')) return; // les boutons d'ajustement gardent leur action
+      openGoalModal(rerender);
+    });
+    card.style.cursor = 'pointer';
+    coachHost.replaceWith(card);
   }
 
 }

@@ -159,15 +159,15 @@ function goalDirection(goalType) {
 }
 
 // opts = { weights:[{date,value}], intakeByDate:{date:kcal}, goalType, today,
-//          bodyweight, windowDays=21, lastAdjustDate=null, cooldownDays=10 }
+//          bodyweight, windowDays=5, lastAdjustDate=null, cooldownDays=5 }
 // Retour : { status, weeklyRateKg, daysSpan, nWeights, avgIntake, nFoodDays,
 //            maintenanceEst, suggestedDelta, direction, stallThreshold, daysSinceAdjust }
 //   status ∈ 'insufficient' | 'on_track' | 'plateau' | 'overshoot' | 'hold' | 'cooldown'
 export function metabolicInsight(opts = {}) {
   const {
     weights = [], intakeByDate = {}, goalType = 'Recomposition',
-    today = null, bodyweight = 0, windowDays = 21,
-    lastAdjustDate = null, cooldownDays = 10,
+    today = null, bodyweight = 0, windowDays = 5,
+    lastAdjustDate = null, cooldownDays = 5,
   } = opts;
 
   const dir = goalDirection(goalType);
@@ -192,9 +192,9 @@ export function metabolicInsight(opts = {}) {
   const bw = bodyweight || (nWeights ? pts[nWeights - 1].y : 0);
   base.nWeights = nWeights; base.daysSpan = daysSpan;
 
-  // Assez de pesées, assez étalées, pour dégager une tendance fiable.
-  const MIN_WEIGHTS = 4;
-  const MIN_SPAN = 10;
+  // Fenêtre courte : 5 jours de suivi suffisent à déclencher le coach.
+  const MIN_WEIGHTS = 3;
+  const MIN_SPAN = 4;
   if (nWeights < MIN_WEIGHTS || daysSpan < MIN_SPAN) return base;
 
   // Régression linéaire : pente en kg/jour → kg/semaine.
@@ -214,7 +214,7 @@ export function metabolicInsight(opts = {}) {
     return dn > minDay && dn < todayN && intakeByDate[d] > 0;
   });
   const nFoodDays = foodDays.length;
-  const MIN_FOOD_DAYS = 8;
+  const MIN_FOOD_DAYS = 3;
   let avgIntake = null; let maintenanceEst = null;
   if (nFoodDays >= MIN_FOOD_DAYS) {
     avgIntake = Math.round(foodDays.reduce((a, d) => a + intakeByDate[d], 0) / nFoodDays);

@@ -1103,6 +1103,55 @@ body.shape-8bit .gr-progress i, body.shape-8bit .progress-bar > div {
 .w-modal-actions { display: flex; gap: 8px; margin-top: 10px; }
 .w-modal-actions .btn { flex: 1 1 0; min-width: 0; }
 
+/* ---------- Liseré dégradé rose → bleu ----------
+   Marqueur visuel réutilisable, posé en tête d'une carte pour signaler ses
+   sections principales (repas du jour, calendrier d'entraînement…). */
+.grad-bar {
+  height: 3px; border-radius: 3px; flex: none;
+  background: linear-gradient(90deg, #F472B6, #38BDF8);
+  margin: -4px 0 12px;
+}
+.card > .grad-bar:first-child { margin-top: 0; }
+
+/* --- Répartition des macros en anneau --- */
+.hk-donut { display: flex; align-items: center; gap: 12px; margin-top: auto; }
+.hk-donut svg { width: clamp(64px, 22vw, 92px); height: auto; flex: none; }
+.hk-donut-mid { fill: var(--text-2); font-size: 14px; font-weight: 700; font-family: 'Inter', system-ui, sans-serif; }
+.hk-donut-legend { display: flex; flex-direction: column; gap: 5px; font-size: 0.72rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* --- Choix de l'objectif (sèche / maintenance / prise) --- */
+.goal-choices { display: flex; flex-direction: column; gap: 10px; }
+.goal-choice {
+  display: flex; flex-direction: column; gap: 3px; text-align: left; width: 100%;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-btn);
+  color: var(--text); font-family: inherit; padding: 14px; cursor: pointer;
+}
+.goal-choice.active { border-color: var(--accent); background: rgba(var(--accent-rgb), 0.10); }
+.goal-choice-t { font-size: 1rem; font-weight: 800; }
+.goal-choice-d { font-size: 0.76rem; color: var(--text-2); }
+
+/* --- Rang global en grand --- */
+.grd-hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 4px 0 14px; }
+.grd-hero svg { max-width: 62vw; height: auto; }
+.grd-name { font-size: 1.5rem; font-weight: 800; letter-spacing: 0.02em; }
+.grd-lp { font-size: 0.88rem; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.grd-bar { width: 70%; height: 6px; border-radius: 4px; background: var(--surface-2); overflow: hidden; margin-top: 4px; }
+.grd-bar i { display: block; height: 100%; border-radius: 4px; }
+.grd-ultime { font-size: 0.78rem; color: var(--accent); font-weight: 700; }
+.grd-stats { border-top: 1px solid var(--border); padding-top: 10px; }
+
+/* --- Choix au démarrage d'une séance --- */
+.ns-list { display: flex; flex-direction: column; gap: 10px; }
+.ns-item {
+  display: flex; flex-direction: column; gap: 3px; text-align: left; width: 100%;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-btn);
+  color: var(--text); font-family: inherit; padding: 13px 14px; cursor: pointer;
+}
+.ns-item:active { border-color: var(--accent); }
+.ns-item-t { font-size: 0.95rem; font-weight: 800; }
+.ns-item-d { font-size: 0.74rem; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; }
+.ns-empty { border-style: dashed; }
+
 /* --- Calories : le chiffre, puis les macros empilées --- */
 .home-kcal { display: flex; flex-direction: column; gap: 8px; }
 .hk-numbers { display: flex; align-items: baseline; gap: 6px; min-width: 0; flex-wrap: wrap; }

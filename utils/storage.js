@@ -14,7 +14,9 @@ export function todayISO(offset = 0) {
 function defaultUserData() {
   return {
     profile: { name: '', age: 25, weight: 75, height: 178, sex: 'M' },
-    goal: { type: 'Prise de muscle', targetWeight: 80, targetDate: todayISO(90) },
+    // Pas de poids cible : on choisit une PHASE (sèche / maintenance / prise),
+    // on s'arrête quand on est satisfait de son physique, pas à un chiffre.
+    goal: { type: 'Prise de muscle' },
     settings: {
       calorieGoal: 2500,
       calorieAuto: true,
