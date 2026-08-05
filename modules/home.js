@@ -1,7 +1,7 @@
 // OmniFit — PAGE 0 : Accueil (stats d'abord, poids ensuite, graphique en modal)
 import { store, todayISO } from '../utils/storage.js';
 import { calculateSMA } from '../utils/math.js';
-import { el, icons, openModal, toast, ringSVG, haptic, makeChart } from '../utils/ui.js';
+import { el, icons, openModal, toast, ringSVG, haptic, makeChart, fmtDateFull, attachSwipeToDelete } from '../utils/ui.js';
 import { lineChartOptions, lineDataset } from '../utils/charts.js';
 import { goToPage, PAGE_NUTRITION, PAGE_ACTIVITY } from '../utils/nav.js';
 import { macroGoals, renderCoachCard } from './nutrition.js';
@@ -169,14 +169,35 @@ function openChartModal(rerender) {
     draw();
   });
   const rec = content.querySelector('#w-recent');
-  for (const w of recent) {
-    const row = el(`<div class="steps-list-item" style="cursor:pointer">
-      <span>${w.date}</span>
-      <span class="num" style="color:var(--accent)">${w.value} kg</span>
-    </div>`);
-    row.addEventListener('click', () => openLogWeightModal(rerender || (() => draw()), { date: w.date, value: w.value }));
-    rec.appendChild(row);
-  }
+  const drawRecent = () => {
+    const list = [...store.userData.weights].slice(-8).reverse();
+    rec.innerHTML = list.length ? '' : '<div class="empty-state">Aucune pesée</div>';
+    for (const w of list) {
+      // Glisser vers la gauche révèle la poubelle, comme pour un repas.
+      const row = el(`<div class="swipe-row" data-date="${w.date}">
+        <button class="swipe-del" data-del aria-label="Supprimer la pesée">${icons.trash}</button>
+        <div class="steps-list-item swipe-content">
+          <span>${fmtDateFull(w.date)}</span>
+          <span class="num" style="color:var(--accent)">${w.value} kg</span>
+        </div>
+      </div>`);
+      row.querySelector('.swipe-content').addEventListener('click', () => {
+        if (row.classList.contains('swiped')) return; // poubelle ouverte : on ne modifie pas
+        openLogWeightModal(() => { drawRecent(); draw(); if (rerender) rerender(); }, { date: w.date, value: w.value });
+      });
+      row.querySelector('[data-del]').addEventListener('click', () => {
+        store.removeWeightLog(w.date);
+        haptic();
+        toast('Pesée supprimée', 'success');
+        drawRecent();
+        draw();
+        if (rerender) rerender();
+      });
+      rec.appendChild(row);
+    }
+  };
+  drawRecent();
+  attachSwipeToDelete(rec, { rowSelector: '.swipe-row', contentSelector: '.swipe-content' });
   draw();
 }
 

@@ -923,6 +923,7 @@ function openSupersetSheet(idx) {
 function openStartSessionSheet(rerender) {
   const routines = store.userData.routines || [];
   const form = el(`<div class="ns-list">
+    <button class="ns-item ns-empty" data-r="">${icons.plus} Séance vide</button>
     ${routines.map((r) => {
       const noms = r.exercises.map((id) => (exerciseLookup(id) || { name: id }).name);
       return `<button class="ns-item" data-r="${r.id}">
@@ -930,7 +931,6 @@ function openStartSessionSheet(rerender) {
         ${noms.length ? `<span class="ns-item-exos">${noms.map((n) => `<i>${esc(n)}</i>`).join('')}</span>` : ''}
       </button>`;
     }).join('')}
-    <button class="ns-item ns-empty" data-r="">${icons.plus} Séance vide</button>
   </div>`);
   const sheet = openSheet({ title: 'Nouvelle séance', content: form });
   form.addEventListener('click', (e) => {

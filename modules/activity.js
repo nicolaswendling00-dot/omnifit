@@ -1,7 +1,7 @@
 // OmniFit — PAGE 3 : Activité (pas)
 import { store, todayISO, parseStepsPayload } from '../utils/storage.js';
 import { calculateTrend } from '../utils/math.js';
-import { el, icons, openModal, openSheet, toast, ringSVG, fmtDateShort, haptic, makeChart } from '../utils/ui.js';
+import { el, icons, openModal, openSheet, toast, ringSVG, fmtDateShort, haptic, makeChart, attachSwipeToDelete } from '../utils/ui.js';
 
 let stepsChart = null;
 let viewDays = 7;
@@ -291,17 +291,31 @@ export function render(container) {
     hasAny = true;
     const prev = store.userData.steps.byDate[todayISO(-i - 1)];
     const delta = prev != null ? v - prev : null;
-    const item = el(`<div class="steps-list-item" style="cursor:pointer">
-      <span>${fmtDateShort(d)}</span>
-      <span>
-        <span class="num">${v.toLocaleString('fr-FR')}</span>
-        ${delta != null ? `<span class="${delta >= 0 ? 'delta-up' : 'delta-down'}"> ${delta >= 0 ? '+' : ''}${delta.toLocaleString('fr-FR')}</span>` : ''}
-      </span>
+    // Glisser vers la gauche révèle la poubelle, comme pour un repas.
+    const item = el(`<div class="swipe-row" data-date="${d}">
+      <button class="swipe-del" data-del aria-label="Supprimer le relevé">${icons.trash}</button>
+      <div class="steps-list-item swipe-content">
+        <span>${fmtDateShort(d)}</span>
+        <span>
+          <span class="num">${v.toLocaleString('fr-FR')}</span>
+          ${delta != null ? `<span class="${delta >= 0 ? 'delta-up' : 'delta-down'}"> ${delta >= 0 ? '+' : ''}${delta.toLocaleString('fr-FR')}</span>` : ''}
+        </span>
+      </div>
     </div>`);
-    item.addEventListener('click', () => openLogStepsModal(rerender, { date: d, count: v }));
+    item.querySelector('.swipe-content').addEventListener('click', () => {
+      if (item.classList.contains('swiped')) return; // poubelle ouverte : on ne modifie pas
+      openLogStepsModal(rerender, { date: d, count: v });
+    });
+    item.querySelector('[data-del]').addEventListener('click', () => {
+      store.removeStepsLog(d);
+      haptic();
+      toast('Relevé supprimé', 'success');
+      rerender();
+    });
     list.appendChild(item);
   });
   if (!hasAny) list.innerHTML = '<div class="empty-state">Aucun log de pas.</div>';
+  attachSwipeToDelete(list, { rowSelector: '.swipe-row', contentSelector: '.swipe-content' });
 
   container.querySelector('#btn-log-steps').addEventListener('click', () => openLogStepsModal(rerender));
   container.querySelector('#btn-step-goal').addEventListener('click', () => openStepGoalModal(rerender));

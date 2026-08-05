@@ -683,5 +683,43 @@ console.log('== v4.7 : les objectifs passés ne bougent plus ==');
   assert(store.userData.nutrition.byDate[hier].goal.kcalGoal === avant, 'Objectif : un jour déjà figé n\'est jamais réécrit');
 }
 
+console.log('== v5.2 : suppression des pesées et relevés de pas ==');
+{
+  // Pesées : suppression + repli du poids de profil
+  store.userData.weights = [
+    { date: todayISO(-2), value: 79 },
+    { date: todayISO(-1), value: 78.5 },
+    { date: todayISO(), value: 78 },
+  ];
+  store.userData.profile.weight = 78;
+  store.removeWeightLog(todayISO());
+  assert(store.userData.weights.length === 2, 'Poids : la pesée est retirée');
+  assert(!store.userData.weights.some((w) => w.date === todayISO()), 'Poids : la bonne date est retirée');
+  assert(store.userData.profile.weight === 78.5, 'Poids : le profil retombe sur la pesée restante la plus récente');
+
+  // Pas : suppression du relevé et de son objectif figé
+  store.userData.steps.byDate[todayISO()] = 8000;
+  store.userData.steps.goalByDate[todayISO()] = 10000;
+  store.removeStepsLog(todayISO());
+  assert(store.userData.steps.byDate[todayISO()] === undefined, 'Pas : le relevé est retiré');
+  assert(store.userData.steps.goalByDate[todayISO()] === undefined, 'Pas : l\'objectif figé du jour est retiré');
+
+  // Rendu : les lignes sont bien glissables avec une poubelle
+  store.userData.steps.byDate[todayISO(-1)] = 7500;
+  activity.render(pages.activity);
+  const stepRow = pages.activity.querySelector('#steps-list .swipe-row');
+  assert(stepRow && stepRow.querySelector('.swipe-del'), 'Pas : ligne glissable avec poubelle');
+  assert(stepRow.querySelector('.swipe-content'), 'Pas : contenu séparé pour le glissement');
+
+  // Séance vide en tête du menu de démarrage
+  clearOverlays();
+  workout.render(pages.workout);
+  pages.workout.querySelector('#btn-new-session').click();
+  const nsSheet = [...document.querySelectorAll('.sheet')].find((s) => s.querySelector('.ns-list'));
+  const first = nsSheet.querySelector('.ns-list').firstElementChild;
+  assert(first && first.classList.contains('ns-empty'), 'Séance : « séance vide » en haut de la liste');
+  clearOverlays();
+}
+
 console.log(`\n===== RÉSULTAT : ${pass} OK / ${fail} FAIL =====`);
 process.exit(fail ? 1 : 0);

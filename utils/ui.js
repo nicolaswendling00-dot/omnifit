@@ -375,6 +375,76 @@ export function normalizeStr(s) {
   return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 }
 
+// ---------- Glisser pour supprimer ----------
+// Révèle une poubelle en glissant une ligne vers la gauche. Le même geste sert
+// aux repas, aux séries, aux exercices custom, aux pesées et aux relevés de pas :
+// on le centralise ici plutôt que d'en recopier la mécanique à chaque liste.
+//
+//   list            : conteneur qui reçoit les écouteurs (délégation)
+//   rowSelector     : sélecteur d'une ligne glissable
+//   contentSelector : partie qui se déplace, DOIT avoir un fond opaque
+//   width           : largeur révélée (px)
+//
+// Une seule ligne reste ouverte à la fois. La classe `swiped` est posée sur la
+// ligne ouverte : les gestionnaires de clic peuvent l'inspecter pour ignorer un
+// tap destiné à refermer la poubelle.
+export function attachSwipeToDelete(list, { rowSelector, contentSelector, width = 76 } = {}) {
+  if (!list) return;
+  let row = null; let startX = 0; let startY = 0; let dx = 0; let mode = null;
+  let openRow = null;
+  const contentOf = (r) => r.querySelector(contentSelector);
+  const closeOpen = (except) => {
+    if (openRow && openRow !== except) {
+      const c = contentOf(openRow);
+      if (c) c.style.transform = '';
+      openRow.classList.remove('swiped');
+      openRow = null;
+    }
+  };
+
+  list.addEventListener('touchstart', (e) => {
+    const r = e.target.closest(rowSelector);
+    closeOpen(r);
+    if (!r) { row = null; return; }
+    row = r; startX = e.touches[0].clientX; startY = e.touches[0].clientY; dx = 0; mode = null;
+  }, { passive: true });
+
+  list.addEventListener('touchmove', (e) => {
+    if (!row) return;
+    dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+    if (mode === null) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      mode = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
+    }
+    if (mode !== 'h') return;
+    e.preventDefault(); // bloque le défilement vertical pendant le glissement
+    const base = row.classList.contains('swiped') ? -width : 0;
+    const t = Math.max(-width, Math.min(0, base + dx));
+    const c = contentOf(row);
+    if (c) c.style.transform = `translateX(${t}px)`;
+  }, { passive: false });
+
+  const end = () => {
+    if (!row || mode !== 'h') { row = null; mode = null; return; }
+    const c = contentOf(row);
+    const wasOpen = row.classList.contains('swiped');
+    const open = wasOpen ? dx < 40 : dx < -40;
+    if (open) {
+      if (c) c.style.transform = `translateX(${-width}px)`;
+      row.classList.add('swiped');
+      openRow = row;
+    } else {
+      if (c) c.style.transform = '';
+      row.classList.remove('swiped');
+      if (openRow === row) openRow = null;
+    }
+    row = null; mode = null;
+  };
+  list.addEventListener('touchend', end, { passive: true });
+  list.addEventListener('touchcancel', end, { passive: true });
+}
+
 // ---------- Graphiques ----------
 // Crée un graphique en détruisant systématiquement l'instance précédente (sinon
 // Chart.js garde le canvas et ses écouteurs en mémoire à chaque re-rendu).

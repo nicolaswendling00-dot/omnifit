@@ -484,6 +484,22 @@ canvas { max-width: 100%; }
 /* Bouton « Ajouter une série » sous chaque exercice de la séance */
 .sr-add { width: 100%; margin-top: 6px; color: var(--accent); }
 
+/* Ligne glissable générique (pesées, relevés de pas) : la poubelle est dessous,
+   le contenu la recouvre. Un fond OPAQUE est indispensable, sinon le rouge
+   transparaît en permanence. */
+.swipe-row { position: relative; overflow: hidden; border-radius: 10px; touch-action: pan-y; }
+.swipe-row .swipe-content {
+  position: relative; z-index: 1; cursor: pointer;
+  background: var(--surface);
+  transition: transform 180ms var(--ease);
+}
+.swipe-del {
+  position: absolute; top: 0; right: 0; bottom: 0; width: 70px; z-index: 0;
+  border: none; border-radius: 10px; background: var(--danger); color: #fff;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.swipe-del svg { width: 22px; height: 22px; }
+
 /* Exercice custom glissable pour révéler la poubelle */
 .exo-swipe-row { position: relative; overflow: hidden; border-radius: 10px; touch-action: pan-y; margin-bottom: 6px; }
 .exo-swipe-row .exo-search-item {

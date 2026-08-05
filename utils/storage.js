@@ -210,6 +210,22 @@ class StorageManager {
     this.persist();
   }
 
+  // Retire la pesée d'une date. `profile.weight` retombe sur la pesée la plus
+  // récente restante : il sert de repli partout où l'historique est vide.
+  removeWeightLog(date) {
+    this.userData.weights = this.userData.weights.filter((w) => w.date !== date);
+    const last = this.userData.weights[this.userData.weights.length - 1];
+    if (last) this.userData.profile.weight = last.value;
+    this.persist();
+  }
+
+  // Retire le relevé de pas d'une date (et son objectif figé associé).
+  removeStepsLog(date) {
+    delete this.userData.steps.byDate[date];
+    if (this.userData.steps.goalByDate) delete this.userData.steps.goalByDate[date];
+    this.persist();
+  }
+
   addNutritionLog(date, meal) {
     if (!this.userData.nutrition.byDate[date]) {
       this.userData.nutrition.byDate[date] = { meals: [] };
