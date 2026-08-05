@@ -1103,15 +1103,15 @@ body.shape-8bit .gr-progress i, body.shape-8bit .progress-bar > div {
 .w-modal-actions { display: flex; gap: 8px; margin-top: 10px; }
 .w-modal-actions .btn { flex: 1 1 0; min-width: 0; }
 
-/* --- Calories --- */
-.home-kcal { display: flex; flex-direction: column; justify-content: center; gap: 6px; }
-.hk-main { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.hk-numbers { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
-.hk-big { font-size: clamp(1.7rem, 8vw, 2.4rem); line-height: 1; }
-.hk-goal { font-size: 0.8rem; color: var(--text-2); font-weight: 600; }
-.hk-remaining { font-size: 0.76rem; color: var(--text-2); }
-.hk-macros { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 2px; }
-.hk-macro-top { display: flex; justify-content: space-between; align-items: baseline; gap: 4px; font-size: 0.66rem; color: var(--text-2); margin-bottom: 3px; }
+/* --- Calories : le chiffre, puis les macros empilées --- */
+.home-kcal { display: flex; flex-direction: column; gap: 8px; }
+.hk-numbers { display: flex; align-items: baseline; gap: 6px; min-width: 0; flex-wrap: wrap; }
+.hk-big { font-size: clamp(1.6rem, 7.5vw, 2.2rem); line-height: 1; color: var(--accent); }
+.hk-goal { font-size: 0.78rem; color: var(--text-2); font-weight: 600; }
+/* Une macro par ligne, jauge pleine largeur : plus lisible que trois colonnes
+   serrées, et c'est la structure de la maquette. */
+.hk-macros { display: flex; flex-direction: column; gap: 7px; margin-top: auto; }
+.hk-macro-top { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; font-size: 0.68rem; color: var(--text-2); margin-bottom: 3px; }
 .hk-macro-top .num { font-size: 0.72rem; }
 .hk-macro-top i { font-style: normal; color: var(--text-2); font-weight: 500; }
 .hk-macro-bar { height: 4px; border-radius: 3px; background: rgba(var(--accent-rgb), 0.14); overflow: hidden; }
@@ -1123,23 +1123,45 @@ body.shape-8bit .gr-progress i, body.shape-8bit .progress-bar > div {
   position: relative; overflow: hidden; cursor: pointer;
   display: flex; flex-direction: column; min-height: 0;
 }
-/* Graphique et piste tracés EN FOND, sous le contenu chiffré. */
-.hw-bg, .ha-bg { position: absolute; inset: auto 0 0 0; height: 62%; opacity: 0.5; pointer-events: none; }
-.hw-bg svg, .ha-bg svg { width: 100%; height: 100%; display: block; }
-.ha-bg { opacity: 0.9; }
+/* Courbe de poids tracée EN FOND, sous le chiffre. */
+.hw-bg { position: absolute; inset: auto 0 0 0; height: 60%; opacity: 0.55; pointer-events: none; }
+.hw-bg svg { width: 100%; height: 100%; display: block; }
 .hw-content, .ha-content { position: relative; z-index: 1; display: flex; flex-direction: column; height: 100%; gap: 4px; }
-.hw-values, .ha-values { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; margin-top: auto; }
-.hw-label { font-size: 0.6rem; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 1px; }
-.w-now { font-size: clamp(1.3rem, 6vw, 1.7rem); line-height: 1; }
-.w-now small { font-size: 0.6em; color: var(--text-2); margin-left: 2px; }
-.hw-delta { text-align: right; }
-.hw-delta .num { font-size: 1.05rem; color: var(--text-2); }
-.hw-delta .num.down { color: var(--success); }
-.hw-delta .num.up { color: var(--warning); }
-.hw-target, .ha-status { font-size: 0.68rem; color: var(--text-2); margin-top: 4px; }
-.hw-target b { color: var(--accent); }
-.ha-big { font-size: clamp(1.3rem, 6vw, 1.7rem); line-height: 1; }
-.ha-goal { font-size: 1.05rem; color: var(--text-2); }
+.w-now { font-size: clamp(1.5rem, 7vw, 2rem); line-height: 1; color: var(--accent); margin-top: auto; }
+.w-now small { font-size: 0.5em; color: var(--text-2); margin-left: 3px; font-weight: 700; }
+.ha-big { font-size: clamp(1.5rem, 7vw, 2rem); line-height: 1; color: var(--accent); }
+/* La piste de progression occupe le bas de la carte. */
+.ha-track { margin-top: auto; padding: 10px 22px 6px 2px; }
+.ha-line { position: relative; height: 4px; border-radius: 3px; background: rgba(148, 163, 184, 0.22); }
+/* La largeur porte la VRAIE valeur ; seule l'échelle est animée. Ainsi, si
+   l'animation ne se joue pas (navigateur, mouvement réduit), la barre affiche
+   quand même la bonne progression — jamais une barre vide. */
+.ha-fill {
+  display: block; height: 100%; border-radius: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transform-origin: left center;
+  animation: haFill 900ms var(--ease) both;
+}
+@keyframes haFill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+/* Point de tête et repère de l'heure qu'il est */
+.ha-dot {
+  position: absolute; top: 50%; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent); transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 3px var(--surface);
+  animation: haDot 900ms var(--ease) both;
+}
+@keyframes haDot { from { opacity: 0; } to { opacity: 1; } }
+.ha-now {
+  position: absolute; top: -4px; width: 1px; height: 12px;
+  background: repeating-linear-gradient(180deg, var(--text-2) 0 2px, transparent 2px 4px);
+  opacity: 0.55; transform: translateX(-50%);
+}
+.ha-flag {
+  position: absolute; right: -20px; top: 50%; transform: translateY(-50%);
+  width: 12px; height: 16px; color: var(--text-2); opacity: 0.65;
+}
+.ha-flag.done { color: var(--success); opacity: 1; }
+.ha-flag svg { width: 100%; height: 100%; display: block; fill: none; }
 
 /* --- Eau : une ligne compacte --- */
 .home-water { display: flex; align-items: center; gap: 10px; padding: 10px 12px !important; }
@@ -1172,13 +1194,12 @@ body.shape-8bit .gr-progress i, body.shape-8bit .progress-bar > div {
   .home-fit .gr-progress { margin: 7px 0 0; }
   .home-fit .stat-card { padding: 9px 10px; }
   .home-fit .stat-head { font-size: 0.56rem; margin-bottom: 3px; }
-  .hk-remaining { display: none; }
-  .hk-macros { gap: 7px; }
-  .hk-macro-top { font-size: 0.6rem; }
+  .hk-macros { gap: 5px; }
+  .hk-macro-top { font-size: 0.6rem; margin-bottom: 2px; }
   .home-water { padding: 7px 10px !important; }
-  .home-actions .btn { min-height: 34px; font-size: 0.68rem; }
-  .hw-target, .ha-status { font-size: 0.62rem; margin-top: 2px; }
-  .hw-bg, .ha-bg { height: 55%; }
+  .hw-bg { height: 52%; }
+  .ha-track { height: 26px; }
+  .coach-compact .coach-msg { font-size: 0.7rem; }
 }
 
 /* ============================================================

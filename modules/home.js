@@ -210,7 +210,8 @@ const C_PROT = '#FB923C';
 const C_CARB = '#38BDF8';
 const C_FAT = '#8B5CF6';
 
-// Petite barre de macro : libellé, jauge colorée, valeur / objectif.
+// Ligne de macro : libellé à gauche, consommé/objectif à droite, jauge en
+// dessous sur toute la largeur. Empilées, elles se lisent d'un coup d'œil.
 function macroBar(label, done, goal, color) {
   const pct = goal ? Math.min(100, Math.round((done / goal) * 100)) : 0;
   return `<div class="hk-macro">
@@ -275,43 +276,24 @@ function dayProgress() {
   return (d.getHours() * 60 + d.getMinutes()) / 1440;
 }
 
-// Piste de progression des pas tracée en fond : une ligne qui se remplit
-// jusqu'au drapeau d'arrivée, plus un repère à l'avancement de la journée
-// (on voit d'un coup d'œil si on est en avance ou en retard).
+// Piste de progression des pas : une ligne qui se remplit jusqu'au drapeau
+// d'arrivée, avec un repère à l'avancement de la journée (on voit d'un coup
+// d'œil si on est en avance ou en retard).
+// Construite en HTML/CSS et non en SVG étiré : un SVG en
+// `preserveAspectRatio: none` déformerait le drapeau dans une bande large et
+// basse.
 function stepsTrack(ratio, timeRatio) {
   const p = Math.max(0, Math.min(1, ratio || 0));
   const t = Math.max(0, Math.min(1, timeRatio || 0));
-  const W = 100; const H = 40; const y = 26;
-  const x1 = 6; const x2 = 88;              // la ligne s'arrête avant le drapeau
-  const fill = x1 + (x2 - x1) * p;
-  const mark = x1 + (x2 - x1) * t;
   const done = p >= 1;
-  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
-    <line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="var(--text-2)" stroke-opacity="0.25"
-      stroke-width="2.5" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
-    <line class="ha-fill" x1="${x1}" y1="${y}" x2="${fill.toFixed(1)}" y2="${y}"
-      stroke="url(#ha-grad)" stroke-width="2.5" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
-    <defs><linearGradient id="ha-grad" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="var(--accent)"/><stop offset="100%" stop-color="var(--accent-2)"/>
-    </linearGradient></defs>
-    <circle cx="${fill.toFixed(1)}" cy="${y}" r="2.6" fill="var(--accent)"/>
-    <line x1="${mark.toFixed(1)}" y1="${y - 5}" x2="${mark.toFixed(1)}" y2="${y + 5}"
-      stroke="var(--text-2)" stroke-opacity="0.5" stroke-width="1" stroke-dasharray="2 2" vector-effect="non-scaling-stroke"/>
-    <g transform="translate(${x2 + 2} ${y - 12})">
-      <line x1="0" y1="0" x2="0" y2="12" stroke="var(--text-2)" stroke-opacity="0.6" stroke-width="1" vector-effect="non-scaling-stroke"/>
-      <path d="M0 0 L7 2.5 L0 5 Z" fill="${done ? 'var(--success)' : 'var(--text-2)'}" fill-opacity="${done ? '1' : '0.6'}"/>
-    </g>
-  </svg>`;
-}
-
-// Variation de poids sur 7 jours (pesée la plus récente vs la plus proche de J-7)
-function weightDelta7(weights) {
-  if (!weights || weights.length < 2) return 0;
-  const last = weights[weights.length - 1];
-  const target = todayISO(-7);
-  let ref = weights[0];
-  for (const w of weights) { if (w.date <= target) ref = w; }
-  return Math.round((last.value - ref.value) * 10) / 10;
+  return `<div class="ha-line">
+    <i class="ha-fill" style="width:${(p * 100).toFixed(1)}%"></i>
+    <i class="ha-now" style="left:${(t * 100).toFixed(1)}%"></i>
+    <i class="ha-dot" style="left:${(p * 100).toFixed(1)}%"></i>
+    <span class="ha-flag${done ? ' done' : ''}" aria-hidden="true">
+      <svg viewBox="0 0 10 14"><path d="M1 0v14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M1.8 1.2 L9 3.6 L1.8 6 Z" fill="currentColor"/></svg>
+    </span>
+  </div>`;
 }
 
 export function render(container) {
@@ -323,9 +305,6 @@ export function render(container) {
   const steps = store.userData.steps.byDate[today] || 0;
   const stepsGoal = settings.stepsGoal || 10000;
   const water = store.userData.water.byDate[today] || 0;
-  const prog = goalProgress();
-  const kcalLeft = Math.round(mg.kcalGoal - totals.kcal);
-  const wDelta = weightDelta7(store.userData.weights);
   const currentW = store.userData.weights.length
     ? store.userData.weights[store.userData.weights.length - 1].value
     : profile.weight;
@@ -354,14 +333,10 @@ export function render(container) {
       <div class="home-duo home-top-duo">
       <div class="card stat-card home-kcal" id="home-kcal">
         <div class="stat-head">${icons.flame} Calories</div>
-        <div class="hk-main">
-          <div class="hk-numbers">
-            <span class="num hk-big">${Math.round(totals.kcal)}</span>
-            <span class="hk-goal">/ ${mg.kcalGoal} kcal</span>
-          </div>
-          ${ringSVG({ size: 58, stroke: 6, progress: totals.kcal / mg.kcalGoal, color: 'var(--accent)', label: `${Math.round((totals.kcal / mg.kcalGoal) * 100)}%` })}
+        <div class="hk-numbers">
+          <span class="num hk-big">${Math.round(totals.kcal)}</span>
+          <span class="hk-goal">/ ${mg.kcalGoal} kcal</span>
         </div>
-        <div class="hk-remaining">${kcalLeft >= 0 ? `${kcalLeft} kcal restantes` : `${Math.abs(kcalLeft)} kcal au-dessus`}</div>
         <div class="hk-macros">
           ${macroBar('Prot', totals.prot, mg.protG, C_PROT)}
           ${macroBar('Gluc', totals.carbs, mg.carbsG, C_CARB)}
@@ -376,35 +351,18 @@ export function render(container) {
           <div class="hw-bg">${weightSparkline(store.userData.weights)}</div>
           <div class="hw-content">
             <div class="stat-head">${icons.user} Poids</div>
-            <div class="hw-values">
-              <div>
-                <div class="num w-now">${currentW}<small>kg</small></div>
-                <div class="hw-label">Actuel</div>
-              </div>
-              <div class="hw-delta">
-                <div class="num ${wDelta > 0 ? 'up' : wDelta < 0 ? 'down' : ''}">${wDelta > 0 ? '+' : ''}${wDelta.toFixed(1)}</div>
-                <div class="hw-label">7 jours</div>
-              </div>
-            </div>
-            <div class="hw-target">Cible <b>${goal.targetWeight} kg</b> · ${Math.round(prog * 100)}%</div>
+            <div class="num w-now">${currentW}<small>kg</small></div>
           </div>
         </div>
 
         <div class="card stat-card home-activity" id="home-activity">
-          <div class="ha-bg">${stepsTrack(steps / stepsGoal, dayProgress())}</div>
           <div class="ha-content">
             <div class="stat-head">${icons.activity} Activité</div>
-            <div class="ha-values">
-              <div>
-                <div class="num ha-big">${steps.toLocaleString('fr-FR')}</div>
-                <div class="hw-label">Pas</div>
-              </div>
-              <div>
-                <div class="num ha-goal">${stepsGoal.toLocaleString('fr-FR')}</div>
-                <div class="hw-label">Objectif</div>
-              </div>
+            <div class="hk-numbers">
+              <span class="num ha-big">${steps.toLocaleString('fr-FR')}</span>
+              <span class="hk-goal">/ ${stepsGoal.toLocaleString('fr-FR')}</span>
             </div>
-            <div class="ha-status">${steps >= stepsGoal ? 'Objectif atteint 🎯' : `${(stepsGoal - steps).toLocaleString('fr-FR')} pas restants`}</div>
+            <div class="ha-track">${stepsTrack(steps / stepsGoal, dayProgress())}</div>
           </div>
         </div>
       </div>
@@ -445,14 +403,4 @@ export function render(container) {
     </div>`));
   }
 
-  // La ligne de progression des pas se remplit à l'affichage plutôt que
-  // d'apparaître déjà pleine : le remplissage se « joue » sous les yeux.
-  const fill = container.querySelector('.ha-fill');
-  if (fill && typeof fill.animate === 'function') {
-    const x1 = fill.getAttribute('x1');
-    const x2 = fill.getAttribute('x2');
-    try {
-      fill.animate([{ x2: x1 }, { x2 }], { duration: 900, easing: 'cubic-bezier(0.4,0,0.2,1)', fill: 'backwards' });
-    } catch (_) { /* l'animation ne doit jamais empêcher l'affichage */ }
-  }
 }
