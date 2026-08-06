@@ -277,7 +277,7 @@ export function openSheet({ title, content, onClose = null, headerAction = null 
   const close = () => {
     scrim.classList.remove('visible');
     document.body.classList.remove('overlay-open');
-    setTimeout(() => scrim.remove(), 320);
+    setTimeout(() => scrim.remove(), 170);
     if (onClose) onClose();
   };
   scrim.addEventListener('click', (e) => { if (e.target === scrim) close(); });
@@ -349,14 +349,14 @@ export function openSheet({ title, content, onClose = null, headerAction = null 
     const wasDragging = dragging;
     startY = null; dragging = false;
     if (!wasDragging) return;
-    sheet.style.transition = 'transform 260ms var(--ease)';
+    sheet.style.transition = 'transform 130ms var(--ease)';
     if (dy > sheet.offsetHeight / 3) {
       // Au-delà du tiers : on termine la fermeture jusqu'en bas
       setY(sheet.offsetHeight);
-      setTimeout(close, 220);
+      setTimeout(close, 110);
     } else {
       setY(0); // retour en place, le panneau reste ouvert
-      setTimeout(() => { sheet.style.transition = ''; sheet.style.transform = ''; }, 280);
+      setTimeout(() => { sheet.style.transition = ''; sheet.style.transform = ''; }, 150);
     }
   };
   sheet.addEventListener('touchend', endDrag, { passive: true });
@@ -422,12 +422,16 @@ export function attachSwipeToDelete(list, { rowSelector, contentSelector, width 
     const base = row.classList.contains('swiped') ? -width : 0;
     const t = Math.max(-width, Math.min(0, base + dx));
     const c = contentOf(row);
-    if (c) c.style.transform = `translateX(${t}px)`;
+    if (c) {
+      c.style.transition = 'none'; // suivi immédiat du doigt, sans traîne
+      c.style.transform = `translateX(${t}px)`;
+    }
   }, { passive: false });
 
   const end = () => {
     if (!row || mode !== 'h') { row = null; mode = null; return; }
     const c = contentOf(row);
+    if (c) c.style.transition = ''; // la transition reprend pour le calage final
     const wasOpen = row.classList.contains('swiped');
     const open = wasOpen ? dx < 40 : dx < -40;
     if (open) {

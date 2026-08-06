@@ -719,6 +719,16 @@ console.log('== v5.2 : suppression des pesées et relevés de pas ==');
   const first = nsSheet.querySelector('.ns-list').firstElementChild;
   assert(first && first.classList.contains('ns-empty'), 'Séance : « séance vide » en haut de la liste');
   clearOverlays();
+
+  // Le glissement horizontal doit être ABSORBÉ sur les lignes glissables :
+  // sinon app.js le convertit en changement d'onglet et la poubelle ne
+  // s'ouvre jamais. C'est ce qui manquait en v5.2.
+  const appSrc = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+  const absorb = appSrc.match(/const SWIPE_ABSORB_ZONES = '([^']+)'/);
+  assert(absorb, 'Swipe : zones d\'absorption déclarées');
+  for (const sel of ['.swipe-row', '.exo-swipe-row']) {
+    assert(absorb[1].includes(sel), `Swipe : ${sel} absorbe le geste horizontal`);
+  }
 }
 
 console.log(`\n===== RÉSULTAT : ${pass} OK / ${fail} FAIL =====`);

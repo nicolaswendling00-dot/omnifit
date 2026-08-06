@@ -1141,7 +1141,11 @@ function openFoodSearchSheet(rerender, opts = {}) {
         list.appendChild(el(`<div class="fs-cat-head">${esc(p.c)}</div>`));
       }
       const r = presetToRecipe(p);
-      list.appendChild(rowRecipe(r, p.d, onPick ? pickRecipeAsFood : addRecipeDirect));
+      // Même menu que pour une recette personnelle : récap + multiplicateur de
+      // portions, pour pouvoir ajuster avant d'ajouter.
+      list.appendChild(rowRecipe(r, p.d, onPick
+        ? pickRecipeAsFood
+        : () => openRecipeAddSheet(rerender, r, () => cat, (c) => { cat = c; })));
     }
   };
 
@@ -1150,12 +1154,69 @@ function openFoodSearchSheet(rerender, opts = {}) {
     else drawMyRecipes(nq);
   };
 
-  // Le sélecteur de source n'a de sens que dans l'onglet Recettes.
+  // ---- Recherche : on cherche PARTOUT, pas seulement dans l'onglet actif ----
+  // Dès qu'une requête est saisie, on remonte les résultats des trois sources
+  // (historique, base d'aliments, recettes) sous des en-têtes de section. Les
+  // onglets ne servent plus qu'à parcourir une source quand le champ est vide.
+  const drawSearchEverywhere = (nq) => {
+    list.innerHTML = '';
+    let total = 0;
+    const section = (titre, elements) => {
+      if (!elements.length) return;
+      total += elements.length;
+      list.appendChild(el(`<div class="fs-cat-head">${titre}</div>`));
+      for (const e of elements) list.appendChild(e);
+    };
+
+    // Historique — clic = ajout direct, poids repris de la dernière saisie
+    const hist = store.nutritionEntryHistory()
+      .filter((e) => normalizeStr(e.baseName || e.name || '').includes(nq))
+      .slice(0, 40)
+      .map((e) => rowFood(
+        e.baseName || e.name || 'Aliment',
+        e.per100 || { prot: e.prot, carbs: e.carbs, fat: e.fat, fiber: e.fiber },
+        e.weight || 100,
+        ` · dernier : ${e.weight || 100} g`,
+        addDirect,
+      ));
+    section('Historique', hist);
+
+    // Base d'aliments
+    const foods = FOODS
+      .filter((f) => normalizeStr(f.n).includes(nq))
+      .sort((a, b) => a.n.localeCompare(b.n, 'fr'))
+      .slice(0, 60)
+      .map((f) => rowFood(f.n, { prot: f.p, carbs: f.g, fat: f.f, fiber: f.fb || 0 }, 100, ''));
+    section('Aliments', foods);
+
+    if (includeRecipes) {
+      const mine = (store.userData.recipes || [])
+        .filter((r) => normalizeStr(r.name).includes(nq))
+        .map((r) => rowRecipe(r, '', () => openRecipeAddSheet(rerender, r, () => cat, (c) => { cat = c; })));
+      section('Mes recettes', mine);
+
+      const presets = PRESET_RECIPES
+        .filter((p) => normalizeStr(p.n).includes(nq) || normalizeStr(p.c).includes(nq) || normalizeStr(p.d).includes(nq))
+        .slice(0, 40)
+        .map((p) => {
+          const r = presetToRecipe(p);
+          return rowRecipe(r, p.d, () => openRecipeAddSheet(rerender, r, () => cat, (c) => { cat = c; }));
+        });
+      section('Recettes préenregistrées', presets);
+    }
+
+    if (!total) list.innerHTML = '<div class="empty-state">Aucun résultat</div>';
+  };
+
+  // Le sélecteur de source n'a de sens que dans l'onglet Recettes, sans recherche.
   const srcSeg = form.querySelector('#fs-rsrc');
   const draw = () => {
     // Recherche insensible aux accents : « pho » doit trouver « Phở bò ».
     const nq = normalizeStr(query.trim());
-    srcSeg.style.display = tab === 'recipes' ? '' : 'none';
+    const searching = nq.length > 0;
+    srcSeg.style.display = (!searching && tab === 'recipes') ? '' : 'none';
+    form.querySelector('#fs-tabs').style.opacity = searching ? '0.45' : '';
+    if (searching) { drawSearchEverywhere(nq); return; }
     if (tab === 'history') drawHistory(nq);
     else if (tab === 'all') drawAll(nq);
     else drawRecipes(nq);

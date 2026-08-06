@@ -280,7 +280,7 @@ body.shape-amoled .modal-actions .btn { font-size: 0.72rem; letter-spacing: 0.04
   border-radius: var(--r-modal) var(--r-modal) 0 0;
   width: 100%; max-height: 88vh; overflow-y: auto;
   padding-bottom: calc(18px + var(--safe-b));
-  transform: translate3d(0, 100%, 0); transition: transform 300ms ease-out;
+  transform: translate3d(0, 100%, 0); transition: transform 150ms ease-out;
 }
 .sheet-scrim.visible .sheet { transform: translate3d(0, 0, 0); }
 .sheet-handle { width: 42px; height: 4px; background: var(--text-2); opacity: 0.4; border-radius: 4px; margin: 10px auto 4px; }
@@ -1217,11 +1217,6 @@ body.shape-8bit .gr-progress i, body.shape-8bit .progress-bar > div {
   animation: haDot 900ms var(--ease) both;
 }
 @keyframes haDot { from { opacity: 0; } to { opacity: 1; } }
-.ha-now {
-  position: absolute; top: -4px; width: 1px; height: 12px;
-  background: repeating-linear-gradient(180deg, var(--text-2) 0 2px, transparent 2px 4px);
-  opacity: 0.55; transform: translateX(-50%);
-}
 .ha-flag {
   position: absolute; right: -20px; top: 50%; transform: translateY(-50%);
   width: 12px; height: 16px; color: var(--text-2); opacity: 0.65;
@@ -1283,7 +1278,7 @@ body.shape-8bit .gr-progress i, body.shape-8bit .progress-bar > div {
    prefers-reduced-motion.
    ============================================================ */
 /* Sheet : léger rebond à l'ouverture */
-.sheet-scrim.visible .sheet { transition: transform 360ms var(--spring); }
+.sheet-scrim.visible .sheet { transition: transform 180ms var(--spring); }
 /* Modale : petit dépassement d'échelle façon pop */
 .scrim.visible .modal { transition: transform 320ms var(--spring); }
 

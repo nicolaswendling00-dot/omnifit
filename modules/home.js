@@ -382,26 +382,15 @@ function weightSparkline(weights) {
   </svg>`;
 }
 
-// Part de la journée écoulée (0–1), pour situer l'avancement des pas par
-// rapport à l'heure qu'il est.
-function dayProgress() {
-  const d = new Date();
-  return (d.getHours() * 60 + d.getMinutes()) / 1440;
-}
-
 // Piste de progression des pas : une ligne qui se remplit jusqu'au drapeau
-// d'arrivée, avec un repère à l'avancement de la journée (on voit d'un coup
-// d'œil si on est en avance ou en retard).
-// Construite en HTML/CSS et non en SVG étiré : un SVG en
+// d'arrivée. Construite en HTML/CSS et non en SVG étiré : un SVG en
 // `preserveAspectRatio: none` déformerait le drapeau dans une bande large et
 // basse.
-function stepsTrack(ratio, timeRatio) {
+function stepsTrack(ratio) {
   const p = Math.max(0, Math.min(1, ratio || 0));
-  const t = Math.max(0, Math.min(1, timeRatio || 0));
   const done = p >= 1;
   return `<div class="ha-line">
     <i class="ha-fill" style="width:${(p * 100).toFixed(1)}%"></i>
-    <i class="ha-now" style="left:${(t * 100).toFixed(1)}%"></i>
     <i class="ha-dot" style="left:${(p * 100).toFixed(1)}%"></i>
     <span class="ha-flag${done ? ' done' : ''}" aria-hidden="true">
       <svg viewBox="0 0 10 14"><path d="M1 0v14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M1.8 1.2 L9 3.6 L1.8 6 Z" fill="currentColor"/></svg>
@@ -471,7 +460,7 @@ export function render(container) {
               <span class="num ha-big">${steps.toLocaleString('fr-FR')}</span>
               <span class="hk-goal">/ ${stepsGoal.toLocaleString('fr-FR')}</span>
             </div>
-            <div class="ha-track">${stepsTrack(steps / stepsGoal, dayProgress())}</div>
+            <div class="ha-track">${stepsTrack(steps / stepsGoal)}</div>
           </div>
         </div>
       </div>

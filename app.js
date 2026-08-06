@@ -53,7 +53,10 @@ let touchStartY = null;
 // Zones dont le glissement horizontal doit être ABSORBÉ (swipe de suppression) :
 // on y bloque le geste horizontal natif. Les rubans à défilement horizontal
 // (dates, segments) en sont exclus : leur scroll doit rester libre.
-const SWIPE_ABSORB_ZONES = '.meal-row, .set-row, #meal-list, #s-exos, .swipe-lock';
+// `.swipe-row` / `.exo-swipe-row` : lignes glissables génériques (pesées,
+// relevés de pas, exercices custom). Sans elles ici, le geste horizontal part
+// dans le changement d'onglet et la poubelle ne s'ouvre jamais.
+const SWIPE_ABSORB_ZONES = '.meal-row, .set-row, .swipe-row, .exo-swipe-row, #meal-list, #s-exos, #steps-list, #w-recent, .swipe-lock';
 // Zones qui empêchent simplement le CHANGEMENT D'ONGLET (sans bloquer leur propre
 // défilement horizontal) : rubans, segments, curseurs.
 const SWIPE_LOCK_ZONES = SWIPE_ABSORB_ZONES + ', .no-swipe, .date-ribbon, .segment, input[type="range"]';
