@@ -488,6 +488,12 @@ canvas { max-width: 100%; }
    le contenu la recouvre. Un fond OPAQUE est indispensable, sinon le rouge
    transparaît en permanence. */
 .swipe-row { position: relative; overflow: hidden; border-radius: 10px; touch-action: pan-y; }
+/* L'animation d'entrée `itemIn` est déclarée avec `fill: both` : sa valeur
+   finale (`transform: none`) persiste après la fin et PRIME sur le style
+   inline, ce qui annulait le décalage du glissement. On anime donc la LIGNE,
+   et on laisse le contenu libre de se déplacer. */
+.swipe-row { animation: itemIn 300ms var(--ease) both; }
+.swipe-row .swipe-content { animation: none !important; }
 .swipe-row .swipe-content {
   position: relative; z-index: 1; cursor: pointer;
   background: var(--surface);
@@ -1615,3 +1621,23 @@ body.shape-amoled .badge {
   letter-spacing: 0.05em;
   font-weight: 700;
 }
+
+/* ============================================================
+   v5.4 — EN-TÊTE NUTRITION APLATI
+   Le ruban de dates rejoint l'en-tête collant : il reste visible quand on
+   fait défiler les repas. Les espacements sont resserrés pour libérer de la
+   hauteur au profit de la liste.
+   ============================================================ */
+.nutrition-header { padding-bottom: 6px; margin-bottom: 10px; }
+.nutrition-header .kcal-sub { margin: 1px 0 6px; }
+.nutrition-header .macro-rings { padding-bottom: 6px; }
+.nutrition-header .macro-actions { margin-top: 0; }
+.nutrition-header .macro-actions .btn { min-height: 34px; }
+/* Le ruban vit désormais DANS l'en-tête : plus de marge basse propre. */
+.nutrition-header .date-ribbon { margin: 8px 0 0; padding: 0 2px 4px; }
+/* Puce « + » : ouvre l'historique complet, sans les mêmes infos qu'un jour. */
+.date-chip.date-more {
+  display: flex; align-items: center; justify-content: center;
+  width: 44px; color: var(--accent); border-style: dashed;
+}
+.date-chip.date-more .d-more { font-size: 1.3rem; font-weight: 800; line-height: 1; }

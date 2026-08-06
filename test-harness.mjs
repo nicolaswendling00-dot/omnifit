@@ -68,7 +68,10 @@ assert(!pages.home.querySelector('#btn-log-weight') && !pages.home.querySelector
 nutrition.render(pages.nutrition);
 assert(pages.nutrition.querySelector('.nutrition-header'), 'Nutrition : header sticky');
 assert(pages.nutrition.querySelectorAll('.macro-rings .ring-item').length === 4, 'Nutrition : 4 anneaux macros (prot/gluc/lip + fibres)');
-assert(pages.nutrition.querySelectorAll('.date-chip').length === 15, 'Nutrition : ruban 15 dates');
+// Ruban : 7 derniers jours + une puce « + » vers l'historique complet
+assert(pages.nutrition.querySelectorAll('.date-chip').length === 8, 'Nutrition : ruban 7 jours + bouton historique');
+assert(pages.nutrition.querySelector('#date-more'), 'Nutrition : puce « + » vers l\'historique');
+assert(pages.nutrition.querySelector('.nutrition-header .date-ribbon'), 'Nutrition : ruban dans l\'en-tête collant');
 assert(pages.nutrition.querySelector('.date-ribbon.no-swipe'), 'Nutrition : ruban en no-swipe');
 assert(document.getElementById('fab-nutrition-wrap')?.parentElement === document.body, 'Nutrition : FAB global dans body');
 assert(pages.nutrition.querySelector('#btn-recipes'), 'Nutrition : bouton Recettes');
@@ -457,7 +460,7 @@ const nh = pages.nutrition;
 store.addNutritionLog(todayISO(), { name: 'X (500 g)', baseName: 'X', meal: 'Snack', prot: 50, carbs: 300, fat: 120, fiber: 0, kcal: 2480, per100: { prot: 10, carbs: 60, fat: 24 }, weight: 500 });
 nutrition.render(nh);
 assert(!nh.querySelector('#nut-cal'), 'Nutrition : carte calendrier retiree');
-assert(nh.querySelectorAll('.date-chip').length === 15, 'Nutrition : ruban de dates conserve');
+assert(nh.querySelectorAll('.date-chip').length === 8, 'Nutrition : ruban de dates conserve (7 jours + « + »)');
 const chipT = [...nh.querySelectorAll('.date-chip')].find((c) => c.dataset.date === todayISO());
 assert(chipT && chipT.querySelector('.d-diff'), 'Nutrition : ecart calorique affiche dans le ruban');
 assert(chipT.querySelector('.d-diff.bad'), 'Nutrition : gros ecart en rouge');
@@ -729,6 +732,15 @@ console.log('== v5.2 : suppression des pesées et relevés de pas ==');
   for (const sel of ['.swipe-row', '.exo-swipe-row']) {
     assert(absorb[1].includes(sel), `Swipe : ${sel} absorbe le geste horizontal`);
   }
+
+  // `itemIn` est declaree avec `fill: both` : sa valeur finale (transform:none)
+  // persiste et PRIME sur le style inline. Appliquee au contenu glissable, elle
+  // annulait le decalage — la poubelle n'apparaissait qu'un instant.
+  const cssSwipe = fs.readFileSync(new URL('./style.css', import.meta.url), 'utf8');
+  assert(/\.swipe-row \.swipe-content \{[^}]*animation: none/.test(cssSwipe),
+    'Swipe : le contenu glissable n\'est pas anime (sinon transform ecrase)');
+  assert(/\.swipe-row \{ animation: itemIn/.test(cssSwipe),
+    'Swipe : l\'animation d\'entree porte sur la ligne, pas sur le contenu');
 }
 
 console.log(`\n===== RÉSULTAT : ${pass} OK / ${fail} FAIL =====`);

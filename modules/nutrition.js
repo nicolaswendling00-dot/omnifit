@@ -1377,6 +1377,77 @@ export function renderCoachCard(rerender, opts = {}) {
   return card;
 }
 
+// Historique nutritionnel complet, sur le modèle du calendrier d'entraînement :
+// un mois par bloc, du plus ancien au plus récent, positionné sur le mois en
+// cours à l'ouverture. Chaque jour montre son écart calorique.
+function openNutritionCalendar(rerender) {
+  const byDate = store.userData.nutrition.byDate || {};
+  const today = todayISO();
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const WD = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+
+  const overlay = el(`<div class="picker-overlay cal-overlay">
+    <div class="picker-topbar">
+      <h3 style="margin:0;flex:1">Historique nutrition</h3>
+      <button class="icon-btn" id="ncal-close" aria-label="Fermer">${icons.close}</button>
+    </div>
+    <div class="cal-scroll" id="ncal-scroll"></div>
+  </div>`);
+  document.body.appendChild(overlay);
+  const wasOpen = document.body.classList.contains('overlay-open');
+  document.body.classList.add('overlay-open');
+  const close = () => { overlay.remove(); if (!wasOpen) document.body.classList.remove('overlay-open'); };
+
+  // On remonte à la première journée renseignée (ou au mois courant si vide).
+  const dates = Object.keys(byDate).filter((d) => byDate[d] && byDate[d].meals && byDate[d].meals.length).sort();
+  const first = dates.length ? dates[0] : today;
+  const [fy, fm] = first.split('-').map(Number);
+  const [ty, tm] = today.split('-').map(Number);
+
+  const scroll = overlay.querySelector('#ncal-scroll');
+  let y = fy; let m = fm - 1;
+  while (y < ty || (y === ty && m <= tm - 1)) {
+    const firstDay = new Date(y, m, 1);
+    const offset = (firstDay.getDay() + 6) % 7;      // semaine commençant lundi
+    const nDays = new Date(y, m + 1, 0).getDate();
+    const wrap = el(`<div class="cal-month">
+      <div class="cal-month-title">${firstDay.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}</div>
+      <div class="cal-wd">${WD.map((d) => `<span>${d}</span>`).join('')}</div>
+      <div class="cal-grid"></div>
+    </div>`);
+    const grid = wrap.querySelector('.cal-grid');
+    for (let i = 0; i < offset; i++) grid.appendChild(el('<span class="cal-empty"></span>'));
+    for (let day = 1; day <= nDays; day++) {
+      const iso = `${y}-${pad2(m + 1)}-${pad2(day)}`;
+      const dDay = byDate[iso];
+      const has = !!(dDay && dDay.meals && dDay.meals.length);
+      let diff = '';
+      if (has) {
+        const v = Math.round(store.dayTotals(iso).kcal - macroGoalsFor(iso).kcalGoal);
+        diff = `<span class="cal-imp ${Math.abs(v) <= 100 ? 'up' : 'down'}">${v > 0 ? '+' : ''}${v}</span>`;
+      }
+      grid.appendChild(el(`<button class="cal-day${has ? ' has-session' : ''}${iso === today ? ' is-today' : ''}${iso > today ? ' dim' : ''}"
+        ${iso > today ? 'disabled' : ''} data-date="${iso}">
+        <span class="cal-dnum">${day}</span>${diff}
+      </button>`));
+    }
+    scroll.appendChild(wrap);
+    m++; if (m > 11) { m = 0; y++; }
+  }
+  // Ouvre sur le mois en cours (en bas de la liste)
+  requestAnimationFrame(() => { scroll.scrollTop = scroll.scrollHeight; });
+
+  scroll.addEventListener('click', (e) => {
+    const b = e.target.closest('.cal-day');
+    if (!b || b.disabled) return;
+    selectedDate = b.dataset.date;
+    haptic();
+    close();
+    rerender();
+  });
+  overlay.querySelector('#ncal-close').addEventListener('click', close);
+}
+
 // FAB global dans body (hors du conteneur transformé, sinon invisible sur iOS)
 // Menu déroulant : "+" principal déploie 2 mini-FAB (ajout rapide / scan code-barre).
 function ensureFab() {
@@ -1415,8 +1486,9 @@ export function render(container) {
   const day = store.userData.nutrition.byDate[selectedDate];
   const meals = day ? day.meals : [];
 
-  const ribbon = [...Array(15)].map((_, i) => {
-    const d = todayISO(i - 14);
+  // Ruban : les 7 derniers jours seulement, puis un « + » qui ouvre l'historique
+  // complet. Au-delà d'une semaine on ne fait plus défiler à l'aveugle.
+  const chipFor = (d) => {
     const dDay = store.userData.nutrition.byDate[d];
     let diffHtml = '<span class="d-diff empty">·</span>';
     if (dDay && dDay.meals && dDay.meals.length) {
@@ -1429,7 +1501,15 @@ export function render(container) {
     return `<button class="date-chip ${d === selectedDate ? 'active' : ''} ${d === todayISO() ? 'today' : ''}" data-date="${d}">
       ${fmtDateShort(d).split(' ')[0]}<span class="d-num">${d.slice(8)}</span>${diffHtml}
     </button>`;
-  }).join('');
+  };
+  const days7 = [...Array(7)].map((_, i) => todayISO(i - 6));
+  // Le jour consulté peut être hors de la semaine : on l'ajoute pour qu'il
+  // reste visible et sélectionné dans le ruban.
+  if (!days7.includes(selectedDate)) days7.unshift(selectedDate);
+  const ribbon = days7.map(chipFor).join('')
+    + `<button class="date-chip date-more" id="date-more" aria-label="Historique complet">
+        <span class="d-more">+</span>
+      </button>`;
 
   container.innerHTML = '';
   container.appendChild(el(`
@@ -1462,12 +1542,11 @@ export function render(container) {
           </div>
         </div>
         <div class="macro-actions">
-          <button class="btn btn-ghost btn-sm btn-block" id="btn-macro-goals" style="margin-top:4px">${icons.edit} Objectifs macros</button>
-          ${Math.abs(remaining) > 100 ? `<button class="btn btn-ghost btn-sm" id="btn-smooth" style="margin-top:4px" title="Lisser l'écart calorique">${icons.swap}</button>` : ''}
+          <button class="btn btn-ghost btn-sm btn-block" id="btn-macro-goals">${icons.edit} Objectifs macros</button>
+          ${Math.abs(remaining) > 100 ? `<button class="btn btn-ghost btn-sm" id="btn-smooth" title="Lisser l'écart calorique">${icons.swap}</button>` : ''}
         </div>
+        <div class="date-ribbon no-swipe" id="date-ribbon">${ribbon}</div>
       </div>
-
-      <div class="date-ribbon no-swipe" id="date-ribbon">${ribbon}</div>
 
       <div class="card card-glow">
         <div class="card-row" style="margin-bottom:4px">
@@ -1586,8 +1665,9 @@ export function render(container) {
   })();
 
   container.querySelector('#date-ribbon').addEventListener('click', (e) => {
+    if (e.target.closest('#date-more')) { openNutritionCalendar(rerender); return; }
     const chip = e.target.closest('.date-chip');
-    if (!chip) return;
+    if (!chip || !chip.dataset.date) return;
     selectedDate = chip.dataset.date;
     rerender();
   });
