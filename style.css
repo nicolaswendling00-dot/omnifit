@@ -1641,3 +1641,24 @@ body.shape-amoled .badge {
   width: 44px; color: var(--accent); border-style: dashed;
 }
 .date-chip.date-more .d-more { font-size: 1.3rem; font-weight: 800; line-height: 1; }
+
+/* --- v5.5 : gestion du lissage calorique --- */
+/* Bandeau « lissage en cours » dans la feuille de lissage */
+.smooth-active {
+  background: rgba(var(--accent-rgb), 0.08);
+  border: 1px solid rgba(var(--accent-rgb), 0.3);
+  border-radius: var(--r-btn); padding: 12px; margin-bottom: 14px;
+}
+.smooth-active-h { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); }
+.smooth-active-h svg { width: 15px; height: 15px; }
+.smooth-active-d { font-size: 0.82rem; line-height: 1.45; color: var(--text-2); margin-top: 6px; }
+/* Rappel, sur un jour ajusté, du lissage dont il provient */
+.smooth-note {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;
+  background: rgba(var(--accent-rgb), 0.07); border: 1px solid rgba(var(--accent-rgb), 0.22);
+  border-radius: var(--r-btn); color: var(--text-2); font-family: inherit;
+  font-size: 0.72rem; line-height: 1.35; text-align: left; padding: 7px 10px;
+  margin: 0 0 6px; cursor: pointer;
+}
+.smooth-note b { color: var(--accent); }
+.smooth-note svg { width: 15px; height: 15px; flex: none; }

@@ -259,10 +259,52 @@ class StorageManager {
         carbsG: base.carbsG != null ? Math.round(base.carbsG * factor) : base.carbsG,
         fatG: base.fatG != null ? Math.round(base.fatG * factor) : base.fatG,
       };
-      // Mémorise le lissage pour pouvoir l'expliquer / l'annuler
-      day.smoothed = { delta: adj, from: sourceDate, at: Date.now() };
+      // Mémorise le lissage pour pouvoir l'expliquer / l'annuler.
+      // `baseGoal` garde l'objectif AVANT ajustement : l'annulation est ainsi
+      // exacte, sans dépendre d'un calcul inverse sensible aux arrondis.
+      day.smoothed = { delta: adj, from: sourceDate, at: Date.now(), baseGoal: { ...base } };
     }
     this.persist();
+    return n;
+  }
+
+  // Jours actuellement ajustés par le lissage parti de `sourceDate`.
+  findCalorieSmoothing(sourceDate) {
+    const days = [];
+    for (const [d, day] of Object.entries(this.userData.nutrition.byDate || {})) {
+      if (day && day.smoothed && day.smoothed.from === sourceDate) days.push({ date: d, ...day.smoothed });
+    }
+    days.sort((a, b) => a.date.localeCompare(b.date));
+    return days.length
+      ? { sourceDate, days, perDay: days[0].delta, total: days.reduce((a, x) => a + x.delta, 0) }
+      : null;
+  }
+
+  // Annule le lissage parti de `sourceDate` : chaque jour retrouve l'objectif
+  // qu'il avait avant. Pour les lissages d'avant cette version (sans
+  // `baseGoal`), on retire l'ajustement à rebours — au pire à l'arrondi près.
+  removeCalorieSmoothing(sourceDate) {
+    let n = 0;
+    for (const day of Object.values(this.userData.nutrition.byDate || {})) {
+      if (!day || !day.smoothed || day.smoothed.from !== sourceDate) continue;
+      const s = day.smoothed;
+      if (s.baseGoal && s.baseGoal.kcalGoal != null) {
+        day.goal = { ...s.baseGoal };
+      } else if (day.goal && day.goal.kcalGoal != null) {
+        const cur = day.goal.kcalGoal;
+        const base = Math.max(0, cur - s.delta);
+        const f = cur ? base / cur : 1;
+        day.goal = {
+          kcalGoal: base,
+          protG: day.goal.protG != null ? Math.round(day.goal.protG * f) : day.goal.protG,
+          carbsG: day.goal.carbsG != null ? Math.round(day.goal.carbsG * f) : day.goal.carbsG,
+          fatG: day.goal.fatG != null ? Math.round(day.goal.fatG * f) : day.goal.fatG,
+        };
+      }
+      delete day.smoothed;
+      n++;
+    }
+    if (n) this.persist();
     return n;
   }
 

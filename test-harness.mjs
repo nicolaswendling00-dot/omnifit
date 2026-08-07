@@ -743,5 +743,54 @@ console.log('== v5.2 : suppression des pesées et relevés de pas ==');
     'Swipe : l\'animation d\'entree porte sur la ligne, pas sur le contenu');
 }
 
+console.log('== v5.5 : lissage modifiable + inertie de fermeture ==');
+{
+  const src = todayISO(-1);
+  const j1 = todayISO(); const j2 = todayISO(1);
+  const base = { kcalGoal: 2500, protG: 170, carbsG: 280, fatG: 78 };
+  store.userData.nutrition.byDate[src] = { meals: [], goal: { ...base } };
+  store.userData.nutrition.byDate[j1] = { meals: [], goal: { ...base } };
+  store.userData.nutrition.byDate[j2] = { meals: [], goal: { ...base } };
+  delete store.userData.nutrition.byDate[j1].smoothed;
+  delete store.userData.nutrition.byDate[j2].smoothed;
+
+  // Applique : -400 kcal repartis sur 2 jours
+  store.applyCalorieSmoothing(src, -400, 2, -200, base);
+  assert(store.userData.nutrition.byDate[j1].goal.kcalGoal === 2300, 'Lissage : objectif du jour suivant reduit');
+  assert(store.userData.nutrition.byDate[j1].smoothed, 'Lissage : jour marque comme ajuste');
+
+  // Retrouve le lissage depuis sa date source
+  const found = store.findCalorieSmoothing(src);
+  assert(found && found.days.length === 2, 'Lissage : retrouve depuis la date source');
+  assert(found.perDay === -200, 'Lissage : ajustement quotidien correct');
+
+  // Supprime : les objectifs reviennent EXACTEMENT a l'origine
+  const n = store.removeCalorieSmoothing(src);
+  assert(n === 2, 'Lissage : suppression sur les 2 jours');
+  assert(store.userData.nutrition.byDate[j1].goal.kcalGoal === 2500, 'Lissage : objectif restaure a l\'identique');
+  assert(store.userData.nutrition.byDate[j1].goal.protG === 170, 'Lissage : macros restaurees a l\'identique');
+  assert(!store.userData.nutrition.byDate[j1].smoothed, 'Lissage : marqueur retire');
+  assert(store.findCalorieSmoothing(src) === null, 'Lissage : plus rien a retrouver apres suppression');
+
+  // Reappliquer apres modification ne doit pas cumuler
+  store.applyCalorieSmoothing(src, -400, 2, -200, base);
+  store.removeCalorieSmoothing(src);
+  store.applyCalorieSmoothing(src, -400, 4, -100, base);
+  assert(store.userData.nutrition.byDate[j1].goal.kcalGoal === 2400, 'Lissage : mise a jour sans cumul');
+  store.removeCalorieSmoothing(src);
+
+  // Inertie : la fermeture se decide sur la position PROJETEE, pas la distance
+  const uiTxt = fs.readFileSync(new URL('./utils/ui.js', import.meta.url), 'utf8');
+  assert(/PROJECTION_MS/.test(uiTxt), 'Inertie : projection declaree');
+  assert(/const projected = dy \+ Math\.max\(0, velocity\) \* PROJECTION_MS/.test(uiTxt),
+    'Inertie : position projetee = distance + vitesse x duree');
+  assert(/projected > sheet\.offsetHeight \/ 3/.test(uiTxt), 'Inertie : seuil applique a la projection');
+  // Un geste vif et court doit fermer ; un geste lent et court, non.
+  const P = 180; const h = 600; const seuil = h / 3;
+  assert((60 + 1.2 * P) > seuil, 'Inertie : geste court mais rapide -> ferme');
+  assert((60 + 0.1 * P) < seuil, 'Inertie : geste court et lent -> reste ouvert');
+  assert((250 + 0 * P) < seuil === false, 'Inertie : geste long sans vitesse -> ferme quand meme');
+}
+
 console.log(`\n===== RÉSULTAT : ${pass} OK / ${fail} FAIL =====`);
 process.exit(fail ? 1 : 0);

@@ -293,6 +293,7 @@ export function openSheet({ title, content, onClose = null, headerAction = null 
   // sinon il revient en place.
   let startY = null; let dy = 0; let dragging = false;
   let activeScroller = null;
+  let lastY = 0; let lastT = 0; let velocity = 0; // px/ms, pour l'inertie
   const setY = (px) => { sheet.style.transform = `translate3d(0, ${px}px, 0)`; };
 
   // Remonte de `node` jusqu'à la sheet pour trouver le conteneur qui défile
@@ -323,11 +324,22 @@ export function openSheet({ title, content, onClose = null, headerAction = null 
     // (recettes, aliments) referme le panneau au lieu de la faire défiler.
     if (activeScroller.scrollTop > 0) { startY = null; return; }
     startY = e.touches[0].clientY; dy = 0; dragging = false;
+    lastY = startY; lastT = e.timeStamp || Date.now(); velocity = 0;
   }, { passive: true });
 
   sheet.addEventListener('touchmove', (e) => {
     if (startY == null) return;
-    dy = e.touches[0].clientY - startY;
+    const y = e.touches[0].clientY;
+    dy = y - startY;
+    // Vitesse instantanée lissée (px/ms). Le lissage évite qu'une micro-pause
+    // juste avant le relâchement n'annule tout l'élan du geste.
+    const t = e.timeStamp || Date.now();
+    const dt = t - lastT;
+    if (dt > 0) {
+      const v = (y - lastY) / dt;
+      velocity = velocity * 0.6 + v * 0.4;
+      lastY = y; lastT = t;
+    }
     if (dy <= 0) { // remontée : on ne déplace pas, on laisse le scroll reprendre
       if (dragging) { sheet.style.transition = ''; setY(0); dragging = false; }
       return;
@@ -344,14 +356,20 @@ export function openSheet({ title, content, onClose = null, headerAction = null 
     setY(dy);
   }, { passive: false });
 
+  // Inertie : on ne décide pas sur la distance parcourue, mais sur la position
+  // PROJETÉE si le doigt continuait sur sa lancée. Un geste vif referme donc
+  // sur une courte distance, tandis qu'un geste lent doit descendre plus bas.
+  // PROJECTION_MS = durée d'élan simulée après le relâchement.
+  const PROJECTION_MS = 180;
   const endDrag = () => {
     if (startY == null) { return; }
     const wasDragging = dragging;
     startY = null; dragging = false;
     if (!wasDragging) return;
     sheet.style.transition = 'transform 130ms var(--ease)';
-    if (dy > sheet.offsetHeight / 3) {
-      // Au-delà du tiers : on termine la fermeture jusqu'en bas
+    const projected = dy + Math.max(0, velocity) * PROJECTION_MS;
+    if (projected > sheet.offsetHeight / 3) {
+      // Le geste (élan compris) dépasse le tiers : on termine la fermeture
       setY(sheet.offsetHeight);
       setTimeout(close, 110);
     } else {

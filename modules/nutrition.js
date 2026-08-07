@@ -530,7 +530,10 @@ function openSmoothingSheet(rerender, sourceDate, remaining) {
   const D = Math.round(remaining);            // écart signé (obj - consommé)
   const absD = Math.abs(D);
   const excess = D < 0;                       // true = on a trop mangé
-  const recommended = Math.max(1, Math.floor(absD / 200));
+  // Lissage déjà en place depuis ce jour : on part de son nombre de jours,
+  // et on propose de le modifier ou de le supprimer plutôt que d'en empiler un.
+  const existing = store.findCalorieSmoothing(sourceDate);
+  const recommended = existing ? existing.days.length : Math.max(1, Math.floor(absD / 200));
   const liveGoal = macroGoalsFor(sourceDate); // objectif du jour source (pour dériver les macros)
 
   const form = el(`<div>
@@ -538,6 +541,14 @@ function openSmoothingSheet(rerender, sourceDate, remaining) {
       <div class="smooth-delta ${excess ? 'over' : 'under'}">${excess ? '+' : '−'}${absD} kcal</div>
       <div class="muted">${excess ? 'mangées en trop le' : 'manquantes le'} ${fmtDateShort(sourceDate)}</div>
     </div>
+    ${existing ? `<div class="smooth-active">
+      <div class="smooth-active-h">${icons.check} Lissage en cours</div>
+      <div class="smooth-active-d">
+        ${existing.perDay > 0 ? '+' : ''}${existing.perDay} kcal/jour sur ${existing.days.length} jour(s),
+        du ${fmtDateShort(existing.days[0].date)} au ${fmtDateShort(existing.days[existing.days.length - 1].date)}.
+      </div>
+      <button class="btn btn-danger btn-sm btn-block" id="sm-remove" style="margin-top:10px">${icons.trash} Supprimer ce lissage</button>
+    </div>` : ''}
     <p class="muted" style="font-size:0.82rem;line-height:1.5;margin:6px 0 14px">
       Répartis cet écart sur les prochains jours pour ${excess ? 'ne pas avoir à te priver d\'un coup' : 'ne pas avoir à te gaver d\'un coup'}.
       L'objectif de ces jours sera ${excess ? 'réduit' : 'augmenté'} en conséquence (uniquement dans Nutrition).
@@ -545,7 +556,7 @@ function openSmoothingSheet(rerender, sourceDate, remaining) {
     <label class="field"><span>Nombre de jours</span>
       <input id="sm-days" type="number" inputmode="numeric" min="1" max="60" value="${recommended}"></label>
     <div class="smooth-preview" id="sm-preview"></div>
-    <button class="btn btn-primary btn-block" id="sm-apply" style="margin-top:14px">${icons.check} Lisser sur <span id="sm-apply-n">${recommended}</span> jour(s)</button>
+    <button class="btn btn-primary btn-block" id="sm-apply" style="margin-top:14px">${icons.check} ${existing ? 'Mettre à jour' : 'Lisser'} sur <span id="sm-apply-n">${recommended}</span> jour(s)</button>
   </div>`);
 
   const sheet = openSheet({ title: 'Lisser les calories', content: form });
@@ -571,12 +582,33 @@ function openSmoothingSheet(rerender, sourceDate, remaining) {
     setTimeout(() => { try { daysInput.select(); } catch (_) { /* noop */ } }, 0);
   });
 
+  const removeBtn = form.querySelector('#sm-remove');
+  if (removeBtn) {
+    removeBtn.addEventListener('click', () => {
+      confirmModal(
+        'Supprimer le lissage',
+        `Les ${existing.days.length} jour(s) concernés retrouveront leur objectif d'origine.`,
+        () => {
+          const n = store.removeCalorieSmoothing(sourceDate);
+          haptic();
+          toast(`Lissage retiré sur ${n} jour(s)`, 'success');
+          sheet.close();
+          rerender();
+        },
+        true,
+      );
+    });
+  }
+
   form.querySelector('#sm-apply').addEventListener('click', () => {
     const { n, perDay } = update();
     if (perDay === 0) { toast('Écart trop faible à lisser', 'error'); return; }
+    // Un lissage existant est d'abord annulé : sans ça le nouveau s'ajouterait
+    // au précédent et l'écart serait compté deux fois.
+    if (existing) store.removeCalorieSmoothing(sourceDate);
     store.applyCalorieSmoothing(sourceDate, D, n, perDay, liveGoal);
     haptic();
-    toast(`Écart lissé sur ${n} jour(s)`, 'success');
+    toast(existing ? `Lissage mis à jour sur ${n} jour(s)` : `Écart lissé sur ${n} jour(s)`, 'success');
     sheet.close();
     rerender();
   });
@@ -1541,6 +1573,10 @@ export function render(container) {
             <div class="ring-caption">Fib / ${fiberGoal}g</div>
           </div>
         </div>
+        ${day && day.smoothed ? `<button class="smooth-note" id="btn-smooth-note">
+          <span>Objectif ajusté de <b>${day.smoothed.delta > 0 ? '+' : ''}${day.smoothed.delta} kcal</b>
+          — lissage du ${fmtDateShort(day.smoothed.from)}</span>${icons.chevron}
+        </button>` : ''}
         <div class="macro-actions">
           <button class="btn btn-ghost btn-sm btn-block" id="btn-macro-goals">${icons.edit} Objectifs macros</button>
           ${Math.abs(remaining) > 100 ? `<button class="btn btn-ghost btn-sm" id="btn-smooth" title="Lisser l'écart calorique">${icons.swap}</button>` : ''}
@@ -1677,6 +1713,16 @@ export function render(container) {
   container.querySelector('#btn-macro-goals').addEventListener('click', () => openMacroGoalsSheet(rerender));
   const smoothBtn = container.querySelector('#btn-smooth');
   if (smoothBtn) smoothBtn.addEventListener('click', () => openSmoothingSheet(rerender, selectedDate, remaining));
+  // Depuis un jour AJUSTÉ, on remonte au jour source pour gérer le lissage.
+  const smoothNote = container.querySelector('#btn-smooth-note');
+  if (smoothNote) {
+    smoothNote.addEventListener('click', () => {
+      const src = day.smoothed.from;
+      const srcTotals = store.dayTotals(src);
+      const srcGoal = macroGoalsFor(src);
+      openSmoothingSheet(rerender, src, srcGoal.kcalGoal - srcTotals.kcal);
+    });
+  }
   container.querySelector('#btn-recipes').addEventListener('click', () => openRecipesSheet(rerender));
   ensureFab();
 }
