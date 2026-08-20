@@ -2,7 +2,7 @@
 // Séance minimisable, timer sticky, menu ⋯ (suppr/réorg/superset/remplacer),
 // détail exo (muscles, historique, repos perso), coefficients d'amélioration.
 import { store, todayISO } from '../utils/storage.js';
-import { EXERCISES, MUSCLES, muscleLabel, AKA } from '../data/exercises.js';
+import { EXERCISES, MUSCLES, muscleLabel, AKA, EQUIPMENT, equipLabel, BRANDED_EQUIP, BRANDS } from '../data/exercises.js';
 import { formatTime, workoutMuscleVolume, weeklySetsByMuscle, muscleAttenuation } from '../utils/math.js';
 import { el, esc, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, fmtDateFull, celebrateLP, makeChart, normalizeStr, closeAllOverlays } from '../utils/ui.js';
 import { lineChartOptions, lineDataset } from '../utils/charts.js';
@@ -42,20 +42,57 @@ export function exerciseLookup(id) {
   const s = store.userData.settings;
   const nameOv = s.exerciseNames;
   const muscleOv = s.exerciseMuscleOverrides && s.exerciseMuscleOverrides[id];
-  if (!nameOv?.[id] && !muscleOv) return e;
+  const equipOv = s.exerciseEquip && s.exerciseEquip[id];
+  const refOv = s.exerciseRefs && s.exerciseRefs[id];
+  if (!nameOv?.[id] && !muscleOv && !equipOv && !refOv) return e;
   return {
     ...e,
     ...(nameOv?.[id] ? { name: nameOv[id] } : null),
     ...(muscleOv ? { primaryMuscles: muscleOv.primaryMuscles, secondaryMuscles: muscleOv.secondaryMuscles } : null),
+    ...(equipOv ? { equip: equipOv } : null),
+    ...(refOv ? { refExercise: refOv.refExercise, refCoef: refOv.refCoef } : null),
   };
+}
+
+// ---------- Matériel et marque ----------
+// Le matériel vit dans la définition de l'exercice (base ou custom) et peut
+// être redéfini par l'utilisateur (settings.exerciseEquip).
+export function exerciseEquip(id) {
+  const def = exerciseLookup(id);
+  return (def && def.equip) || [];
+}
+// Un exercice sur machine / poulie porte une marque : deux presses de marques
+// différentes n'ont ni la même charge ni le même bras de levier, leurs séances
+// ne se comparent donc pas. `''` = aucune marque (valeur par défaut).
+export function hasBrand(id) {
+  return exerciseEquip(id).some((q) => BRANDED_EQUIP.includes(q));
+}
+export function currentBrand(id) {
+  if (!hasBrand(id)) return '';
+  return (store.userData.settings.exerciseBrand || {})[id] || '';
+}
+export function allBrands() {
+  const extra = store.userData.settings.customBrands || [];
+  return [...new Set([...BRANDS, ...extra])].sort((a, b) => a.localeCompare(b, 'fr'));
+}
+// La marque sous laquelle une série a été réalisée. Les séances enregistrées
+// avant l'arrivée des marques n'en portent pas : elles comptent comme « aucune »,
+// ce qui préserve l'historique existant tant qu'aucune marque n'est choisie.
+const wxBrand = (wx) => (wx && wx.brand) || '';
+function matchesBrand(exerciseId, wx) {
+  if (!hasBrand(exerciseId)) return true;
+  return wxBrand(wx) === currentBrand(exerciseId);
 }
 // Map LP de tous les exos (avec poids de corps + standards pour le raccourci Onyx)
 // Table { idCustom: { refId, coef } } : permet de classer un exercice custom
 // via les standards d'un exercice de référence, pondérés par un coefficient.
 export function customRefMap() {
   const out = {};
-  for (const e of (store.userData.settings.customExercises || [])) {
-    if (e.refExercise && e.refCoef > 0) out[e.id] = { refId: e.refExercise, coef: e.refCoef };
+  // Base intégrée comprise : des exercices repris de la bibliothèque perso y
+  // sont entrés en gardant leur exercice de référence.
+  for (const e of allExercises()) {
+    const d = exerciseLookup(e.id) || e;
+    if (d.refExercise && d.refCoef > 0) out[e.id] = { refId: d.refExercise, coef: d.refCoef };
   }
   return out;
 }
@@ -90,6 +127,8 @@ function exoKeywords(e) {
   const parts = [(exerciseLookup(e.id) || e).name, e.category, CAT_SYN[e.category] || '', ...(AKA[e.id] || [])];
   // Les exercices créés par l'utilisateur répondent à « custom » / « perso ».
   if (e.isCustom) parts.push('custom perso personnalise mes exercices');
+  // Le matériel est cherchable : « poulie », « banc », « smith »…
+  for (const q of (e.equip || [])) parts.push(q, equipLabel(q));
   for (const m of [...e.primaryMuscles, ...e.secondaryMuscles]) {
     parts.push(m.m, muscleLabel(m.m), MUSCLE_SYN[m.m] || '');
   }
@@ -148,16 +187,38 @@ const doneSets = (wx) => (wx && wx.sets ? wx.sets.filter(isDone) : []);
 // Séries à enregistrer : les validées, sans le marqueur de séance.
 const savedSets = (wx) => doneSets(wx).map(({ done, ...rest }) => rest);
 
+// Exercice prêt à être enregistré : séries validées + marque de la machine.
+// Séance en cours : c'est la marque sélectionnée maintenant qui compte (on peut
+// la changer en pleine séance en arrivant sur une autre machine).
+// Séance ancienne rouverte pour correction (`keepBrand`) : on garde la sienne,
+// la corriger ne doit pas la réattribuer à la marque du jour.
+function savedExercise(wx, keepBrand = false) {
+  const out = { exerciseId: wx.exerciseId, sets: savedSets(wx) };
+  if (wx.ss) out.ss = wx.ss;
+  const brand = keepBrand ? (wx.brand || '') : currentBrand(wx.exerciseId);
+  if (brand) out.brand = brand;
+  return out;
+}
+
 // Volume total d'un exo dans un workout
 const exoVolume = (wx) => doneSets(wx).reduce((a, s) => a + s.weight * s.reps, 0);
 
+// Occurrences passées d'un exo, de la plus ancienne à la plus récente.
+// Filtrées sur la marque courante quand l'exercice en porte une : chaque
+// marque de machine a son propre historique.
+function exoEntries(exerciseId) {
+  const out = [];
+  for (const w of store.userData.workouts) {
+    const wx = w.exercises.find((x) => x.exerciseId === exerciseId);
+    if (wx && wx.sets.length && matchesBrand(exerciseId, wx)) out.push({ workout: w, wx });
+  }
+  return out;
+}
+
 // Dernier workout contenant l'exo → { workout, wx }
 function lastEntry(exerciseId) {
-  for (let i = store.userData.workouts.length - 1; i >= 0; i--) {
-    const wx = store.userData.workouts[i].exercises.find((x) => x.exerciseId === exerciseId);
-    if (wx && wx.sets.length) return { workout: store.userData.workouts[i], wx };
-  }
-  return null;
+  const all = exoEntries(exerciseId);
+  return all.length ? all[all.length - 1] : null;
 }
 
 // ---------- Séance de référence (colonne PRÉC) ----------
@@ -195,10 +256,8 @@ function bestEntry(exerciseId, refDate = null) {
   const end = refDate || todayISO();
   const start = todayISO(-REFERENCE_WINDOW_DAYS);
   let best = null;
-  for (const w of store.userData.workouts) {
+  for (const { workout: w, wx } of exoEntries(exerciseId)) {
     if (w.date > end || w.date < start) continue;
-    const wx = w.exercises.find((x) => x.exerciseId === exerciseId);
-    if (!wx) continue;
     const sets = workSets(wx);
     if (!sets.length) continue;
     const score = exoScore(wx);
@@ -281,11 +340,8 @@ function topMuscle(w) {
 // précédente. Il dit donc « où j'en suis par rapport à mes débuts », là où le
 // volume ne disait que « combien j'ai soulevé ce jour-là ».
 function exoHistory(exerciseId) {
-  const h = [];
-  for (const w of store.userData.workouts) {
-    const wx = w.exercises.find((x) => x.exerciseId === exerciseId);
-    if (wx && wx.sets.length) h.push({ date: w.date, id: w.id, vol: exoVolume(wx), score: exoScore(wx) });
-  }
+  const h = exoEntries(exerciseId)
+    .map(({ workout: w, wx }) => ({ date: w.date, id: w.id, vol: exoVolume(wx), score: exoScore(wx) }));
   h.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
   let coef = 1;
   h.forEach((e, i) => {
@@ -360,83 +416,288 @@ export function openExercisePicker(onPick, title = 'Ajouter un exercice') {
   overlay.querySelector('#picker-close').addEventListener('click', close);
   overlay.querySelector('#btn-custom').addEventListener('click', () => {
     close();
-    openCustomExerciseModal((exo) => onPick(exo));
+    openExerciseEditor((exo) => onPick(exo));
   });
 }
 
 // ============================================================
-// CRÉATEUR D'EXERCICE CUSTOM
+// ÉDITEUR D'EXERCICE
 // ============================================================
-// existing = null pour créer, ou { id, name, primaryMuscles, secondaryMuscles, isCustom } pour éditer.
+// existing = null pour créer, ou la définition de l'exercice pour la modifier.
 // onSaved(exo) est appelé avec l'exercice créé/modifié (forme allExercises()).
-function openCustomExerciseModal(onSaved, existing = null) {
-  const muscleRows = (label, checked = []) => MUSCLES.map((m) => {
-    const found = checked.find((c) => c.m === m.id);
-    return `
-    <div class="card-row" style="padding:3px 0">
-      <label style="display:flex;align-items:center;gap:8px;font-size:0.82rem;flex:1">
-        <input type="checkbox" class="${label}-chk" data-m="${m.id}" ${found ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--accent)"> ${m.label}
-      </label>
-      <input type="number" class="${label}-pct" data-m="${m.id}" min="0" max="100" placeholder="%" value="${found ? found.p : ''}" style="width:70px;min-height:36px;padding:6px">
-    </div>`;
-  }).join('');
-
-  // Référence de classement : un exercice custom n'a pas de standard de force.
-  // On le rattache à un exercice connu, pondéré par un coefficient (ex. un leg
-  // curl unilatéral vaut ~0.5× un leg curl classique), pour en déduire un rang.
-  let refId = existing && existing.refExercise ? existing.refExercise : null;
-  let refCoef = existing && existing.refCoef > 0 ? existing.refCoef : 1;
-  const refName = () => {
-    if (!refId) return 'Aucun (pas de rang)';
-    const d = exerciseLookup(refId);
-    return d ? d.name : refId;
+//
+// Chaque réglage est une LIGNE-BOUTON qui ouvre son propre petit panneau : la
+// fenêtre reste lisible d'un coup d'œil (on voit l'état de tout l'exercice)
+// et chaque réglage a la place qu'il lui faut quand on l'ouvre. Seul le nom se
+// modifie directement, puisqu'il n'a besoin que d'un champ.
+// Rien n'est écrit tant qu'on n'a pas validé : tout vit dans `draft`.
+function openExerciseEditor(onSaved, existing = null) {
+  const draft = {
+    name: existing ? existing.name : '',
+    primary: existing ? existing.primaryMuscles.map((x) => ({ ...x })) : [],
+    secondary: existing ? existing.secondaryMuscles.map((x) => ({ ...x })) : [],
+    equip: existing && existing.equip ? [...existing.equip] : [],
+    refExercise: existing && existing.refExercise ? existing.refExercise : null,
+    refCoef: existing && existing.refCoef > 0 ? existing.refCoef : 1,
+    brand: existing ? currentBrand(existing.id) : '',
+    rest: existing ? exoRestDuration(existing.id) : store.userData.settings.restTimerDefault,
   };
 
-  const form = el(`<div>
-    <label class="field"><span>Nom</span><input id="cx-name" type="text" placeholder="Mon exercice" value="${existing ? esc(existing.name) : ''}"></label>
+  const muscleSummary = (list) => (list.length
+    ? list.map((x) => `${muscleLabel(x.m)} ${x.p}%`).join(' · ')
+    : 'Aucun');
+  const equipSummary = () => (draft.equip.length ? draft.equip.map(equipLabel).join(' · ') : 'Non renseigné');
+  const rankSummary = () => {
+    if (!draft.refExercise) return 'Aucun (pas de rang)';
+    const d = exerciseLookup(draft.refExercise);
+    return `${d ? d.name : draft.refExercise} ×${draft.refCoef.toFixed(2)}`;
+  };
+  const totalPct = () => [...draft.primary, ...draft.secondary].reduce((a, x) => a + x.p, 0);
+  // La marque n'a de sens que sur une machine / poulie : le bouton n'apparaît
+  // que si le matériel choisi en comporte une.
+  const brandable = () => draft.equip.some((q) => BRANDED_EQUIP.includes(q));
 
-    <div class="cx-ref">
-      <div class="row-label" style="margin-bottom:2px">Classement (rang)</div>
-      <div class="row-sub" style="margin-bottom:8px">Rattache cet exercice à un mouvement connu pour lui attribuer un rang.</div>
-      <button type="button" class="btn btn-secondary btn-block" id="cx-ref-btn" style="justify-content:space-between">
-        <span id="cx-ref-label">${esc(refName())}</span>${icons.chevron}
-      </button>
-      <div id="cx-coef-wrap" style="${refId ? '' : 'display:none'};margin-top:10px">
-        <div class="card-row">
-          <span style="font-size:0.85rem">Coefficient</span>
-          <span class="num" id="cx-coef-val" style="color:var(--accent)">×${refCoef.toFixed(2)}</span>
-        </div>
-        <input id="cx-coef" type="range" min="0.2" max="5" step="0.05" value="${refCoef}">
-        <div class="muted" id="cx-coef-hint" style="font-size:0.72rem;line-height:1.4;margin-top:4px"></div>
-      </div>
-    </div>
+  const row = (key, label, value) => `<button type="button" class="ex-row" data-open="${key}">
+      <span class="ex-row-l">${label}</span>
+      <span class="ex-row-v">${esc(value)}</span>
+      ${icons.chevron}
+    </button>`;
 
-    <h3 style="font-size:0.85rem;margin:8px 0 4px">Muscles principaux</h3>
-    <div style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px 10px">${muscleRows('prim', existing ? existing.primaryMuscles : [])}</div>
-    <h3 style="font-size:0.85rem;margin:12px 0 4px">Muscles secondaires</h3>
-    <div style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px 10px">${muscleRows('sec', existing ? existing.secondaryMuscles : [])}</div>
+  const form = el(`<div class="ex-edit">
+    <label class="field ex-edit-name"><span>Nom</span>
+      <input id="xe-name" type="text" placeholder="Mon exercice" value="${existing ? esc(existing.name) : ''}">
+    </label>
+    <div id="xe-rows"></div>
+    <div class="ex-total" id="xe-total"></div>
   </div>`);
 
-  const coefWrap = form.querySelector('#cx-coef-wrap');
-  const coefInput = form.querySelector('#cx-coef');
-  const coefHint = form.querySelector('#cx-coef-hint');
-  const updHint = () => {
-    form.querySelector('#cx-coef-val').textContent = `×${refCoef.toFixed(2)}`;
-    const d = refId ? exerciseLookup(refId) : null;
-    coefHint.textContent = d
-      ? `100 kg ici comptent comme ${Math.round(100 / refCoef)} kg en ${d.name}.`
-      : '';
+  const rowsHost = form.querySelector('#xe-rows');
+  const totalEl = form.querySelector('#xe-total');
+  const paint = () => {
+    rowsHost.innerHTML = row('rank', 'Classement', rankSummary())
+      + row('prim', 'Muscles principaux', muscleSummary(draft.primary))
+      + row('sec', 'Muscles secondaires', muscleSummary(draft.secondary))
+      + row('equip', 'Équipement', equipSummary())
+      + (brandable() ? row('brand', 'Marque', draft.brand || 'Aucune') : '')
+      + row('rest', 'Repos', `${draft.rest}s`);
+    const t = totalPct();
+    totalEl.className = `ex-total ${t === 100 ? 'ok' : 'warn'}`;
+    totalEl.textContent = t === 100
+      ? 'Répartition musculaire : 100 % ✓'
+      : `Répartition musculaire : ${t} % (il faut 100 %)`;
   };
-  updHint();
-  coefInput.addEventListener('input', () => { refCoef = parseFloat(coefInput.value) || 1; updHint(); });
-  form.querySelector('#cx-ref-btn').addEventListener('click', () => {
-    openExercisePicker((exo) => {
-      refId = exo.id;
-      form.querySelector('#cx-ref-label').textContent = refName();
-      coefWrap.style.display = '';
-      updHint();
-    }, 'Exercice de référence');
+  paint();
+
+  // ---- Panneau « Classement » : exercice de référence + coefficient ----
+  const openRankSheet = () => {
+    const c = el(`<div>
+      <div class="row-sub" style="margin-bottom:10px">Rattache cet exercice à un mouvement connu pour lui attribuer un rang.</div>
+      <button type="button" class="btn btn-secondary btn-block" id="xr-pick" style="justify-content:space-between">
+        <span id="xr-name">${esc(draft.refExercise ? rankSummary().replace(/ ×[\d.]+$/, '') : 'Aucun (pas de rang)')}</span>${icons.chevron}
+      </button>
+      <div id="xr-coef-wrap" style="${draft.refExercise ? '' : 'display:none'};margin-top:14px">
+        <div class="card-row">
+          <span style="font-size:0.85rem">Coefficient</span>
+          <span class="num" id="xr-coef-val" style="color:var(--accent)">×${draft.refCoef.toFixed(2)}</span>
+        </div>
+        <input id="xr-coef" type="range" min="0.2" max="5" step="0.05" value="${draft.refCoef}">
+        <div class="muted" id="xr-hint" style="font-size:0.72rem;line-height:1.4;margin-top:4px"></div>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm btn-block" id="xr-clear" style="margin-top:14px">Retirer la référence</button>
+      <button type="button" class="btn btn-primary btn-block" data-done style="margin-top:10px">Terminé</button>
+    </div>`);
+    const sh = openSheet({ title: 'Classement (rang)', content: c, onClose: paint });
+    c.querySelector('[data-done]').addEventListener('click', () => sh.close());
+    const upd = () => {
+      const d = draft.refExercise ? exerciseLookup(draft.refExercise) : null;
+      c.querySelector('#xr-name').textContent = d ? d.name : 'Aucun (pas de rang)';
+      c.querySelector('#xr-coef-val').textContent = `×${draft.refCoef.toFixed(2)}`;
+      c.querySelector('#xr-coef-wrap').style.display = draft.refExercise ? '' : 'none';
+      c.querySelector('#xr-hint').textContent = d
+        ? `100 kg ici comptent comme ${Math.round(100 / draft.refCoef)} kg en ${d.name}.`
+        : '';
+    };
+    upd();
+    c.querySelector('#xr-coef').addEventListener('input', (e) => {
+      draft.refCoef = parseFloat(e.target.value) || 1;
+      upd();
+    });
+    c.querySelector('#xr-pick').addEventListener('click', () => {
+      openExercisePicker((exo) => { draft.refExercise = exo.id; upd(); }, 'Exercice de référence');
+    });
+    c.querySelector('#xr-clear').addEventListener('click', () => {
+      draft.refExercise = null; draft.refCoef = 1; upd(); haptic();
+    });
+    return sh;
+  };
+
+  // ---- Panneau « Muscles » : plus de cases à cocher, un pourcentage suffit ----
+  // Un muscle est retenu dès qu'il porte un pourcentage non nul. Le total des
+  // deux listes doit faire 100 % : il est affiché en direct, avec ce qui reste.
+  const openMuscleSheet = (kind) => {
+    const list = kind === 'prim' ? draft.primary : draft.secondary;
+    const other = kind === 'prim' ? draft.secondary : draft.primary;
+    const otherTotal = other.reduce((a, x) => a + x.p, 0);
+    const c = el(`<div>
+      <div class="mus-edit">
+        ${MUSCLES.map((m) => {
+    const f = list.find((x) => x.m === m.id);
+    return `<div class="mus-edit-row${f ? ' on' : ''}" data-m="${m.id}">
+            <span class="mus-edit-l">${m.label}</span>
+            <input class="mus-edit-p" type="number" inputmode="numeric" min="0" max="100" step="5"
+              data-m="${m.id}" placeholder="0" value="${f ? f.p : ''}">
+            <span class="mus-edit-u">%</span>
+          </div>`;
+  }).join('')}
+      </div>
+      <div class="ex-total" id="ms-total"></div>
+      <button type="button" class="btn btn-primary btn-block" data-done style="margin-top:10px">Terminé</button>
+    </div>`);
+    const tot = c.querySelector('#ms-total');
+    const read = () => [...c.querySelectorAll('.mus-edit-p')]
+      .map((i) => ({ m: i.dataset.m, p: parseFloat(i.value) || 0 }))
+      .filter((x) => x.p > 0);
+    const upd = () => {
+      const here = read().reduce((a, x) => a + x.p, 0);
+      const t = here + otherTotal;
+      tot.className = `ex-total ${t === 100 ? 'ok' : 'warn'}`;
+      tot.textContent = t === 100
+        ? 'Total 100 % ✓'
+        : `Total ${t} % — ${t < 100 ? `${100 - t} % à répartir` : `${t - 100} % de trop`}`;
+      for (const r of c.querySelectorAll('.mus-edit-row')) {
+        const v = parseFloat(r.querySelector('.mus-edit-p').value) || 0;
+        r.classList.toggle('on', v > 0);
+      }
+    };
+    upd();
+    c.addEventListener('input', upd);
+    const apply = () => {
+      const vals = read();
+      if (kind === 'prim') draft.primary = vals; else draft.secondary = vals;
+      paint();
+    };
+    const sh = openSheet({
+      title: kind === 'prim' ? 'Muscles principaux' : 'Muscles secondaires',
+      content: c,
+      onClose: apply,
+    });
+    c.querySelector('[data-done]').addEventListener('click', () => sh.close());
+    return sh;
+  };
+
+  // ---- Panneau « Équipement » : sélection multiple ----
+  const openEquipSheet = () => {
+    const c = el(`<div>
+      <div class="equip-grid">
+        ${EQUIPMENT.map((q) => `<button type="button" class="equip-chip${draft.equip.includes(q.id) ? ' on' : ''}" data-q="${q.id}">${q.label}</button>`).join('')}
+      </div>
+      <button type="button" class="btn btn-primary btn-block" data-done style="margin-top:14px">Terminé</button>
+    </div>`);
+    const sh = openSheet({ title: 'Équipement', content: c, onClose: paint });
+    c.querySelector('[data-done]').addEventListener('click', () => sh.close());
+    c.addEventListener('click', (e) => {
+      const b = e.target.closest('.equip-chip');
+      if (!b) return;
+      const id = b.dataset.q;
+      if (draft.equip.includes(id)) draft.equip = draft.equip.filter((x) => x !== id);
+      else draft.equip = [...draft.equip, id];
+      b.classList.toggle('on');
+      haptic();
+    });
+    return sh;
+  };
+
+  // ---- Panneau « Marque » ----
+  // Une marque ajoutée à la main est mémorisée : elle sera proposée ensuite
+  // pour tous les exercices.
+  const openBrandSheet = () => {
+    const draw = () => `<div class="brand-list" id="br-list">
+        ${['', ...allBrands()].map((b) => `<button type="button" class="brand-item${b === draft.brand ? ' on' : ''}" data-b="${esc(b)}">
+          <span>${b ? esc(b) : 'Aucune'}</span>${b === draft.brand ? icons.check : ''}
+        </button>`).join('')}
+      </div>
+      <button type="button" class="btn btn-secondary btn-block" id="br-other" style="margin-top:10px">${icons.plus} Autre marque…</button>`;
+    const c = el(`<div>${draw()}</div>`);
+    const sh = openSheet({ title: 'Marque', content: c, onClose: paint });
+    c.addEventListener('click', (e) => {
+      const b = e.target.closest('.brand-item');
+      if (b) {
+        draft.brand = b.dataset.b;
+        c.innerHTML = draw();
+        haptic();
+        sh.close();
+        return;
+      }
+      if (e.target.closest('#br-other')) {
+        const f = el(`<label class="field"><span>Nom de la marque</span><input id="br-new" type="text" placeholder="Ex. Panatta"></label>`);
+        openModal({
+          title: 'Nouvelle marque',
+          content: f,
+          actions: [
+            { label: 'Annuler' },
+            {
+              label: 'Ajouter',
+              variant: 'btn-primary',
+              onClick: (body) => {
+                const v = body.querySelector('#br-new').value.trim();
+                if (!v) { toast('Nom requis', 'error'); return 'keep'; }
+                const cur = store.userData.settings.customBrands || [];
+                if (!allBrands().includes(v)) store.saveUserData({ settings: { customBrands: [...cur, v] } });
+                draft.brand = v;
+                c.innerHTML = draw();
+                paint();
+                sh.close();
+              },
+            },
+          ],
+        });
+      }
+    });
+    return sh;
+  };
+
+  // ---- Panneau « Repos » ----
+  const openRestSheet = () => {
+    const c = el(`<div>
+      <div class="card-row">
+        <span style="font-size:0.85rem">Temps de repos entre les séries</span>
+        <span class="num" id="xrest-val" style="color:var(--accent)">${draft.rest}s</span>
+      </div>
+      <input id="xrest" type="range" min="30" max="300" step="15" value="${draft.rest}">
+      <div class="muted" style="font-size:0.72rem;margin-top:6px">Le minuteur démarre à la validation d'une série.</div>
+      <button type="button" class="btn btn-primary btn-block" data-done style="margin-top:14px">Terminé</button>
+    </div>`);
+    c.querySelector('#xrest').addEventListener('input', (e) => {
+      draft.rest = +e.target.value;
+      c.querySelector('#xrest-val').textContent = `${draft.rest}s`;
+    });
+    const sh = openSheet({ title: 'Repos', content: c, onClose: paint });
+    c.querySelector('[data-done]').addEventListener('click', () => sh.close());
+    return sh;
+  };
+
+  rowsHost.addEventListener('click', (e) => {
+    const b = e.target.closest('.ex-row');
+    if (!b) return;
+    haptic();
+    if (b.dataset.open === 'rank') openRankSheet();
+    else if (b.dataset.open === 'prim') openMuscleSheet('prim');
+    else if (b.dataset.open === 'sec') openMuscleSheet('sec');
+    else if (b.dataset.open === 'equip') openEquipSheet();
+    else if (b.dataset.open === 'brand') openBrandSheet();
+    else if (b.dataset.open === 'rest') openRestSheet();
   });
+
+  // Réglages liés à l'exercice (repos, marque) : stockés par identifiant, donc
+  // écrits une fois l'exercice créé.
+  const saveById = (id) => {
+    const s = store.userData.settings;
+    const rbe = { ...(s.restByExercise || {}) };
+    rbe[id] = draft.rest;
+    const brands = { ...(s.exerciseBrand || {}) };
+    if (draft.brand) brands[id] = draft.brand; else delete brands[id];
+    store.saveUserData({ settings: { restByExercise: rbe, exerciseBrand: brands } });
+  };
 
   openModal({
     title: existing ? 'Modifier l\'exercice' : 'Créer un exercice',
@@ -445,48 +706,71 @@ function openCustomExerciseModal(onSaved, existing = null) {
     actions: [
       { label: 'Annuler' },
       {
-        label: existing ? 'Enregistrer' : 'Créer', variant: 'btn-primary',
+        label: existing ? 'Enregistrer' : 'Créer',
+        variant: 'btn-primary',
         onClick: (body) => {
-          const name = body.querySelector('#cx-name').value.trim();
+          const name = body.querySelector('#xe-name').value.trim();
           if (!name) { toast('Nom requis', 'error'); return 'keep'; }
-          const collect = (cls) => [...body.querySelectorAll(`.${cls}-chk:checked`)].map((chk) => {
-            const pct = parseFloat(body.querySelector(`.${cls}-pct[data-m="${chk.dataset.m}"]`).value) || 0;
-            return { m: chk.dataset.m, p: pct };
-          }).filter((x) => x.p > 0);
-          const primary = collect('prim');
-          const secondary = collect('sec');
-          if (!primary.length) { toast('Au moins 1 muscle principal avec %', 'error'); return 'keep'; }
-          const totalPct = [...primary, ...secondary].reduce((a, x) => a + x.p, 0);
-          if (totalPct > 100) { toast(`Total ${totalPct}% > 100%`, 'error'); return 'keep'; }
+          if (!draft.primary.length) { toast('Au moins 1 muscle principal', 'error'); return 'keep'; }
+          const t = totalPct();
+          if (t !== 100) { toast(`Répartition à ${t} % — il faut 100 %`, 'error'); return 'keep'; }
 
           if (existing) {
             if (existing.isCustom) {
-              // Exercice custom : on modifie directement l'entrée dans customExercises
               const list = (store.userData.settings.customExercises || []).map((e) =>
-                e.id === existing.id
-                  ? { ...e, name, primaryMuscles: primary, secondaryMuscles: secondary, refExercise: refId, refCoef }
-                  : e);
+                (e.id === existing.id
+                  ? {
+                    ...e,
+                    name,
+                    primaryMuscles: draft.primary,
+                    secondaryMuscles: draft.secondary,
+                    equip: draft.equip,
+                    refExercise: draft.refExercise,
+                    refCoef: draft.refCoef,
+                  }
+                  : e));
               store.saveUserData({ settings: { customExercises: list } });
             } else {
-              // Exercice de la base intégrée : on stocke une surcouche (nom + muscles),
-              // sans toucher à la base d'origine, comme pour le renommage déjà existant.
-              const namesOv = { ...(store.userData.settings.exerciseNames || {}) };
+              // Exercice de la base intégrée : on empile des surcouches par
+              // identifiant, sans jamais toucher à la base elle-même.
+              const s = store.userData.settings;
+              const namesOv = { ...(s.exerciseNames || {}) };
               namesOv[existing.id] = name;
-              const musclesOv = { ...(store.userData.settings.exerciseMuscleOverrides || {}) };
-              musclesOv[existing.id] = { primaryMuscles: primary, secondaryMuscles: secondary };
-              store.saveUserData({ settings: { exerciseNames: namesOv, exerciseMuscleOverrides: musclesOv } });
+              const musclesOv = { ...(s.exerciseMuscleOverrides || {}) };
+              musclesOv[existing.id] = { primaryMuscles: draft.primary, secondaryMuscles: draft.secondary };
+              const equipOv = { ...(s.exerciseEquip || {}) };
+              equipOv[existing.id] = draft.equip;
+              const refsOv = { ...(s.exerciseRefs || {}) };
+              if (draft.refExercise) refsOv[existing.id] = { refExercise: draft.refExercise, refCoef: draft.refCoef };
+              else delete refsOv[existing.id];
+              store.saveUserData({
+                settings: {
+                  exerciseNames: namesOv,
+                  exerciseMuscleOverrides: musclesOv,
+                  exerciseEquip: equipOv,
+                  exerciseRefs: refsOv,
+                },
+              });
             }
+            saveById(existing.id);
             toast('Exercice modifié', 'success');
             if (onSaved) onSaved(exerciseLookup(existing.id));
           } else {
             const exo = {
               id: 'custom_' + crypto.randomUUID().slice(0, 8),
-              name, category: 'Custom', isCustom: true,
-              primaryMuscles: primary, secondaryMuscles: secondary,
-              difficulty: 'Custom', equipment: 'Other',
-              refExercise: refId, refCoef,
+              name,
+              category: 'Custom',
+              isCustom: true,
+              primaryMuscles: draft.primary,
+              secondaryMuscles: draft.secondary,
+              equip: draft.equip,
+              difficulty: 'Custom',
+              equipment: draft.equip.includes('machine') ? 'Machine' : 'Other',
+              refExercise: draft.refExercise,
+              refCoef: draft.refCoef,
             };
             store.saveUserData({ settings: { customExercises: [...(store.userData.settings.customExercises || []), exo] } });
+            saveById(exo.id);
             if (onSaved) onSaved(exo);
           }
         },
@@ -627,22 +911,46 @@ function restoreSession() {
 }
 
 // ============================================================
-// DÉTAIL EXO (muscles, repos perso, historique + vue séance)
+// DÉTAIL EXO (rang, muscles, matériel, historique par marque)
 // ============================================================
+// Le contenu est redessiné SUR PLACE (`paint`) plutôt que par réouverture :
+// modifier l'exercice depuis le crayon laisse donc la fiche ouverte, à jour,
+// là où on l'avait laissée.
 function openExerciseDetailSheet(exerciseId) {
-  const def = exerciseLookup(exerciseId);
-  if (!def) return;
-  const rest = exoRestDuration(exerciseId);
-  const history = store.userData.workouts
-    .map((w) => ({ w, wx: w.exercises.find((x) => x.exerciseId === exerciseId) }))
-    .filter((h) => h.wx && h.wx.sets.length)
-    .slice(-12).reverse();
+  if (!exerciseLookup(exerciseId)) return;
+  const host = el('<div></div>');
+  let sheet = null;
+  const paint = () => {
+    host.innerHTML = '';
+    host.appendChild(buildExerciseDetail(exerciseId));
+    if (sheet) sheet.setTitle(exerciseLookup(exerciseId).name);
+  };
+  sheet = openSheet({
+    title: exerciseLookup(exerciseId).name,
+    content: host,
+    // Crayon en haut à droite : édition complète de l'exercice. La fiche reste
+    // ouverte derrière et se met à jour à l'enregistrement.
+    headerAction: {
+      icon: icons.edit,
+      label: 'Modifier l\'exercice',
+      onClick: () => openExerciseEditor(paint, exerciseLookup(exerciseId)),
+    },
+  });
+  paint();
+  return sheet;
+}
 
-  // Meilleur 1RM estimé (Epley : poids × (1 + reps/30)) sur tout l'historique
+function buildExerciseDetail(exerciseId) {
+  const def = exerciseLookup(exerciseId);
+  const brand = currentBrand(exerciseId);
+  // L'historique est celui de la MARQUE COURANTE : les charges d'une presse
+  // Panatta ne disent rien de celles d'une Hammer Strength.
+  const entries = exoEntries(exerciseId);
+  const history = entries.slice(-12).reverse();
+
+  // Meilleur 1RM estimé (Epley : poids × (1 + reps/30)) sur cet historique
   let best1rm = null;
-  for (const w of store.userData.workouts) {
-    const wx = w.exercises.find((x) => x.exerciseId === exerciseId);
-    if (!wx) continue;
+  for (const { workout: w, wx } of entries) {
     for (const s of wx.sets) {
       if (!s.weight || !s.reps) continue;
       const orm = s.weight * (1 + s.reps / 30);
@@ -677,44 +985,19 @@ function openExerciseDetailSheet(exerciseId) {
     <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px">
       ${def.primaryMuscles.map((m) => `<span class="badge">${muscleLabel(m.m)} ${m.p}%</span>`).join('')}
       ${def.secondaryMuscles.map((m) => `<span class="badge violet">${muscleLabel(m.m)} ${m.p}%</span>`).join('')}
+      ${(def.equip || []).map((q) => `<span class="badge equip-badge">${esc(equipLabel(q))}</span>`).join('')}
     </div>
-    <div class="card-row" style="margin-bottom:6px">
-      <span style="font-size:0.85rem">Repos pour cet exercice</span>
-      <span class="num" id="ed-rest-val" style="color:var(--accent)">${rest}s</span>
+    <div class="ed-hist-title">
+      <h3 style="margin:0">Historique</h3>
+      ${hasBrand(exerciseId) ? `<span class="ed-brand-tag">${esc(brand || 'Aucune marque')}</span>` : ''}
     </div>
-    <input id="ed-rest" type="range" min="30" max="300" step="15" value="${rest}" style="margin-bottom:14px">
-    <h3 style="margin-bottom:6px">Historique</h3>
-    <div id="ed-history">${history.length ? '' : '<div class="empty-state">Jamais réalisé</div>'}</div>
+    <div id="ed-history">${history.length
+    ? ''
+    : `<div class="empty-state">${hasBrand(exerciseId) && brand ? `Jamais réalisé en ${esc(brand)}` : 'Jamais réalisé'}</div>`}</div>
   </div>`);
-
-  const sheet = openSheet({
-    title: def.name,
-    content: form,
-    // Crayon en haut à droite : édition complète (nom + pourcentages de muscles),
-    // même interface que la création d'un exercice custom.
-    headerAction: {
-      icon: icons.edit,
-      label: 'Modifier l\'exercice',
-      onClick: ({ close }) => {
-        close();
-        openCustomExerciseModal(() => {
-          openExerciseDetailSheet(exerciseId); // rouvre la fiche à jour
-        }, def);
-      },
-    },
-  });
 
   const rankEl = form.querySelector('#ed-rank');
   if (rankEl) rankEl.addEventListener('click', () => rankEl.classList.toggle('flipped'));
-
-  const slider = form.querySelector('#ed-rest');
-  slider.addEventListener('input', () => { form.querySelector('#ed-rest-val').textContent = slider.value + 's'; });
-  slider.addEventListener('change', () => {
-    const rbe = { ...(store.userData.settings.restByExercise || {}) };
-    rbe[exerciseId] = +slider.value;
-    store.saveUserData({ settings: { restByExercise: rbe } });
-    toast(`Repos mémorisé : ${slider.value}s`, 'success');
-  });
 
   const hostH = form.querySelector('#ed-history');
   // Séance retenue comme référence (colonne PRÉC) : on la met en évidence.
@@ -724,19 +1007,20 @@ function openExerciseDetailSheet(exerciseId) {
   const coefById = {};
   for (const e of exoHistory(exerciseId)) coefById[e.id] = e.coef;
   for (const h of history) {
-    const coef = coefById[h.w.id];
-    const isRef = refId && h.w.id === refId;
+    const w = h.workout; const wx = h.wx;
+    const coef = coefById[w.id];
+    const isRef = refId && w.id === refId;
     // Séries listées les unes sous les autres (au lieu d'une ligne « · »),
     // avec le marqueur W/D quand la série est un échauffement ou une dégressive.
-    const labels = setLabels(h.wx.sets);
-    const setsHtml = h.wx.sets.map((s, i) => `<div class="ed-set">
+    const labels = setLabels(wx.sets);
+    const setsHtml = wx.sets.map((s, i) => `<div class="ed-set">
       <span class="ed-set-n ${labels[i].cls}">${labels[i].text}</span>
       <span class="ed-set-v">${s.weight} kg × ${s.reps}</span>
     </div>`).join('');
     const row = el(`<div class="ed-hist-item${isRef ? ' ed-hist-best' : ''}">
       ${isRef ? '<span class="ed-best-tag">Référence</span>' : ''}
       <div class="ed-hist-head">
-        <span class="ed-hist-date">${fmtDateFull(h.w.date)}</span>
+        <span class="ed-hist-date">${fmtDateFull(w.date)}</span>
         <span style="display:flex;align-items:center;gap:6px">
           <span class="num ed-coef" title="Coefficient de progression (1.00 = première séance)">×${(coef || 1).toFixed(2)}</span>
           <button class="icon-btn" aria-label="Voir la séance" style="width:38px;height:38px">${icons.history}</button>
@@ -744,10 +1028,10 @@ function openExerciseDetailSheet(exerciseId) {
       </div>
       <div class="ed-sets">${setsHtml}</div>
     </div>`);
-    row.querySelector('.icon-btn').addEventListener('click', () => openWorkoutDetail(h.w, exerciseId));
+    row.querySelector('.icon-btn').addEventListener('click', () => openWorkoutDetail(w, exerciseId));
     hostH.appendChild(row);
   }
-  return sheet;
+  return form;
 }
 
 // Vue d'une séance complète (séries empilées, coefficient d'amélioration, exos cliquables)
@@ -1005,8 +1289,10 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null, resum
       notes: editWorkout ? (editWorkout.notes || '') : '',
       editingId: editWorkout ? editWorkout.id : null,
       exercises: editWorkout
-        ? editWorkout.exercises.map((wx) => ({ exerciseId: wx.exerciseId, ss: wx.ss, sets: wx.sets.map((s) => ({ ...s })) }))
-        : (fromRoutine ? fromRoutine.exercises.map((id) => ({ exerciseId: id, sets: [] })) : []),
+        // `brand` est repris tel quel : modifier une vieille séance ne doit pas
+        // la réattribuer à la marque sélectionnée aujourd'hui.
+        ? editWorkout.exercises.map((wx) => ({ exerciseId: wx.exerciseId, ss: wx.ss, brand: wx.brand || '', sets: wx.sets.map((s) => ({ ...s })) }))
+        : (fromRoutine ? fromRoutine.exercises.map((id) => ({ exerciseId: id, sets: [], brand: currentBrand(id) })) : []),
     };
   }
   persistSession();
@@ -1329,7 +1615,7 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null, resum
   });
   overlay.querySelector('#s-add-exo').addEventListener('click', () => {
     openExercisePicker((exo) => {
-      session.exercises.push({ exerciseId: exo.id, sets: [] });
+      session.exercises.push({ exerciseId: exo.id, sets: [], brand: currentBrand(exo.id) });
       renderExos();
     });
   });
@@ -1337,7 +1623,7 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null, resum
     // Seules les séries validées partent au résumé (et donc à l'enregistrement) :
     // les lignes ouvertes puis laissées en plan ne comptent pas.
     const withSets = session.exercises
-      .map((x) => ({ ...x, sets: savedSets(x) }))
+      .map((x) => savedExercise(x, !!session.editingId))
       .filter((x) => x.sets.length);
     if (!withSets.length) { toast('Aucune série enregistrée', 'error'); return; }
     showSummary(withSets, closeSession);
@@ -1952,7 +2238,7 @@ function openExerciseBrowser() {
     draw(searchInput.value);
   });
   overlay.querySelector('#xb-custom').addEventListener('click', () => {
-    openCustomExerciseModal((exo) => {
+    openExerciseEditor((exo) => {
       toast(`« ${exo.name} » créé`, 'success');
       draw(searchInput.value); // rafraîchit la liste avec le nouvel exo
     });

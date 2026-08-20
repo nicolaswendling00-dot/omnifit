@@ -40,6 +40,10 @@ function defaultUserData() {
       volumeTrackingEnabled: true,
       volumeSectionOpen: true,
       exerciseMuscleOverrides: {},
+      exerciseEquip: {},        // { exoId: ['barbell','bench'] } — matériel redéfini
+      exerciseRefs: {},         // { exoId: { refExercise, refCoef } } — classement redéfini
+      exerciseBrand: {},        // { exoId: 'Panatta' } — marque en cours (historique séparé)
+      customBrands: [],         // marques ajoutées à la main
       showCExo: true,
       secondaryRatio: 0.5,
       exerciseDbFull: true,

@@ -1,4 +1,4 @@
-// OmniFit — Base d'exercices (156 exercices)
+// OmniFit — Base d'exercices (169 exercices, materiel inclus)
 // Structure : { id, name, category, primaryMuscles:[{m,p}], secondaryMuscles:[{m,p}], difficulty, equipment }
 
 export const MUSCLES = [
@@ -210,8 +210,204 @@ export const EXERCISES = [
   ex('devilPress', 'Devil press', 'FullBody', [['shoulders', 30], ['quads', 25], ['chest', 20]], [['glutes', 15], ['core', 10]], 'Dumbbells', 'Advanced'),
 ];
 
+// ============================================================
+// EXERCICES REPRIS DE MA BIBLIOTHÈQUE PERSONNELLE
+// ============================================================
+// Ces mouvements étaient stockés côté utilisateur (exercices « custom »). Ils
+// rejoignent la base intégrée en GARDANT LEUR IDENTIFIANT : l'historique, les
+// routines et les rangs déjà enregistrés continuent de pointer dessus.
+// `refExercise` / `refCoef` : ceux qui n'ont pas de standard de force propre
+// restent classés via un mouvement de référence pondéré (cf. customRefMap).
+const IMPORTED = [
+  ex('lo_adduction', 'Adduction des hanches', 'Glutes', [['glutes', 100]], [], 'Machine'),
+  ex('lo_beltSquat', 'Squat avec ceinture', 'Quads', [['quads', 70], ['glutes', 20]], [['hamstrings', 10]], 'Machine'),
+  ex('lo_smithBenchPress', 'Développé couché à la Smith machine', 'Chest', [['chest', 70], ['shoulders', 15]], [['triceps', 15]], 'Machine'),
+  ex('lo_smithDeclinePress', 'Développé décliné à la Smith machine', 'Chest', [['chest', 75]], [['triceps', 15], ['shoulders', 10]], 'Machine'),
+  ex('lo_smithInclinePress', 'Développé incliné à la Smith machine', 'Chest', [['chest', 60], ['shoulders', 25]], [['triceps', 15]], 'Machine'),
+  ex('lo_smithRDL', 'RDLs à la Smith machine', 'Hamstrings', [['hamstrings', 55], ['glutes', 30]], [['lowerback', 15]], 'Machine'),
+  ex('lo_smithRow', 'Tirage buste penché à la Smith machine', 'Back', [['back', 65]], [['biceps', 15], ['lowerback', 10], ['forearms', 10]], 'Machine'),
+  ex('lo_smithShoulderPress', 'Développé épaules à la Smith machine', 'Shoulders', [['shoulders', 70]], [['triceps', 20], ['core', 10]], 'Machine'),
+  ex('lo_yRaiseIncline', 'Élévation en Y sur banc incliné avec haltères', 'Shoulders', [['shoulders', 100]], [], 'Dumbbells'),
+  ex('custom_hipAdduction', 'Hip Adduction', 'Glutes', [['glutes', 100]], [], 'Machine'),
+  ex('custom_e8c04362', 'Machine Chest Press Lying', 'Chest', [['chest', 80]], [['shoulders', 10], ['triceps', 10]], 'Machine'),
+  ex('custom_1ad5f699', 'Machine Chest Press Incline', 'Chest', [['chest', 70], ['shoulders', 20]], [['triceps', 10]], 'Machine'),
+  ex('custom_c6a2d0dd', 'Triceps Pushdown Unilateral', 'Triceps', [['triceps', 100]], [], 'Cable'),
+  ex('custom_790bf953', 'Curl Machine', 'Biceps', [['biceps', 100]], [], 'Machine'),
+  ex('custom_e1389208', 'Tirage vertical prise neutre', 'Back', [['back', 80], ['biceps', 20]], [], 'Cable'),
+  ex('custom_d549dec2', 'Élévations latérales haltères (unilatéral)', 'Shoulders', [['shoulders', 80]], [['back', 20]], 'Dumbbells'),
+  ex('custom_22a584ca', 'Tirage Horizontal Machine', 'Back', [['back', 90]], [['biceps', 10]], 'Machine'),
+];
+// Références de classement conservées telles quelles.
+const IMPORTED_REFS = {
+  custom_hipAdduction: ['abduction', 1],
+  custom_c6a2d0dd: ['cablePushdown', 0.35],
+  custom_790bf953: ['preacherCurl', 1],
+  custom_e1389208: ['latPulldown', 0.9],
+  custom_d549dec2: ['lo_yRaiseIncline', 1.25],
+  custom_22a584ca: ['seatedCableRow', 2],
+};
+for (const e of IMPORTED) {
+  const r = IMPORTED_REFS[e.id];
+  if (r) { e.refExercise = r[0]; e.refCoef = r[1]; }
+  EXERCISES.push(e);
+}
+
 export const CATEGORIES = [...new Set(EXERCISES.map((e) => e.category))];
 export const EQUIPMENT_TYPES = [...new Set(EXERCISES.map((e) => e.equipment))].sort();
+
+// ============================================================
+// MATÉRIEL
+// ============================================================
+// Un exercice ne tient pas dans une seule case : un développé couché demande
+// une barre ET un banc. `equipment` (au singulier) reste la grande famille du
+// mouvement, utilisée par le filtre des réglages ; `equip` liste tout ce qu'il
+// faut réellement avoir sous la main.
+export const EQUIPMENT = [
+  { id: 'barbell', label: 'Barre' },
+  { id: 'ezbar', label: 'Barre EZ' },
+  { id: 'dumbbells', label: 'Haltères' },
+  { id: 'kettlebell', label: 'Kettlebell' },
+  { id: 'machine', label: 'Machine' },
+  { id: 'smith', label: 'Smith machine' },
+  { id: 'cable', label: 'Poulie' },
+  { id: 'rope', label: 'Corde de poulie' },
+  { id: 'pullupBar', label: 'Barre de traction' },
+  { id: 'dipBar', label: 'Barres parallèles' },
+  { id: 'bench', label: 'Banc' },
+  { id: 'inclineBench', label: 'Banc incliné' },
+  { id: 'preacherBench', label: 'Pupitre à curl' },
+  { id: 'rack', label: 'Rack / support' },
+  { id: 'landmine', label: 'Landmine' },
+  { id: 'plate', label: 'Disque' },
+  { id: 'band', label: 'Élastique' },
+  { id: 'ball', label: 'Swiss ball' },
+  { id: 'box', label: 'Box / step' },
+  { id: 'mat', label: 'Tapis' },
+  { id: 'abwheel', label: 'Roue abdominale' },
+  { id: 'ghd', label: 'Banc à lombaires' },
+  { id: 'sled', label: 'Traîneau' },
+  { id: 'battleRope', label: 'Battle ropes' },
+  { id: 'jumpRope', label: 'Corde à sauter' },
+  { id: 'ergometer', label: 'Ergomètre' },
+  { id: 'gripper', label: 'Pince de force' },
+  { id: 'wristRoller', label: 'Enrouleur de poignet' },
+  { id: 'belt', label: 'Ceinture de lest' },
+  { id: 'bodyweight', label: 'Poids du corps' },
+];
+export const equipLabel = (id) => (EQUIPMENT.find((e) => e.id === id) || { label: id }).label;
+// Matériel dont la marque change complètement les charges : deux machines de
+// marques différentes ne se comparent pas. C'est ce qui déclenche le bouton
+// « Marque » dans l'éditeur, et un historique séparé par marque.
+export const BRANDED_EQUIP = ['machine', 'cable', 'smith'];
+
+// Marques de machines. « Autre » permet d'en ajouter une à la volée, mémorisée
+// ensuite dans les réglages (settings.customBrands).
+export const BRANDS = [
+  'Panatta', 'Hammer Strength', 'Technogym', 'Life Fitness', 'Cybex', 'Nautilus',
+  'Precor', 'Matrix', 'Hoist', 'Atlantis', 'Arsenal Strength', 'Prime Fitness',
+  'Watson', 'Gym80', 'Eleiko', 'Rogue', 'Body-Solid', 'Star Trac', 'FreeMotion',
+  'Muscle D', 'Legend Fitness', 'Sorinex', 'Nebula', 'Strive', 'BodyCraft',
+  'Powertec', 'Icarian', 'Paramount', 'Salter', 'BH Fitness', 'Impulse',
+  'DHZ Fitness', 'Jerai', 'Milon', 'Pendulum', 'Ironmaster', 'Primal Strength',
+  'Force USA', 'Titan Fitness', 'Domyos', 'Care Fitness', 'Heubozen', 'SportsArt',
+  'Marbo Sport', 'Nordic Gym', 'Gymleco', 'Exigo', 'TuffStuff', 'Vectra', 'Keiser',
+  'Schnell', 'Proxomed', 'Ergo-Fit', 'Bodytone', 'Pullum', 'Indigo Fitness',
+];
+
+// Matériel réellement nécessaire, exercice par exercice.
+const EQUIP_BY_ID = {
+  // Pectoraux
+  benchPress: ['barbell', 'bench', 'rack'], inclineBench: ['barbell', 'inclineBench', 'rack'],
+  declineBench: ['barbell', 'bench', 'rack'], dbBenchPress: ['dumbbells', 'bench'],
+  dbInclinePress: ['dumbbells', 'inclineBench'], dbFly: ['dumbbells', 'bench'],
+  cableFly: ['cable'], pecDeck: ['machine'], pushUp: ['bodyweight'],
+  dips: ['dipBar', 'bodyweight'], machinePress: ['machine'], pullover: ['dumbbells', 'bench'],
+  svendPress: ['plate'], landminePress: ['barbell', 'landmine'],
+  // Dos
+  pullUp: ['pullupBar', 'bodyweight'], chinUp: ['pullupBar', 'bodyweight'],
+  latPulldown: ['cable', 'machine'], barbellRow: ['barbell'], pendlayRow: ['barbell'],
+  dbRow: ['dumbbells', 'bench'], seatedCableRow: ['cable', 'machine'],
+  tBarRow: ['barbell', 'landmine'], deadlift: ['barbell'], rackPull: ['barbell', 'rack'],
+  facePull: ['cable', 'rope'], straightArmPulldown: ['cable'], shrugs: ['barbell', 'dumbbells'],
+  machineRow: ['machine'], invertedRow: ['barbell', 'rack', 'bodyweight'],
+  // Épaules
+  overheadPress: ['barbell', 'rack'], dbShoulderPress: ['dumbbells', 'bench'],
+  arnoldPress: ['dumbbells', 'bench'], lateralRaise: ['dumbbells'], cableLateralRaise: ['cable'],
+  frontRaise: ['dumbbells'], rearDeltFly: ['dumbbells', 'bench'], reversePecDeck: ['machine'],
+  uprightRow: ['barbell'], machineShoulderPress: ['machine'], pushPress: ['barbell', 'rack'],
+  cubanRotation: ['dumbbells'], plateFrontRaise: ['plate'],
+  // Biceps
+  barbellCurl: ['barbell'], ezBarCurl: ['ezbar'], dbCurl: ['dumbbells'], hammerCurl: ['dumbbells'],
+  inclineCurl: ['dumbbells', 'inclineBench'], preacherCurl: ['ezbar', 'preacherBench'],
+  concentrationCurl: ['dumbbells', 'bench'], cableCurl: ['cable'],
+  spiderCurl: ['dumbbells', 'inclineBench'], bayesianCurl: ['cable'], dragCurl: ['barbell'],
+  zottmanCurl: ['dumbbells'],
+  // Triceps
+  closeGripBench: ['barbell', 'bench', 'rack'], tricepsDips: ['bench', 'bodyweight'],
+  skullCrusher: ['ezbar', 'bench'], overheadExtension: ['dumbbells'], cablePushdown: ['cable'],
+  ropePushdown: ['cable', 'rope'], kickback: ['dumbbells'], overheadCableExt: ['cable', 'rope'],
+  diamondPushUp: ['bodyweight'], jmPress: ['barbell', 'bench'], machineDips: ['machine'],
+  tatePress: ['dumbbells', 'bench'],
+  // Avant-bras
+  wristCurl: ['barbell', 'bench'], reverseWristCurl: ['barbell', 'bench'], reverseCurl: ['ezbar'],
+  farmersWalk: ['dumbbells'], platePinch: ['plate'], deadHang: ['pullupBar', 'bodyweight'],
+  wristRoller: ['wristRoller'], gripper: ['gripper'],
+  // Quadriceps
+  squat: ['barbell', 'rack'], frontSquat: ['barbell', 'rack'], gobletSquat: ['dumbbells'],
+  legPress: ['machine'], hackSquat: ['machine'], legExtension: ['machine'],
+  bulgarianSplitSquat: ['dumbbells', 'bench'], walkingLunge: ['dumbbells'],
+  stepUp: ['dumbbells', 'box'], sissySquat: ['bodyweight'], pistolSquat: ['bodyweight'],
+  smithSquat: ['smith'], pauseSquat: ['barbell', 'rack'], wallSit: ['bodyweight'],
+  // Ischios
+  romanianDeadlift: ['barbell'], stiffLegDeadlift: ['barbell'], lyingLegCurl: ['machine'],
+  seatedLegCurl: ['machine'], nordicCurl: ['bodyweight'], goodMorning: ['barbell', 'rack'],
+  dbRDL: ['dumbbells'], singleLegRDL: ['dumbbells'], gluteHamRaise: ['machine', 'ghd'],
+  swissBallCurl: ['ball', 'bodyweight'],
+  // Fessiers
+  hipThrust: ['barbell', 'bench'], gluteBridge: ['bodyweight'], cableKickback: ['cable'],
+  sumoDeadlift: ['barbell'], abduction: ['machine'], frogPump: ['bodyweight'],
+  curtsyLunge: ['dumbbells'], reverseHyper: ['machine'], bandWalk: ['band'],
+  smithHipThrust: ['smith', 'bench'],
+  // Mollets
+  standingCalfRaise: ['machine'], seatedCalfRaise: ['machine'], legPressCalfRaise: ['machine'],
+  donkeyCalfRaise: ['machine'], singleLegCalfRaise: ['bodyweight', 'box'],
+  dbCalfRaise: ['dumbbells'], tibialisRaise: ['bodyweight'],
+  // Abdos
+  plank: ['bodyweight', 'mat'], sidePlank: ['bodyweight', 'mat'], crunch: ['bodyweight', 'mat'],
+  cableCrunch: ['cable', 'rope'], hangingLegRaise: ['pullupBar', 'bodyweight'],
+  lyingLegRaise: ['bodyweight', 'mat'], russianTwist: ['plate', 'mat'], abWheel: ['abwheel', 'mat'],
+  deadBug: ['bodyweight', 'mat'], birdDog: ['bodyweight', 'mat'], palofPress: ['cable'],
+  mountainClimber: ['bodyweight', 'mat'], vUp: ['bodyweight', 'mat'], dragonFlag: ['bench', 'bodyweight'],
+  // Lombaires
+  backExtension: ['ghd', 'bodyweight'], superman: ['bodyweight', 'mat'],
+  jeffersonCurl: ['dumbbells', 'box'], weightedBackExtension: ['ghd', 'plate'],
+  machineBackExtension: ['machine'], catCow: ['bodyweight', 'mat'],
+  // Full body
+  kettlebellSwing: ['kettlebell'], burpee: ['bodyweight'], thruster: ['barbell', 'rack'],
+  cleanAndPress: ['barbell'], kbClean: ['kettlebell'], kbSnatch: ['kettlebell'],
+  turkishGetUp: ['kettlebell'], bearCrawl: ['bodyweight'], battleRopes: ['battleRope'],
+  sledPush: ['sled'], boxJump: ['box', 'bodyweight'], jumpSquat: ['bodyweight'],
+  rowingErg: ['ergometer'], assaultBike: ['ergometer'], jumpRope: ['jumpRope'],
+  manMaker: ['dumbbells'], devilPress: ['dumbbells'],
+  // Bibliothèque personnelle
+  lo_adduction: ['machine'], lo_beltSquat: ['machine', 'belt'],
+  lo_smithBenchPress: ['smith', 'bench'], lo_smithDeclinePress: ['smith', 'bench'],
+  lo_smithInclinePress: ['smith', 'inclineBench'], lo_smithRDL: ['smith'],
+  lo_smithRow: ['smith'], lo_smithShoulderPress: ['smith', 'bench'],
+  lo_yRaiseIncline: ['dumbbells', 'inclineBench'],
+  custom_hipAdduction: ['machine'], custom_e8c04362: ['machine'], custom_1ad5f699: ['machine'],
+  custom_c6a2d0dd: ['cable'], custom_790bf953: ['machine'], custom_e1389208: ['cable'],
+  custom_d549dec2: ['dumbbells'], custom_22a584ca: ['machine'],
+};
+// Repli sur la grande famille si un exercice n'est pas dans la table.
+const EQUIP_FALLBACK = {
+  Barbell: ['barbell'], Dumbbells: ['dumbbells'], Cable: ['cable'], Machine: ['machine'],
+  Bodyweight: ['bodyweight'], Plate: ['plate'], Band: ['band'], Kettlebell: ['kettlebell'],
+  Other: [],
+};
+for (const e of EXERCISES) {
+  e.equip = EQUIP_BY_ID[e.id] || EQUIP_FALLBACK[e.equipment] || [];
+}
 
 // Noms alternatifs (anglais / autres appellations courantes, façon StrengthLevel.com)
 // Utilisés uniquement pour la recherche — n'affecte pas le nom affiché.

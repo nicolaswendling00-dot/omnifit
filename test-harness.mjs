@@ -902,5 +902,128 @@ console.log('== v5.6 : accueil, ruban, series persistantes, coefficient ==');
   clearOverlays();
 }
 
+console.log('== v5.7 : materiel, marques, editeur d\'exercice ==');
+{
+  const exdata = await import('./data/exercises.js');
+  // ---- Base : materiel renseigne partout, exos perso integres
+  assert(exdata.EXERCISES.length === 169, 'Base : 169 exercices (152 + 17 repris de la bibliotheque perso)');
+  assert(exdata.EXERCISES.every((e) => Array.isArray(e.equip) && e.equip.length), 'Base : materiel renseigne pour chaque exercice');
+  const eqIds = new Set(exdata.EQUIPMENT.map((q) => q.id));
+  assert(exdata.EXERCISES.every((e) => e.equip.every((q) => eqIds.has(q))), 'Base : aucun materiel inconnu');
+  const bp = exdata.EXERCISES.find((e) => e.id === 'benchPress');
+  assert(bp.equip.includes('barbell') && bp.equip.includes('bench'), 'Materiel : le developpe couche demande barre ET banc');
+  assert(exdata.EXERCISES.some((e) => e.id === 'custom_22a584ca') && exdata.EXERCISES.some((e) => e.id === 'lo_smithRow'),
+    'Exos perso : passes dans la base en gardant leur identifiant');
+  assert(exdata.EXERCISES.every((e) => [...e.primaryMuscles, ...e.secondaryMuscles].reduce((a, x) => a + x.p, 0) === 100),
+    'Base : la repartition musculaire fait 100 % partout');
+  store.userData.settings.customExercises = [];
+  store.userData.settings.exerciseBrand = {};
+  store.userData.settings.exerciseEquip = {};
+  store.userData.settings.customBrands = [];
+  assert(workout.customRefMap().custom_22a584ca.coef === 2, 'Rangs : la reference des exos perso est conservee');
+  assert(workout.customRefMap().custom_c6a2d0dd.refId === 'cablePushdown', 'Rangs : exercice de reference conserve');
+
+  // ---- Un historique par marque
+  store.userData.workouts = [];
+  store.addWorkout({ id: 'br1', date: todayISO(-4), totalTime: 600, exercises: [{ exerciseId: 'legPress', sets: [{ weight: 200, reps: 10 }] }] });
+  store.addWorkout({ id: 'br2', date: todayISO(-2), totalTime: 600, exercises: [{ exerciseId: 'legPress', brand: 'Panatta', sets: [{ weight: 150, reps: 10 }] }] });
+  assert(workout.hasBrand('legPress'), 'Marque : proposee sur un exercice sur machine');
+  assert(!workout.hasBrand('barbellCurl'), 'Marque : pas proposee sur un exercice a la barre');
+
+  workout.render(pages.workout);
+  pages.workout.querySelector('#btn-new-session').click();
+  document.querySelector('.sheet .ns-empty').click();
+  const ov7 = document.querySelector('.session-overlay');
+  ov7.querySelector('#s-add-exo').click();
+  const pick7 = document.querySelector('.picker-overlay');
+  pick7.querySelector('#exo-search').value = 'Presse a cuisses';
+  fire(pick7.querySelector('#exo-search'), 'input');
+  [...pick7.querySelectorAll('.exo-search-item')][0].click();
+
+  const openDetail = () => {
+    ov7.querySelector('#s-exos .exo-card [data-detail]').click();
+    return [...document.querySelectorAll('.sheet')].find((s) => s.querySelector('#ed-history'));
+  };
+  let ed = openDetail();
+  assert(ed, 'Fiche exo ouverte');
+  assert(!ed.querySelector('#ed-rest'), 'Fiche exo : le reglage du repos a quitte l\'historique');
+  assert(ed.querySelector('.ed-brand-tag').textContent === 'Aucune marque', 'Fiche exo : marque courante affichee');
+  assert(ed.querySelectorAll('.ed-hist-item').length === 1 && ed.textContent.includes('200 kg'),
+    'Marque : sans marque, on ne voit que les seances sans marque');
+
+  // Le crayon NE FERME PAS la fiche
+  ed.querySelector('.sheet-action').click();
+  assert(document.body.contains(ed), 'Modifier : la fiche d\'historique reste ouverte derriere');
+  const edit = document.querySelector('.modal .ex-edit');
+  assert(edit, 'Editeur : fenetre ouverte par-dessus');
+  const rowKeys = [...edit.querySelectorAll('.ex-row')].map((r) => r.dataset.open);
+  assert(rowKeys.join(',') === 'rank,prim,sec,equip,brand,rest',
+    'Editeur : une ligne-bouton par reglage (rang, muscles, equipement, marque, repos)');
+  assert(edit.querySelector('#xe-name').value === 'Presse à cuisses', 'Editeur : le nom se modifie directement');
+  assert(edit.querySelector('.ex-total').classList.contains('ok'), 'Editeur : total musculaire a 100 %');
+
+  // Muscles : plus de cases a cocher
+  edit.querySelector('[data-open="prim"]').click();
+  const musSheet = [...document.querySelectorAll('.sheet')].find((s) => s.querySelector('.mus-edit-row'));
+  assert(musSheet.querySelectorAll('.mus-edit-row').length === 12, 'Muscles : les 12 muscles sont proposes');
+  assert(!musSheet.querySelector('input[type="checkbox"]'), 'Muscles : plus de case a cocher');
+  assert(musSheet.querySelectorAll('.mus-edit-row.on').length > 0, 'Muscles : un pourcentage non nul allume la ligne');
+  const quadInput = musSheet.querySelector('.mus-edit-p[data-m="quads"]');
+  const quadWas = quadInput.value;
+  quadInput.value = '10';
+  fire(quadInput, 'input');
+  assert(musSheet.querySelector('#ms-total').classList.contains('warn'), 'Muscles : total different de 100 signale');
+  quadInput.value = quadWas;
+  fire(quadInput, 'input');
+  assert(musSheet.querySelector('#ms-total').classList.contains('ok'), 'Muscles : total revenu a 100 %');
+  musSheet.querySelector('[data-done]').click();
+
+  // Equipement : selection multiple
+  edit.querySelector('[data-open="equip"]').click();
+  const eqSheet = [...document.querySelectorAll('.sheet')].find((s) => s.querySelector('.equip-chip'));
+  assert(eqSheet.querySelectorAll('.equip-chip').length === exdata.EQUIPMENT.length, 'Equipement : tout le materiel propose');
+  assert(eqSheet.querySelector('.equip-chip[data-q="machine"]').classList.contains('on'), 'Equipement : machine deja selectionnee');
+  eqSheet.querySelector('.equip-chip[data-q="bench"]').click();
+  assert(eqSheet.querySelector('.equip-chip[data-q="bench"]').classList.contains('on'), 'Equipement : selection multiple possible');
+  eqSheet.querySelector('[data-done]').click();
+  assert([...edit.querySelectorAll('.ex-row')].find((r) => r.dataset.open === 'equip').textContent.includes('Banc'),
+    'Equipement : le bouton resume le materiel choisi');
+
+  // Marque : choix dans la liste
+  edit.querySelector('[data-open="brand"]').click();
+  const brSheet = [...document.querySelectorAll('.sheet')].find((s) => s.querySelector('.brand-item'));
+  assert(brSheet.querySelectorAll('.brand-item').length === exdata.BRANDS.length + 1, 'Marques : liste fournie + « Aucune »');
+  [...brSheet.querySelectorAll('.brand-item')].find((b) => b.dataset.b === 'Panatta').click();
+  assert([...edit.querySelectorAll('.ex-row')].find((r) => r.dataset.open === 'brand').textContent.includes('Panatta'),
+    'Marque : selection reportee sur le bouton');
+
+  // Enregistrement
+  [...document.querySelectorAll('.modal')].pop();
+  const saveBtn = [...document.querySelectorAll('.modal-actions .btn')].find((b) => b.textContent === 'Enregistrer');
+  saveBtn.click();
+  assert(store.userData.settings.exerciseBrand.legPress === 'Panatta', 'Enregistrement : marque memorisee');
+  assert((store.userData.settings.exerciseEquip.legPress || []).includes('bench'), 'Enregistrement : materiel memorise');
+  assert(workout.currentBrand('legPress') === 'Panatta', 'Marque courante lue depuis les reglages');
+  document.querySelectorAll('.scrim').forEach((s) => s.remove());
+
+  // L'historique suit la marque courante
+  ed = openDetail();
+  assert(ed.querySelector('.ed-brand-tag').textContent === 'Panatta', 'Fiche exo : marque courante affichee');
+  assert(ed.querySelectorAll('.ed-hist-item').length === 1 && ed.textContent.includes('150 kg'),
+    'Marque : chaque marque a son propre historique');
+  document.querySelectorAll('.scrim').forEach((s) => s.remove());
+
+  // La seance en cours enregistre la marque du moment
+  const cardL = ov7.querySelector('#s-exos .exo-card');
+  cardL.querySelector('.sr-kg').value = '160';
+  cardL.querySelector('.sr-reps').value = '10';
+  cardL.querySelector('.sr-check').click();
+  ov7.querySelector('#s-finish').click();
+  [...document.querySelectorAll('.modal-actions .btn')].find((b) => b.textContent.includes('Valider')).click();
+  const lastW = store.userData.workouts[store.userData.workouts.length - 1];
+  assert(lastW.exercises[0].brand === 'Panatta', 'Seance : la marque du moment est enregistree avec l\'exercice');
+  clearOverlays();
+}
+
 console.log(`\n===== RÉSULTAT : ${pass} OK / ${fail} FAIL =====`);
 process.exit(fail ? 1 : 0);

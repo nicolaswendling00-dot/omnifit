@@ -186,6 +186,16 @@ export function toast(message, type = 'info') {
   }, 2400);
 }
 
+// Les panneaux peuvent s'empiler (une feuille par-dessus une fenêtre, par ex.
+// le choix des muscles au-dessus de l'éditeur d'exercice). Fermer celui du
+// dessus ne doit donc pas rendre son défilement à la page tant qu'il en reste
+// un ouvert dessous.
+function releaseOverlayLock() {
+  if (!document.querySelector('.scrim, .picker-overlay')) {
+    document.body.classList.remove('overlay-open');
+  }
+}
+
 // ---------- Modal ----------
 export function openModal({ title, content, actions = [], onClose = null, wide = false }) {
   document.body.classList.add('overlay-open');
@@ -210,8 +220,7 @@ export function openModal({ title, content, actions = [], onClose = null, wide =
   const actionsEl = scrim.querySelector('.modal-actions');
   const close = () => {
     scrim.classList.remove('visible');
-    document.body.classList.remove('overlay-open');
-    setTimeout(() => scrim.remove(), 250);
+    setTimeout(() => { scrim.remove(); releaseOverlayLock(); }, 250);
     if (onClose) onClose();
   };
   for (const a of actions) {
@@ -276,10 +285,12 @@ export function openSheet({ title, content, onClose = null, headerAction = null 
   const sheet = scrim.querySelector('.sheet');
   const close = () => {
     scrim.classList.remove('visible');
-    document.body.classList.remove('overlay-open');
-    setTimeout(() => scrim.remove(), 170);
+    setTimeout(() => { scrim.remove(); releaseOverlayLock(); }, 170);
     if (onClose) onClose();
   };
+  // Le titre peut changer sans rouvrir le panneau (renommage d'un exercice
+  // depuis la fiche restée ouverte).
+  const setTitle = (txt) => { sheet.querySelector('.sheet-header h3').textContent = txt; };
   scrim.addEventListener('click', (e) => { if (e.target === scrim) close(); });
 
   if (headerAction) {
@@ -382,7 +393,7 @@ export function openSheet({ title, content, onClose = null, headerAction = null 
 
   document.body.appendChild(scrim);
   requestAnimationFrame(() => scrim.classList.add('visible'));
-  return { close, body };
+  return { close, body, setTitle };
 }
 
 // Normalise une chaîne pour la recherche : minuscules, sans accents ni signes
