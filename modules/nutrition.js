@@ -1538,10 +1538,11 @@ export function render(container) {
   // Le jour consulté peut être hors de la semaine : on l'ajoute pour qu'il
   // reste visible et sélectionné dans le ruban.
   if (!days7.includes(selectedDate)) days7.unshift(selectedDate);
-  const ribbon = days7.map(chipFor).join('')
-    + `<button class="date-chip date-more" id="date-more" aria-label="Historique complet">
+  // Le « + » ouvre le passé : il se place donc AVANT le plus ancien des 7 jours,
+  // dans le sens de lecture du ruban (on remonte le temps vers la gauche).
+  const ribbon = `<button class="date-chip date-more" id="date-more" aria-label="Historique complet">
         <span class="d-more">+</span>
-      </button>`;
+      </button>` + days7.map(chipFor).join('');
 
   container.innerHTML = '';
   container.appendChild(el(`
@@ -1553,7 +1554,6 @@ export function render(container) {
         </div>
         <div class="kcal-sub">
           <span>${remaining >= 0 ? `${Math.round(remaining)} kcal restantes` : `${Math.abs(Math.round(remaining))} kcal au-dessus`}</span>
-          <span class="fiber-line">Fibres ${Math.round(totals.fiber)} / ${fiberGoal} g</span>
         </div>
         <div class="macro-rings">
           <div class="ring-item">

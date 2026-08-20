@@ -455,6 +455,11 @@ canvas { max-width: 100%; }
 .ed-hist-item { padding: 11px; border-radius: 10px; background: var(--surface-2); margin-bottom: 8px; }
 .ed-hist-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
 .ed-hist-date { font-weight: 700; font-size: 0.85rem; }
+/* Coefficient de progression (remplace le volume en kg, mauvaise mesure de force) */
+.ed-coef {
+  color: var(--accent); font-size: 0.85rem; font-weight: 800;
+  padding: 2px 8px; border-radius: 999px; background: rgba(var(--accent-rgb), 0.12);
+}
 .ed-sets { display: flex; flex-direction: column; gap: 5px; }
 .ed-set { display: flex; align-items: center; gap: 10px; }
 .ed-set-n {
@@ -1306,13 +1311,22 @@ body.shape-8bit .gr-progress i, body.shape-8bit .progress-bar > div {
 .page > div > .nutrition-header,
 .home-fit > .card,
 .home-fit > .gr-card,
-.home-fit > .grid-2 { animation: cardIn 380ms var(--ease) both; }
+.home-fit > .grid-2,
+/* Les 4 cartes du milieu sont regroupées deux à deux dans `.home-duo`, qui
+   n'est pas une carte : sans cette ligne elles entraient sans animation, alors
+   que le rang et l'eau, enfants directs, en avaient une. */
+.home-fit > .home-duo > .card { animation: cardIn 380ms var(--ease) both; }
 /* Cascade : chaque bloc entre légèrement après le précédent */
 .page > div > *:nth-child(1), .home-fit > *:nth-child(1) { animation-delay: 0ms; }
 .page > div > *:nth-child(2), .home-fit > *:nth-child(2) { animation-delay: 45ms; }
 .page > div > *:nth-child(3), .home-fit > *:nth-child(3) { animation-delay: 90ms; }
 .page > div > *:nth-child(4), .home-fit > *:nth-child(4) { animation-delay: 135ms; }
 .page > div > *:nth-child(5), .home-fit > *:nth-child(5) { animation-delay: 180ms; }
+/* Les cartes d'un duo suivent le rythme de la cascade, décalées entre elles */
+.home-fit > *:nth-child(3) > .card:nth-child(1) { animation-delay: 90ms; }
+.home-fit > *:nth-child(3) > .card:nth-child(2) { animation-delay: 112ms; }
+.home-fit > *:nth-child(4) > .card:nth-child(1) { animation-delay: 135ms; }
+.home-fit > *:nth-child(4) > .card:nth-child(2) { animation-delay: 157ms; }
 
 /* Items de liste (repas, historique, réglages) : apparition en cascade */
 @keyframes itemIn { from { opacity: 0; transform: translate3d(0, 10px, 0); } to { opacity: 1; transform: none; } }

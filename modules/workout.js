@@ -137,8 +137,19 @@ function setLabels(sets) {
   });
 }
 
+// ---------- Séries validées ----------
+// Pendant une séance, une ligne peut exister sans être validée : l'utilisateur
+// a saisi (ou décoché) des valeurs mais n'a pas coché la case. Ces séries-là
+// restent dans `sets` pour ne pas perdre la saisie, mais ne comptent nulle part
+// et sont retirées à l'enregistrement. Les séances déjà enregistrées n'ont pas
+// de marqueur `done` : elles sont donc toutes considérées comme validées.
+const isDone = (s) => !!s && s.done !== false;
+const doneSets = (wx) => (wx && wx.sets ? wx.sets.filter(isDone) : []);
+// Séries à enregistrer : les validées, sans le marqueur de séance.
+const savedSets = (wx) => doneSets(wx).map(({ done, ...rest }) => rest);
+
 // Volume total d'un exo dans un workout
-const exoVolume = (wx) => wx.sets.reduce((a, s) => a + s.weight * s.reps, 0);
+const exoVolume = (wx) => doneSets(wx).reduce((a, s) => a + s.weight * s.reps, 0);
 
 // Dernier workout contenant l'exo → { workout, wx }
 function lastEntry(exerciseId) {
@@ -151,17 +162,31 @@ function lastEntry(exerciseId) {
 
 // ---------- Séance de référence (colonne PRÉC) ----------
 // On n'affiche plus la DERNIÈRE séance, mais la MEILLEURE du dernier mois.
-// « Meilleure » = à la fois plus de séries et des charges plus lourdes : on
-// score donc chaque séance sur son volume de travail (Σ poids × reps), qui
-// combine naturellement les deux — 4×80 kg bat 3×80 kg, et 3×90 kg bat 3×80 kg.
-// À volume égal, la charge maximale départage (une séance plus lourde à volume
-// identique est la meilleure référence), puis la date (la plus récente gagne).
-// Les séries d'échauffement et dégressives sont exclues : elles gonfleraient le
-// volume sans refléter la performance.
+// « Meilleure » = celle où on a été le plus fort, mesurée par le score de
+// performance (moyenne des 1RM estimés) et NON par le volume : une série de
+// plus au même poids ne fait pas d'une séance une meilleure référence.
+// Les séries d'échauffement et dégressives sont exclues : elles tireraient le
+// score vers le bas sans refléter la performance.
 const REFERENCE_WINDOW_DAYS = 30;
 
 function workSets(wx) {
-  return (wx && wx.sets ? wx.sets : []).filter(isWorkSet);
+  return doneSets(wx).filter(isWorkSet);
+}
+
+// ---------- Score de performance ----------
+// Le volume (Σ poids × reps) mesure mal la force : une série de plus le fait
+// grimper sans qu'on ait été plus fort. On score donc une prestation par la
+// MOYENNE des 1RM estimés (Epley : poids × (1 + reps/30)) de ses séries de
+// travail — une valeur indépendante du NOMBRE de séries.
+// Séries au poids du corps (0 kg) : on retombe sur le nombre de répétitions.
+// Les scores ne sont jamais comparés qu'entre séances d'un MÊME exercice, donc
+// l'unité importe peu tant qu'elle reste la même d'une séance à l'autre.
+const setScore = (s) => (s.weight > 0 ? s.weight * (1 + s.reps / 30) : s.reps);
+
+function exoScore(wx) {
+  const sets = workSets(wx).filter((s) => s.reps > 0);
+  if (!sets.length) return 0;
+  return sets.reduce((a, s) => a + setScore(s), 0) / sets.length;
 }
 
 // Meilleure prestation de l'exo sur les 30 derniers jours → { workout, wx, sets }
@@ -176,13 +201,14 @@ function bestEntry(exerciseId, refDate = null) {
     if (!wx) continue;
     const sets = workSets(wx);
     if (!sets.length) continue;
-    const volume = sets.reduce((a, s) => a + s.weight * s.reps, 0);
-    const maxWeight = sets.reduce((a, s) => Math.max(a, s.weight), 0);
-    const cand = { workout: w, wx, sets, volume, maxWeight };
+    const score = exoScore(wx);
+    const cand = { workout: w, wx, sets, score };
+    // À score égal (mêmes charges, mêmes reps), la séance qui compte le plus de
+    // séries l'emporte, puis la plus récente.
     if (!best
-      || cand.volume > best.volume
-      || (cand.volume === best.volume && cand.maxWeight > best.maxWeight)
-      || (cand.volume === best.volume && cand.maxWeight === best.maxWeight && cand.workout.date > best.workout.date)) {
+      || cand.score > best.score
+      || (cand.score === best.score && cand.sets.length > best.sets.length)
+      || (cand.score === best.score && cand.sets.length === best.sets.length && cand.workout.date > best.workout.date)) {
       best = cand;
     }
   }
@@ -198,13 +224,14 @@ function bestEntry(exerciseId, refDate = null) {
   return best;
 }
 
-// Coefficient d'amélioration exo : volume courant vs dernier volume (%)
-function exoImprovement(exerciseId, currentVolume) {
-  const last = lastEntry(exerciseId);
-  if (!last || !currentVolume) return null;
-  const lv = exoVolume(last.wx);
-  if (!lv) return null;
-  return Math.round(((currentVolume / lv) - 1) * 100);
+// Amélioration d'un exo EN COURS de séance : score courant vs dernière séance.
+function exoImprovement(wx) {
+  const last = lastEntry(wx.exerciseId);
+  if (!last) return null;
+  const cur = exoScore(wx);
+  const prev = exoScore(last.wx);
+  if (!cur || !prev) return null;
+  return Math.round(((cur / prev) - 1) * 100);
 }
 
 // Dernier volume d'un muscle dans les séances passées
@@ -248,25 +275,36 @@ function topMuscle(w) {
   return best;
 }
 
-// Historique {date,id,vol} d'un exo, trié par date
+// Historique {date, id, score, ratio, coef} d'un exo, trié par date.
+// `coef` est le COEFFICIENT DE PROGRESSION : il vaut 1.00 à la première séance,
+// puis se multiplie à chaque fois par le rapport de score avec la séance
+// précédente. Il dit donc « où j'en suis par rapport à mes débuts », là où le
+// volume ne disait que « combien j'ai soulevé ce jour-là ».
 function exoHistory(exerciseId) {
   const h = [];
   for (const w of store.userData.workouts) {
     const wx = w.exercises.find((x) => x.exerciseId === exerciseId);
-    if (wx && wx.sets.length) h.push({ date: w.date, id: w.id, vol: exoVolume(wx) });
+    if (wx && wx.sets.length) h.push({ date: w.date, id: w.id, vol: exoVolume(wx), score: exoScore(wx) });
   }
   h.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  let coef = 1;
+  h.forEach((e, i) => {
+    const prev = i > 0 ? h[i - 1].score : 0;
+    // Score manquant (séance sans série de travail) : on ne casse pas la chaîne,
+    // le coefficient est simplement reconduit.
+    e.ratio = i > 0 && prev && e.score ? e.score / prev : null;
+    if (e.ratio) coef *= e.ratio;
+    e.coef = coef;
+  });
   return h;
 }
 
 // Amélioration (%) d'un exo dans une séance donnée vs l'occurrence précédente
 function exoImprovementAt(exerciseId, workout) {
   const h = exoHistory(exerciseId);
-  const idx = h.findIndex((e) => e.id === workout.id);
-  if (idx <= 0) return null;
-  const prev = h[idx - 1].vol;
-  if (!prev) return null;
-  return Math.round(((h[idx].vol / prev) - 1) * 100);
+  const e = h.find((x) => x.id === workout.id);
+  if (!e || !e.ratio) return null;
+  return Math.round((e.ratio - 1) * 100);
 }
 
 // Coefficient d'amélioration d'une séance = moyenne des améliorations d'exos ayant un précédent
@@ -682,8 +720,11 @@ function openExerciseDetailSheet(exerciseId) {
   // Séance retenue comme référence (colonne PRÉC) : on la met en évidence.
   const refEntry = bestEntry(exerciseId);
   const refId = refEntry && refEntry.workout ? refEntry.workout.id : null;
+  // Coefficient de progression par séance (1.00 = première fois qu'on fait l'exo)
+  const coefById = {};
+  for (const e of exoHistory(exerciseId)) coefById[e.id] = e.coef;
   for (const h of history) {
-    const vol = exoVolume(h.wx);
+    const coef = coefById[h.w.id];
     const isRef = refId && h.w.id === refId;
     // Séries listées les unes sous les autres (au lieu d'une ligne « · »),
     // avec le marqueur W/D quand la série est un échauffement ou une dégressive.
@@ -697,7 +738,7 @@ function openExerciseDetailSheet(exerciseId) {
       <div class="ed-hist-head">
         <span class="ed-hist-date">${fmtDateFull(h.w.date)}</span>
         <span style="display:flex;align-items:center;gap:6px">
-          <span class="num" style="color:var(--accent);font-size:0.85rem">${vol.toLocaleString('fr-FR')} kg</span>
+          <span class="num ed-coef" title="Coefficient de progression (1.00 = première séance)">×${(coef || 1).toFixed(2)}</span>
           <button class="icon-btn" aria-label="Voir la séance" style="width:38px;height:38px">${icons.history}</button>
         </span>
       </div>
@@ -1031,35 +1072,34 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null, resum
       // Référence = meilleure séance du dernier mois (séries de travail seules)
       const best = bestEntry(wx.exerciseId);
       const prevSets = best ? best.sets : [];
-      const curVol = exoVolume(wx);
-      const imp = exoImprovement(wx.exerciseId, curVol);
+      const imp = exoImprovement(wx);
       const rk = exerciseRank(wx.exerciseId, lpMap);
-      const labels = setLabels(wx.sets);
 
-      // Plus de ligne vide ajoutée d'office après la dernière série validée :
-      // on affiche autant de lignes qu'il y a de séries (ou de séries de
-      // référence à reproduire), et une ligne de plus par appui sur
-      // « Ajouter une série » (compteur `pending`, remis à zéro à la validation).
-      const pending = wx.pending || 0;
-      let rowCount = Math.max(wx.sets.length + pending, prevSets.length);
-      if (rowCount === 0) rowCount = 1; // exercice sans historique : une ligne pour démarrer
+      // Une ligne par série de l'exo — validée ou non : dévalider ne fait donc
+      // pas disparaître la ligne, ses valeurs restent en place et il suffit de
+      // la revalider. On complète ensuite avec des lignes vides jusqu'au nombre
+      // de séries de la référence, à reproduire.
+      const rowSets = [...wx.sets];
+      while (rowSets.length < prevSets.length) rowSets.push(null);
+      if (!rowSets.length) rowSets.push(null); // exo sans historique : une ligne pour démarrer
+      const labels = setLabels(rowSets);
       let rowsHtml = '';
-      for (let i = 0; i < rowCount; i++) {
-        const confirmed = i < wx.sets.length;
-        const s = confirmed ? wx.sets[i] : null;
+      rowSets.forEach((s, i) => {
+        const live = i < wx.sets.length; // ligne réelle (supprimable), même vide
+        const done = isDone(s);
         const prev = prevSets[i];
-        const lab = confirmed ? labels[i] : { text: String(i + 1), cls: '' };
-        rowsHtml += `<div class="set-row${confirmed ? ' done' : ''}" data-idx="${idx}" data-set="${i}">
-          ${confirmed ? '<button class="sr-del" data-del aria-label="Supprimer la série">' + icons.trash + '</button>' : ''}
+        const lab = labels[i];
+        rowsHtml += `<div class="set-row${done ? ' done' : ''}${live ? ' sr-live' : ''}" data-idx="${idx}" data-set="${i}">
+          ${live ? '<button class="sr-del" data-del aria-label="Supprimer la série">' + icons.trash + '</button>' : ''}
           <div class="sr-content">
             <button class="sr-n ${lab.cls}" data-kind="${i}" aria-label="Type de série">${lab.text}</button>
             <button class="sr-prev" data-prev="${i}" ${prev ? '' : 'disabled'}>${prev ? `${prev.weight} × ${prev.reps}` : '–'}</button>
-            <input class="sr-kg" type="number" inputmode="decimal" step="0.5" min="0" value="${confirmed ? s.weight : ''}" placeholder="${prev ? prev.weight : ''}">
-            <input class="sr-reps" type="number" inputmode="numeric" min="1" value="${confirmed ? s.reps : ''}" placeholder="${prev ? prev.reps : ''}">
-            <button class="sr-check${confirmed ? ' on' : ''}" data-check="${i}" aria-label="Valider la série">${icons.check}</button>
+            <input class="sr-kg" type="number" inputmode="decimal" step="0.5" min="0" value="${s && s.weight != null ? s.weight : ''}" placeholder="${prev ? prev.weight : ''}">
+            <input class="sr-reps" type="number" inputmode="numeric" min="1" value="${s && s.reps != null ? s.reps : ''}" placeholder="${prev ? prev.reps : ''}">
+            <button class="sr-check${done ? ' on' : ''}" data-check="${i}" aria-label="Valider la série">${icons.check}</button>
           </div>
         </div>`;
-      }
+      });
 
       const card = el(`<div class="card exo-card">
         <div class="exo-head">
@@ -1101,11 +1141,17 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null, resum
       }
       return;
     }
-    // « Ajouter une série » : ouvre une ligne vide sous les séries de l'exo
+    // « Ajouter une série » : ajoute une série vide, non validée. C'est une
+    // vraie ligne (et non un compteur) : si la série n'est finalement pas
+    // faite, elle se supprime au doigt comme n'importe quelle autre.
     const addBtn = e.target.closest('.sr-add');
     if (addBtn) {
       const wxa = session.exercises[+addBtn.dataset.add];
-      wxa.pending = (wxa.pending || 0) + 1;
+      const refA = bestEntry(wxa.exerciseId);
+      // Les lignes issues de la référence sont d'abord matérialisées, sinon le
+      // bouton n'ajouterait rien de visible tant qu'elles ne sont pas remplies.
+      const target = Math.max(wxa.sets.length, refA ? refA.sets.length : 0) + 1;
+      while (wxa.sets.length < target) wxa.sets.push({ weight: null, reps: null, done: false });
       haptic();
       renderExos();
       return;
@@ -1125,8 +1171,16 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null, resum
       const row = checkBtn.closest('.set-row');
       const exoIdx = +row.dataset.idx; const i = +row.dataset.set;
       const wxx = session.exercises[exoIdx];
-      if (i < wxx.sets.length) {
-        wxx.sets.splice(i, 1); // décocher = retirer la série
+      if (isDone(wxx.sets[i])) {
+        // Dévalider : la ligne RESTE, avec les valeurs saisies. Il faudra la
+        // revalider pour qu'elle recompte dans l'amélioration de l'exercice.
+        const s = wxx.sets[i];
+        const kg = parseFloat(row.querySelector('.sr-kg').value);
+        const reps = parseInt(row.querySelector('.sr-reps').value, 10);
+        if (!isNaN(kg)) s.weight = kg;
+        if (reps) s.reps = reps;
+        s.done = false;
+        haptic();
         renderExos();
       } else {
         // Valider une série située après des lignes remplies mais non cochées
@@ -1137,18 +1191,22 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null, resum
         const rows = [...card.querySelectorAll('.set-row')];
         const captured = [];
         for (const r of rows) {
-          const idx = +r.dataset.set;
-          if (idx < wxx.sets.length || idx > i) continue; // hors de la plage à valider
+          const j = +r.dataset.set;
+          if (j > i || isDone(wxx.sets[j])) continue; // au-delà, ou déjà validée
           const kg = parseFloat(r.querySelector('.sr-kg').value);
           const reps = parseInt(r.querySelector('.sr-reps').value, 10);
-          if (idx === i && (isNaN(kg) || !reps)) { toast('Poids et reps requis', 'error'); return; }
+          if (j === i && (isNaN(kg) || !reps)) { toast('Poids et reps requis', 'error'); return; }
           if (isNaN(kg) || !reps) continue; // ligne intermédiaire vide : ignorée
-          captured.push({ idx, weight: kg, reps });
+          captured.push({ j, weight: kg, reps });
         }
-        captured.sort((a, b) => a.idx - b.idx);
-        for (const c of captured) wxx.sets.push({ weight: c.weight, reps: c.reps });
-        // Les lignes ouvertes manuellement viennent d'être consommées.
-        wxx.pending = Math.max(0, (wxx.pending || 0) - captured.length);
+        captured.sort((a, b) => a.j - b.j);
+        for (const c of captured) {
+          // Les lignes vides qui précèdent (venues de la référence) deviennent
+          // de vraies séries non validées : chaque série garde ainsi son rang.
+          while (wxx.sets.length <= c.j) wxx.sets.push({ weight: null, reps: null, done: false });
+          const s = wxx.sets[c.j];
+          s.weight = c.weight; s.reps = c.reps; s.done = true;
+        }
         haptic();
         renderExos();
         startRestTimer(wxx.exerciseId);
@@ -1187,10 +1245,20 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null, resum
     const exoIdx = +row.dataset.idx; const i = +row.dataset.set;
     const wxx = session.exercises[exoIdx];
     if (i < wxx.sets.length) {
+      const s = wxx.sets[i];
       const w = parseFloat(row.querySelector('.sr-kg').value);
       const r = parseInt(row.querySelector('.sr-reps').value, 10);
-      if (!isNaN(w)) wxx.sets[i].weight = w;
-      if (r) wxx.sets[i].reps = r;
+      if (!isNaN(w)) s.weight = w;
+      if (r) s.reps = r;
+      // Modifier une série validée la DÉVALIDE : les valeurs restent, mais il
+      // faut recocher pour que la performance de l'exo soit recalculée.
+      // On ne re-rend pas la carte ici : le clavier est encore ouvert.
+      if (isDone(s)) {
+        s.done = false;
+        row.classList.remove('done');
+        const chk = row.querySelector('.sr-check');
+        if (chk) chk.classList.remove('on');
+      }
       persistSession();
     }
   });
@@ -1204,7 +1272,9 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null, resum
       if (openRow && openRow !== except) { openRow.querySelector('.sr-content').style.transform = ''; openRow.classList.remove('swiped'); openRow = null; }
     };
     exosHost.addEventListener('touchstart', (e) => {
-      const r = e.target.closest('.set-row.done');
+      // `.sr-live` : toute ligne portée par une série, validée ou non — une
+      // série ajoutée puis laissée vide se supprime donc comme les autres.
+      const r = e.target.closest('.set-row.sr-live');
       closeOpen(r);
       if (!r) { row = null; return; }
       row = r; startX = e.touches[0].clientX; startY = e.touches[0].clientY; dx = 0; mode = null;
@@ -1264,7 +1334,11 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null, resum
     });
   });
   overlay.querySelector('#s-finish').addEventListener('click', () => {
-    const withSets = session.exercises.filter((x) => x.sets.length);
+    // Seules les séries validées partent au résumé (et donc à l'enregistrement) :
+    // les lignes ouvertes puis laissées en plan ne comptent pas.
+    const withSets = session.exercises
+      .map((x) => ({ ...x, sets: savedSets(x) }))
+      .filter((x) => x.sets.length);
     if (!withSets.length) { toast('Aucune série enregistrée', 'error'); return; }
     showSummary(withSets, closeSession);
   });
@@ -1277,10 +1351,10 @@ function showSummary(exercises, closeSession) {
   const byMuscle = workoutMuscleVolume({ exercises }, exerciseLookup, s.secondaryRatio);
   const atten = muscleAttenuation({ exercises }, exerciseLookup, s.secondaryRatio);
   const breakdown = Object.keys(atten).sort((a, b) => atten[b] - atten[a]);
-  const impVals = exercises.map((x) => exoImprovement(x.exerciseId, exoVolume(x))).filter((v) => v != null);
+  const impVals = exercises.map((x) => exoImprovement(x)).filter((v) => v != null);
   const sessImp = impVals.length ? Math.round(impVals.reduce((a, b) => a + b, 0) / impVals.length) : null;
   const progress = exercises
-    .map((x) => ({ name: (exerciseLookup(x.exerciseId) || { name: x.exerciseId }).name, imp: exoImprovement(x.exerciseId, exoVolume(x)) }))
+    .map((x) => ({ name: (exerciseLookup(x.exerciseId) || { name: x.exerciseId }).name, imp: exoImprovement(x) }))
     .filter((p) => p.imp != null && p.imp > 0)
     .sort((a, b) => b.imp - a.imp);
 

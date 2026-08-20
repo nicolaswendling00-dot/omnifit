@@ -78,7 +78,7 @@ assert(pages.nutrition.querySelector('#btn-recipes'), 'Nutrition : bouton Recett
 // v3 : kcal total en haut + fibres
 assert(pages.nutrition.querySelector('.kcal-total .kcal-consumed'), 'Nutrition : kcal consommées affichées en haut');
 assert(pages.nutrition.querySelector('.kcal-sep').textContent.includes('2227'), 'Nutrition : objectif total kcal (/2227) affiché en haut');
-assert(pages.nutrition.querySelector('.fiber-line'), 'Nutrition : ligne fibres présente');
+assert(!pages.nutrition.querySelector('.fiber-line'), 'Nutrition : ligne fibres retirée (doublon de l\'anneau)');
 // v3 : couleurs macros (prot orange)
 const protRing = pages.nutrition.querySelector('.macro-rings .ring-item svg');
 assert(protRing && protRing.innerHTML.includes('#FB923C'), 'Nutrition : anneau protéines en orange (#FB923C)');
@@ -790,6 +790,116 @@ console.log('== v5.5 : lissage modifiable + inertie de fermeture ==');
   assert((60 + 1.2 * P) > seuil, 'Inertie : geste court mais rapide -> ferme');
   assert((60 + 0.1 * P) < seuil, 'Inertie : geste court et lent -> reste ouvert');
   assert((250 + 0 * P) < seuil === false, 'Inertie : geste long sans vitesse -> ferme quand meme');
+}
+
+console.log('== v5.6 : accueil, ruban, series persistantes, coefficient ==');
+{
+  const cssV6 = fs.readFileSync(new URL('./style.css', import.meta.url), 'utf8');
+  // Les 4 cartes du milieu vivent dans `.home-duo`, qui n'est pas une carte :
+  // sans regle dediee, elles entraient sans animation.
+  assert(/\.home-fit > \.home-duo > \.card \{ animation: cardIn/.test(cssV6),
+    'Accueil : les cartes des duos sont animees comme les autres');
+  assert(/\.home-fit > \*:nth-child\(3\) > \.card:nth-child\(2\) \{ animation-delay/.test(cssV6),
+    'Accueil : cascade appliquee a l\'interieur des duos');
+
+  home.render(pages.home);
+  const legend = pages.home.querySelector('.hk-donut-legend').textContent;
+  assert(/P \d+g/.test(legend) && /L \d+g/.test(legend), 'Accueil : macros de l\'anneau en grammes');
+  assert(!legend.includes('%'), 'Accueil : plus de pourcentages dans l\'anneau');
+
+  nutrition.render(pages.nutrition);
+  const chips = [...pages.nutrition.querySelectorAll('.date-chip')];
+  assert(chips[0].id === 'date-more', 'Nutrition : le « + » ouvre le ruban a gauche (avant le plus ancien jour)');
+  assert(chips.length === 8, 'Nutrition : toujours 7 jours + le « + »');
+
+  // ---- Coefficient de progression : le VOLUME le plus gros n'est pas la reference
+  store.userData.workouts = [];
+  const mk = (date, sets) => ({ id: 'w6-' + date, date, exercises: [{ exerciseId: 'benchPress', sets }], totalVolume: 0, totalTime: 600 });
+  const rep = (n, s) => [...Array(n)].map(() => ({ ...s }));
+  store.addWorkout(mk(todayISO(-10), rep(3, { weight: 80, reps: 8 })));   // premiere fois -> coef 1.00
+  store.addWorkout(mk(todayISO(-6), rep(3, { weight: 80, reps: 10 })));   // plus fort -> coef > 1
+  store.addWorkout(mk(todayISO(-2), rep(6, { weight: 80, reps: 8 })));    // 2x le volume, mais pas plus fort
+
+  workout.render(pages.workout);
+  pages.workout.querySelector('#btn-new-session').click();
+  document.querySelector('.sheet .ns-empty').click();
+  const ov6 = document.querySelector('.session-overlay');
+  ov6.querySelector('#s-add-exo').click();
+  const pick6 = document.querySelector('.picker-overlay');
+  pick6.querySelector('#exo-search').value = 'Bench Press';
+  fire(pick6.querySelector('#exo-search'), 'input');
+  [...pick6.querySelectorAll('.exo-search-item')].find((it) => it.querySelector('span').textContent === 'Développé couché').click();
+  const card6 = ov6.querySelector('#s-exos .exo-card');
+
+  card6.querySelector('[data-detail]').click();
+  const edSheet = [...document.querySelectorAll('.sheet')].find((s) => s.querySelector('.ed-hist-item'));
+  const hist = [...edSheet.querySelectorAll('.ed-hist-item')];
+  assert(hist.length === 3, 'Fiche exo : 3 seances dans l\'historique');
+  assert(!edSheet.textContent.includes('kg pondérés') && !hist[0].querySelector('.ed-hist-head .num').textContent.includes('kg'),
+    'Fiche exo : volume total en kg retire');
+  const coefs = hist.map((h) => parseFloat(h.querySelector('.ed-coef').textContent.replace('×', '')));
+  // hist est en ordre antechronologique : [-2j, -6j, -10j]
+  assert(coefs[2] === 1, 'Coefficient : 1.00 a la premiere seance de l\'exo');
+  assert(coefs[1] > 1, 'Coefficient : monte quand on est plus fort');
+  assert(coefs[0] < coefs[1], 'Coefficient : deux fois plus de volume au meme poids ne le fait PAS monter');
+  const best6 = hist.find((h) => h.classList.contains('ed-hist-best'));
+  assert(best6 === hist[1], 'Reference : la seance au plus grand coefficient (et non au plus gros volume)');
+  document.querySelectorAll('.sheet, .scrim').forEach((s) => s.remove());
+
+  // ---- Validation / devalidation des series
+  // `renderExos` reconstruit la carte : on la relit a chaque fois.
+  const cardNow = () => ov6.querySelector('#s-exos .exo-card');
+  const rowsOf = () => [...cardNow().querySelectorAll('.set-row')];
+  // La reference retenue est la seance a 3 series (la plus forte), pas celle a 6.
+  assert(rowsOf().length === 3, 'Seance : autant de lignes que la seance de reference');
+  const setRow = (i, kg, reps) => {
+    const r = rowsOf()[i];
+    r.querySelector('.sr-kg').value = String(kg);
+    r.querySelector('.sr-reps').value = String(reps);
+    return r;
+  };
+  setRow(0, 80, 8);
+  setRow(1, 80, 8).querySelector('.sr-check').click(); // valide la 2e -> valide aussi la 1re
+  assert(cardNow().querySelectorAll('.set-row.done').length === 2, 'Serie : valider apres une ligne remplie valide les deux');
+
+  // Devalider l'avant-derniere : la ligne RESTE, avec ses valeurs
+  rowsOf()[0].querySelector('.sr-check').click();
+  assert(rowsOf().length === 3, 'Devalidation : la ligne ne disparait pas');
+  assert(!rowsOf()[0].classList.contains('done'), 'Devalidation : la ligne repasse a valider');
+  assert(rowsOf()[0].querySelector('.sr-kg').value === '80' && rowsOf()[0].querySelector('.sr-reps').value === '8',
+    'Devalidation : poids et reps conserves');
+  assert(rowsOf()[1].classList.contains('done'), 'Devalidation : la serie suivante reste validee');
+  rowsOf()[0].querySelector('.sr-check').click(); // revalidation
+  assert(rowsOf()[0].classList.contains('done'), 'Revalidation : la ligne se recoche');
+
+  // Modifier une serie validee la devalide (valeurs gardees)
+  const r1 = rowsOf()[1];
+  r1.querySelector('.sr-kg').value = '85';
+  fire(r1.querySelector('.sr-kg'), 'change');
+  assert(!r1.classList.contains('done') && !r1.querySelector('.sr-check').classList.contains('on'),
+    'Modification : la serie validee est decochee, a revalider');
+  assert(r1.querySelector('.sr-kg').value === '85', 'Modification : la valeur saisie reste en place');
+
+  // Serie ajoutee puis laissee vide : supprimable comme les autres
+  const before = rowsOf().length;
+  cardNow().querySelector('.sr-add').click();
+  const added = rowsOf()[rowsOf().length - 1];
+  assert(rowsOf().length === before + 1, '« Ajouter une serie » : une ligne de plus');
+  assert(added.classList.contains('sr-live') && added.querySelector('.sr-del'),
+    'Serie vide ajoutee : supprimable (poubelle presente)');
+  added.querySelector('.sr-del').click();
+  assert(rowsOf().length === before, 'Serie vide : supprimee comme les autres');
+
+  // Enregistrement : seules les series validees partent dans la seance
+  const nBefore = store.userData.workouts.length;
+  ov6.querySelector('#s-finish').click();
+  const sum6 = document.querySelector('.modal');
+  [...sum6.querySelectorAll('.modal-actions .btn')].find((b) => b.textContent.includes('Valider')).click();
+  const saved6 = store.userData.workouts[store.userData.workouts.length - 1];
+  assert(store.userData.workouts.length === nBefore + 1, 'Seance enregistree');
+  assert(saved6.exercises[0].sets.length === 1, 'Enregistrement : seules les series validees sont gardees');
+  assert(saved6.exercises[0].sets.every((s) => s.done === undefined), 'Enregistrement : marqueur `done` retire des donnees');
+  clearOverlays();
 }
 
 console.log(`\n===== RÉSULTAT : ${pass} OK / ${fail} FAIL =====`);

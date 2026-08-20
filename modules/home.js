@@ -299,13 +299,14 @@ function macroDonut(prot, carbs, fat, size = 92) {
     { k: kF, color: C_FAT, label: 'L' },
   ];
 
-  // Légende toujours présente (0 % si rien n'est consommé) : la carte garde
-  // ainsi la même taille tout au long de la journée.
-  const pct = (k) => (total ? Math.round((k / total) * 100) : 0);
+  // Légende toujours présente (0 g si rien n'est consommé) : la carte garde
+  // ainsi la même taille tout au long de la journée. On affiche les GRAMMES
+  // consommés — l'anneau montre déjà la répartition en proportion, le chiffre
+  // utile au quotidien est la quantité restante à couvrir.
   const legend = `<div class="hk-donut-legend">
-      <span style="color:${C_PROT}">P ${pct(kP)}%</span>
-      <span style="color:${C_CARB}">G ${pct(kC)}%</span>
-      <span style="color:${C_FAT}">L ${pct(kF)}%</span>
+      <span style="color:${C_PROT}">P ${Math.round(prot || 0)}g</span>
+      <span style="color:${C_CARB}">G ${Math.round(carbs || 0)}g</span>
+      <span style="color:${C_FAT}">L ${Math.round(fat || 0)}g</span>
     </div>`;
 
   // Rien de consommé : anneau creux, pas de camembert trompeur.
