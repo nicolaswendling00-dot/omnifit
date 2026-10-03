@@ -1,4 +1,3 @@
-import { ICONS_PIXEL as PIXEL_ICONS } from './pixelArt.js';
 // OmniFit — Helpers UI partagés (modals, sheets, toasts, icônes SVG)
 
 const ICONS_LINE = {
@@ -16,7 +15,7 @@ const ICONS_LINE = {
   chevron: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
   steps: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3c2 0 3 1.7 3 4s-1 4-2.5 4S6 9.3 6 7s.5-4 2-4ZM7 14.5c1.5 0 2.5 1 2.5 2.5S8.5 20 7.5 20 5 19 5 17.5 5.5 14.5 7 14.5ZM16 6c1.5 0 2 1.7 2 4s-1 4-2.5 4-2.5-1.7-2.5-4 1-4 3-4ZM16.5 17.5c1.5 0 2.5 1 2.5 2.5" transform="translate(0,-1)"/></svg>',
   water: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5S5.5 10 5.5 14.5a6.5 6.5 0 0 0 13 0C18.5 10 12 2.5 12 2.5Z"/></svg>',
-  flame: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c4.4 0 7-2.8 7-6.5 0-4-3-6.5-4.5-9C13 4 13 2 13 2s-6 4-6 9c-1-1-1.5-2.5-1.5-2.5C4 10.5 5 22 12 22Z"/></svg>',
+  flame: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5Z"/></svg>',
   barcode: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="butt"><path d="M4 5v14" stroke-width="1.4"/><path d="M7 5v14" stroke-width="2.6"/><path d="M10 5v14" stroke-width="1.4"/><path d="M12.5 5v14" stroke-width="1.4"/><path d="M15 5v14" stroke-width="2.6"/><path d="M18 5v14" stroke-width="1.4"/><path d="M20 5v14" stroke-width="1.4"/></svg>',
   protein: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="13.5" rx="7.5" ry="6"/><path d="M12 7.5C12 5 14 3 16.5 3 15 4.5 15 7 15 7"/></svg>',
   download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v3h16v-3"/></svg>',
@@ -35,16 +34,7 @@ const ICONS_LINE = {
   copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg>',
 };
 
-// `icons` est un objet MUTABLE : le thème 8-bit remplace son contenu par le jeu
-// pixel-art. Les modules l'importent une fois et lisent ses propriétés au moment
-// du rendu, donc la bascule s'applique partout au prochain rendu.
 export const icons = { ...ICONS_LINE };
-
-export function setIconSet(mode) {
-  const src = mode === '8bit' ? PIXEL_ICONS : ICONS_LINE;
-  for (const k of Object.keys(icons)) delete icons[k];
-  Object.assign(icons, src);
-}
 
 export function el(html) {
   const t = document.createElement('template');
@@ -72,10 +62,8 @@ export function haptic() {
 }
 
 // Animation de récompense : jouée quand une quête journalière est validée et
-// rapporte des LP (objectif calorique atteint, séance enregistrée…). Des
-// particules jaillissent du bouton pressé vers l'extérieur de l'écran.
-//   - Thème 8-bit : pièces pixel qui montent en tournoyant (façon jeu rétro).
-//   - Autres thèmes : orbes lumineuses cyan/violet qui éclatent puis retombent.
+// rapporte des LP (objectif calorique atteint, séance enregistrée…). Des orbes
+// cyan/violet jaillissent du bouton pressé puis retombent.
 // `originEl` = l'élément à partir duquel émettre (le bouton). `opts.label`
 // affiche un « +N LP » flottant.
 export function celebrateLP(originEl, opts = {}) {
@@ -86,7 +74,6 @@ export function celebrateLP(originEl, opts = {}) {
       : { left: window.innerWidth / 2, top: window.innerHeight / 2, width: 0, height: 0 };
     const ox = rect.left + rect.width / 2;
     const oy = rect.top + rect.height / 2;
-    const is8bit = document.body.classList.contains('shape-8bit');
 
     let layer = document.getElementById('lp-fx-layer');
     if (!layer) {
@@ -97,28 +84,18 @@ export function celebrateLP(originEl, opts = {}) {
     }
 
     const canAnimate = typeof Element !== 'undefined' && Element.prototype.animate;
-    const N = is8bit ? 7 : 12;
-
-    for (let i = 0; i < N; i++) {
+    for (let i = 0; i < 12; i++) {
       const p = document.createElement('div');
-      if (is8bit) {
-        // Pièce pixel : petit carré doré avec un « ¢ » façon sprite de jeu.
-        p.textContent = '¢';
-        p.style.cssText = `position:absolute;left:${ox}px;top:${oy}px;width:16px;height:16px;line-height:16px;text-align:center;font-family:'VT323',monospace;font-weight:700;font-size:15px;color:#ffd479;background:#8a5a00;border:1px solid #ffd479;image-rendering:pixelated;transform:translate(-50%,-50%);will-change:transform,opacity`;
-      } else {
-        // Orbe lumineuse : dégradé accent → violet, halo.
-        const c = i % 2 ? 'var(--accent)' : 'var(--accent-2)';
-        const size = 8 + Math.round(Math.random() * 8);
-        p.style.cssText = `position:absolute;left:${ox}px;top:${oy}px;width:${size}px;height:${size}px;border-radius:50%;background:${c};box-shadow:0 0 10px ${c};transform:translate(-50%,-50%);will-change:transform,opacity`;
-      }
+      const c = i % 2 ? 'var(--accent)' : 'var(--accent-2)';
+      const size = 8 + Math.round(Math.random() * 8);
+      p.style.cssText = `position:absolute;left:${ox}px;top:${oy}px;width:${size}px;height:${size}px;border-radius:50%;background:${c};box-shadow:0 0 10px ${c};transform:translate(-50%,-50%);will-change:transform,opacity`;
       layer.appendChild(p);
 
       // Trajectoire : vers le haut et sur les côtés, avec un peu de gravité.
-      const angle = (-Math.PI / 2) + (Math.random() - 0.5) * (is8bit ? 1.1 : 2.4);
-      const dist = (is8bit ? 220 : 130) + Math.random() * (is8bit ? 260 : 120);
+      const angle = (-Math.PI / 2) + (Math.random() - 0.5) * 2.4;
+      const dist = 130 + Math.random() * 120;
       const dx = Math.cos(angle) * dist;
       const dyUp = Math.sin(angle) * dist;
-      const dur = is8bit ? 900 + Math.random() * 400 : 700 + Math.random() * 400;
       const spin = (Math.random() - 0.5) * 720;
 
       if (canAnimate) {
@@ -126,9 +103,9 @@ export function celebrateLP(originEl, opts = {}) {
           [
             { transform: 'translate(-50%,-50%) translate(0px,0px) rotate(0deg) scale(1)', opacity: 1 },
             { transform: `translate(-50%,-50%) translate(${dx * 0.6}px, ${dyUp}px) rotate(${spin * 0.6}deg) scale(1.05)`, opacity: 1, offset: 0.6 },
-            { transform: `translate(-50%,-50%) translate(${dx}px, ${dyUp + (is8bit ? -80 : 90)}px) rotate(${spin}deg) scale(${is8bit ? 0.9 : 0.4})`, opacity: 0 },
+            { transform: `translate(-50%,-50%) translate(${dx}px, ${dyUp + 90}px) rotate(${spin}deg) scale(0.4)`, opacity: 0 },
           ],
-          { duration: dur, easing: is8bit ? 'cubic-bezier(0.22,1,0.36,1)' : 'cubic-bezier(0.4,0,0.6,1)', fill: 'forwards' },
+          { duration: 700 + Math.random() * 400, easing: 'cubic-bezier(0.4,0,0.6,1)', fill: 'forwards' },
         );
         anim.onfinish = () => p.remove();
       } else {
@@ -140,7 +117,7 @@ export function celebrateLP(originEl, opts = {}) {
     if (opts.label) {
       const tag = document.createElement('div');
       tag.textContent = opts.label;
-      tag.style.cssText = `position:absolute;left:${ox}px;top:${oy}px;transform:translate(-50%,-50%);font-weight:800;font-size:1rem;color:${is8bit ? '#ffd479' : 'var(--accent)'};text-shadow:0 0 8px rgba(0,0,0,0.4);${is8bit ? "font-family:'VT323',monospace;" : ''}will-change:transform,opacity`;
+      tag.style.cssText = `position:absolute;left:${ox}px;top:${oy}px;transform:translate(-50%,-50%);font-weight:800;font-size:1rem;color:var(--accent);text-shadow:0 0 8px rgba(0,0,0,0.4);will-change:transform,opacity`;
       layer.appendChild(tag);
       if (canAnimate) {
         const a = tag.animate(
@@ -285,7 +262,7 @@ export function openSheet({ title, content, onClose = null, headerAction = null 
   const sheet = scrim.querySelector('.sheet');
   const close = () => {
     scrim.classList.remove('visible');
-    setTimeout(() => { scrim.remove(); releaseOverlayLock(); }, 170);
+    setTimeout(() => { scrim.remove(); releaseOverlayLock(); }, 210);
     if (onClose) onClose();
   };
   // Le titre peut changer sans rouvrir le panneau (renommage d'un exercice

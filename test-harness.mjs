@@ -250,12 +250,13 @@ const cg2 = mathmod.harrisBenedict(store.userData.profile, 'Perte de poids');
 assert(cg2 > 1500 && cg2 < 3500, `Harris-Benedict recalcule : ${cg2} kcal`);
 assert(mathmod.harrisBenedict(store.userData.profile, 'Prise de muscle') > cg2, 'Prise de muscle > Perte de poids');
 settings.render(pages.settings);
-pages.settings.querySelector('#seg-shape [data-v="amoled"]').click();
-assert(document.body.classList.contains('shape-amoled'), 'Forme AMOLED appliquee');
+assert(!pages.settings.querySelector('#seg-shape'), 'Theme : plus de selecteur de forme (8-bit supprime)');
+pages.settings.querySelector('#seg-palette [data-v="dark"]').click();
+assert(!document.body.classList.contains('palette-light'), 'Palette sombre appliquee');
 
 console.log('== Persistance + import/export ==');
 const raw = JSON.parse(localStorage.getItem('omniffit_userData'));
-assert(raw.workouts.length === 1 && raw.settings.shape === 'amoled', 'Données persistées');
+assert(raw.workouts.length === 1 && raw.settings.shape === undefined, 'Données persistées (sans réglage de forme)');
 store.importJSON({ profile: { name: 'Nicolas' } }, 'merge');
 assert(store.userData.profile.name === 'Nicolas' && store.userData.workouts.length === 1, 'Import merge conserve les données');
 
@@ -326,7 +327,7 @@ assert(!cssBody.includes('#04101d'), 'Theme : aucun texte quasi-noir en dur hors
 assert(!cssBody.includes('rgba(10, 14, 39'), 'Theme : aucun fond de barre sombre en dur hors :root');
 const lightBlock = cssTxt.slice(cssTxt.indexOf('body.palette-light {'), cssTxt.indexOf('}', cssTxt.indexOf('body.palette-light {')));
 assert(lightBlock.includes('--on-accent: #FFFFFF'), 'Theme clair : texte blanc sur boutons pleins');
-assert(lightBlock.includes('--header-bg: rgba(255, 255, 255'), 'Theme clair : header nutrition clair');
+assert(lightBlock.includes('--header-bg: rgba(243, 245, 249'), 'Theme clair : header nutrition clair');
 
 // Swipe : les lignes swipables ne declenchent pas le changement d'onglet
 const appTxt = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
@@ -338,7 +339,7 @@ assert(/capture:\s*true/.test(appTxt), 'Verrou swipe : pose en phase de capture'
 assert(/touchcancel/.test(appTxt), 'Verrou swipe : libere aussi sur touchcancel');
 assert(/touchmove[\s\S]*?passive: false/.test(appTxt), 'Verrou swipe : touchmove non-passif (bloque le geste horizontal natif iOS)');
 const cssSw = fs.readFileSync(new URL('./style.css', import.meta.url), 'utf8');
-assert(/\.meal-row \{[^}]*touch-action: pan-y/.test(cssSw), 'Verrou swipe : meal-row en touch-action pan-y');
+assert(/\.meal-row[^{]*\{[^}]*touch-action: pan-y/.test(cssSw), 'Verrou swipe : meal-row en touch-action pan-y');
 
 // Panneaux : fermeture au tiers de la hauteur
 const uiTxt = fs.readFileSync(new URL('./utils/ui.js', import.meta.url), 'utf8');
@@ -378,49 +379,33 @@ assert(pages.home.querySelectorAll('.gr-pillar').length === 0, 'Accueil : carte 
 assert(pages.home.querySelector('.gr-lp'), 'Accueil : LP affiches');
 assert(pages.home.querySelector('.gr-rank-name'), 'Accueil : nom du rang affiche');
 
-console.log('== Theme 8-bit ==');
+console.log('== v6.0 : theme 8-bit supprime ==');
 const uiMod = await import('./utils/ui.js');
 const ranksMod = await import('./utils/ranks.js');
-const lineHome = uiMod.icons.home;
-uiMod.setIconSet('8bit');
-assert(Object.keys(uiMod.icons).length === 31, '8-bit : 31 icones');
-assert(Object.values(uiMod.icons).every((v) => v.includes('crispEdges')), '8-bit : toutes les icones sont pixelisees');
-ranksMod.setRankStyle('8bit');
-assert(ranksMod.rankBadge('gold', 60).includes('crispEdges'), '8-bit : badge de rang pixelise');
-assert(!ranksMod.rankBadge('gold', 60).includes('linearGradient'), '8-bit : aucun degrade dans le badge');
-const allSigils = ['bronze','gold','plat','diam','emer','saph','ruby','onyx'].map((id) => ranksMod.rankBadge(id, 48));
-assert(new Set(allSigils).size === 8, '8-bit : chaque rang a une silhouette distincte (identifiable en monochrome)');
-const rc = (id) => (ranksMod.rankBadge(id, 48).match(/<rect/g) || []).length;
-assert(rc('onyx') > rc('bronze'), '8-bit : complexite du sigil croit avec le rang');
-uiMod.setIconSet('default');
-ranksMod.setRankStyle('default');
-assert(uiMod.icons.home === lineHome, '8-bit : retour au jeu d icones par defaut');
-// Bascule complete via les reglages
+assert(typeof uiMod.setIconSet === 'undefined', '8-bit : plus de jeu d icones alternatif');
+assert(typeof ranksMod.setRankStyle === 'undefined', '8-bit : plus de style de badge alternatif');
+assert(Object.values(uiMod.icons).every((v) => !v.includes('crispEdges')), 'Icones : toutes vectorielles');
+assert(ranksMod.rankBadge('gold', 60).includes('linearGradient'), 'Badge de rang : version illustree');
+assert(!fs.existsSync(new URL('./utils/pixelArt.js', import.meta.url)), 'pixelArt.js supprime');
+const css8 = fs.readFileSync(new URL('./style.css', import.meta.url), 'utf8');
+assert(!/8bit|8-bit|VT323|shape-amoled/.test(css8), 'CSS : plus aucune regle 8-bit ni de forme');
+assert(!fs.readFileSync(new URL('./sw.js', import.meta.url), 'utf8').includes('pixelArt'), 'Service worker : pixelArt retire du precache');
+// Un ancien reglage 8-bit est nettoye au chargement
 store.saveUserData({ settings: { shape: '8bit' } });
 settings.applyTheme();
-assert(document.body.classList.contains('shape-8bit'), '8-bit : classe appliquee');
-assert(uiMod.icons.home.includes('crispEdges'), '8-bit : applyTheme bascule les icones');
-const nav8 = document.querySelector('#bottom-nav .nav-btn svg');
-assert(nav8 && nav8.getAttribute('shape-rendering') === 'crispEdges', '8-bit : barre de nav pixelisee');
-assert(document.getElementById('font-8bit').href.includes('VT323'), '8-bit : police terminal VT323');
-store.saveUserData({ settings: { shape: 'amoled' } });
-settings.applyTheme();
-assert(!document.body.classList.contains('shape-8bit'), '8-bit : retour AMOLED');
-assert(uiMod.icons.home.includes('stroke'), '8-bit : icones vectorielles restaurees');
-// L'option « Sombre » a disparu des reglages
+assert(!document.body.classList.contains('shape-8bit'), 'Ancien reglage 8-bit sans effet');
 settings.render(pages.settings);
-assert(pages.settings.querySelector('#seg-shape [data-v="8bit"]'), 'Theme : forme 8-bit presente');
 assert(pages.settings.querySelector('#seg-palette [data-v="light"]'), 'Couleur : palette claire presente');
 assert(!pages.settings.querySelector('#seg-density'), 'Densite : segment retire');
 
 console.log('== v3.33 : deux axes, badge de rang, scroll dates ==');
-// 8-bit clair possible
-store.saveUserData({ settings: { shape: '8bit', palette: 'light' } });
+// Palette claire
+store.saveUserData({ settings: { palette: 'light' } });
 settings.applyTheme();
-assert(document.body.classList.contains('shape-8bit') && document.body.classList.contains('palette-light'), '8-bit clair : combinaison des deux axes');
-store.saveUserData({ settings: { shape: 'amoled', palette: 'dark' } });
+assert(document.body.classList.contains('palette-light'), 'Palette claire appliquee');
+store.saveUserData({ settings: { palette: 'dark' } });
 settings.applyTheme();
-// Badge de rang global : identique a celui des exercices (px-rank en 8-bit), sans ailettes
+// Badge de rang global : identique a celui des exercices, sans ailettes
 home.render(pages.home);
 assert(pages.home.querySelector('.gr-badge svg'), 'Accueil : badge de rang affiche');
 assert(!pages.home.querySelector('.gr-badge .rank-wings'), 'Accueil : ailettes retirees');
@@ -429,14 +414,14 @@ const appTxt2 = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
 const absorb = (appTxt2.match(/SWIPE_ABSORB_ZONES\s*=\s*'([^']+)'/) || [])[1] || '';
 assert(!absorb.includes('.date-ribbon'), 'Scroll dates : ruban NON absorbe (scroll horizontal libre)');
 assert(absorb.includes('.meal-row'), 'Swipe suppression : repas toujours absorbe');
-// Densite figee en spacieux
-assert(document.body.classList.contains('density-spacious'), 'Densite : toujours spacieuse');
+// Une seule densite : l'espacement est un jeton fixe, plus une classe sur body
+assert(/:root \{[^}]*--space: \d+px/.test(fs.readFileSync(new URL('./style.css', import.meta.url), 'utf8')), 'Densite : espacement fixe defini dans :root');
 
 console.log('== v3.34 : pas colores, bleu clair, accueil sans scroll ==');
 const cssV = fs.readFileSync(new URL('./style.css', import.meta.url), 'utf8');
-assert(/\.steps-hero \.ring-label \{[^}]*fill: var\(--accent\)/.test(cssV), 'Pas : nombre en couleur accent (comme calories)');
+assert(/\.steps-hero \.ring-label \{[^}]*fill: var\(--text\)/.test(cssV), 'Pas : grand chiffre blanc, comme les autres chiffres cles (v6)');
 assert(!/2aa7c4/i.test(cssV), 'Couleur : #2AA7C4 supprime partout');
-assert(cssV.includes('#3AA0F0'), 'Couleur : nouveau bleu ciel present');
+assert(cssV.includes('--accent: #0A9FD8'), 'Couleur : accent de la palette claire defini');
 home.render(pages.home);
 assert(pages.home.querySelector('.home-fit'), 'Accueil : conteneur home-fit (sans scroll)');
 assert(/\.home-fit \{[^}]*display: flex/.test(cssV), 'Accueil : layout flex pour tenir sur un ecran');
@@ -737,10 +722,10 @@ console.log('== v5.2 : suppression des pesées et relevés de pas ==');
   // persiste et PRIME sur le style inline. Appliquee au contenu glissable, elle
   // annulait le decalage — la poubelle n'apparaissait qu'un instant.
   const cssSwipe = fs.readFileSync(new URL('./style.css', import.meta.url), 'utf8');
-  assert(/\.swipe-row \.swipe-content \{[^}]*animation: none/.test(cssSwipe),
-    'Swipe : le contenu glissable n\'est pas anime (sinon transform ecrase)');
-  assert(/\.swipe-row \{ animation: itemIn/.test(cssSwipe),
-    'Swipe : l\'animation d\'entree porte sur la ligne, pas sur le contenu');
+  // v6 : plus aucune animation d'entree sur les lignes glissables, ce qui
+  // ecarte definitivement le piege du `fill: both`.
+  assert(!/\.swipe-row[^{]*\{[^}]*animation/.test(cssSwipe) && !/\.swipe-content[^{]*\{[^}]*animation/.test(cssSwipe),
+    'Swipe : aucune animation ne peut ecraser le decalage du contenu');
 }
 
 console.log('== v5.5 : lissage modifiable + inertie de fermeture ==');
@@ -801,6 +786,11 @@ console.log('== v5.6 : accueil, ruban, series persistantes, coefficient ==');
     'Accueil : les cartes des duos sont animees comme les autres');
   assert(/\.home-fit > \*:nth-child\(3\) > \.card:nth-child\(2\) \{ animation-delay/.test(cssV6),
     'Accueil : cascade appliquee a l\'interieur des duos');
+  // v6 : les entrees en cascade ne se jouent qu'au PREMIER affichage d'une page
+  assert(/\.page\.anim-in \.home-fit > \.home-duo > \.card/.test(cssV6),
+    'Animations : reservees au premier affichage (.page.anim-in)');
+  assert(!/^\.meal-row[^{]*\{[^}]*animation/m.test(cssV6) && !/^\.set-row[^{]*\{[^}]*animation/m.test(cssV6),
+    'Animations : les lignes ne se rejouent plus a chaque rendu (plus de clignotement)');
 
   home.render(pages.home);
   const legend = pages.home.querySelector('.hk-donut-legend').textContent;
@@ -812,13 +802,13 @@ console.log('== v5.6 : accueil, ruban, series persistantes, coefficient ==');
   assert(chips[0].id === 'date-more', 'Nutrition : le « + » ouvre le ruban a gauche (avant le plus ancien jour)');
   assert(chips.length === 8, 'Nutrition : toujours 7 jours + le « + »');
 
-  // ---- Coefficient de progression : le VOLUME le plus gros n'est pas la reference
+  // ---- Progression : on compare la MEILLEURE SERIE d'une seance a la precedente
   store.userData.workouts = [];
   const mk = (date, sets) => ({ id: 'w6-' + date, date, exercises: [{ exerciseId: 'benchPress', sets }], totalVolume: 0, totalTime: 600 });
   const rep = (n, s) => [...Array(n)].map(() => ({ ...s }));
-  store.addWorkout(mk(todayISO(-10), rep(3, { weight: 80, reps: 8 })));   // premiere fois -> coef 1.00
-  store.addWorkout(mk(todayISO(-6), rep(3, { weight: 80, reps: 10 })));   // plus fort -> coef > 1
-  store.addWorkout(mk(todayISO(-2), rep(6, { weight: 80, reps: 8 })));    // 2x le volume, mais pas plus fort
+  store.addWorkout(mk(todayISO(-10), rep(3, { weight: 80, reps: 8 })));   // premiere fois
+  store.addWorkout(mk(todayISO(-6), [{ weight: 80, reps: 10 }, { weight: 70, reps: 8 }, { weight: 60, reps: 8 }])); // meilleure serie plus forte, series de fin plus legeres
+  store.addWorkout(mk(todayISO(-2), rep(6, { weight: 80, reps: 8 })));    // 2x le volume, meilleure serie plus faible
 
   workout.render(pages.workout);
   pages.workout.querySelector('#btn-new-session').click();
@@ -835,15 +825,18 @@ console.log('== v5.6 : accueil, ruban, series persistantes, coefficient ==');
   const edSheet = [...document.querySelectorAll('.sheet')].find((s) => s.querySelector('.ed-hist-item'));
   const hist = [...edSheet.querySelectorAll('.ed-hist-item')];
   assert(hist.length === 3, 'Fiche exo : 3 seances dans l\'historique');
-  assert(!edSheet.textContent.includes('kg pondérés') && !hist[0].querySelector('.ed-hist-head .num').textContent.includes('kg'),
-    'Fiche exo : volume total en kg retire');
-  const coefs = hist.map((h) => parseFloat(h.querySelector('.ed-coef').textContent.replace('×', '')));
+  assert(!edSheet.textContent.includes('kg pondérés'), 'Fiche exo : volume total en kg retire');
+  assert(!edSheet.querySelector('.ed-coef'), 'Fiche exo : plus de coefficient cumule (remplace par la variation)');
+  const imps = hist.map((h) => h.querySelector('.ed-imp').textContent.trim());
   // hist est en ordre antechronologique : [-2j, -6j, -10j]
-  assert(coefs[2] === 1, 'Coefficient : 1.00 a la premiere seance de l\'exo');
-  assert(coefs[1] > 1, 'Coefficient : monte quand on est plus fort');
-  assert(coefs[0] < coefs[1], 'Coefficient : deux fois plus de volume au meme poids ne le fait PAS monter');
+  assert(imps[2] === '1re', 'Progression : la premiere seance est marquee comme telle');
+  assert(imps[1] === '+5 %', `Progression : une rep de plus sur la meilleure serie (80x8 -> 80x10) = +5 % (${imps[1]})`);
+  assert(imps[0] === '-5 %', `Progression : six series a 80x8 apres 80x10 = baisse, malgre le double de volume (${imps[0]})`);
+  // Les series de fin plus legeres n'entrent pas dans la comparaison
+  const topSets = hist.map((h) => h.querySelector('.ed-set.is-top .ed-set-v').textContent);
+  assert(topSets[1] === '80 kg × 10', 'Progression : la meilleure serie est mise en avant');
   const best6 = hist.find((h) => h.classList.contains('ed-hist-best'));
-  assert(best6 === hist[1], 'Reference : la seance au plus grand coefficient (et non au plus gros volume)');
+  assert(best6 === hist[1], 'Reference : la seance a la meilleure serie la plus forte (et non au plus gros volume)');
   document.querySelectorAll('.sheet, .scrim').forEach((s) => s.remove());
 
   // ---- Validation / devalidation des series
@@ -902,7 +895,7 @@ console.log('== v5.6 : accueil, ruban, series persistantes, coefficient ==');
   clearOverlays();
 }
 
-console.log('== v5.7 : materiel, marques, editeur d\'exercice ==');
+console.log('== v5.7 : materiel, editeur d\'exercice ==');
 {
   const exdata = await import('./data/exercises.js');
   // ---- Base : materiel renseigne partout, exos perso integres
@@ -917,18 +910,17 @@ console.log('== v5.7 : materiel, marques, editeur d\'exercice ==');
   assert(exdata.EXERCISES.every((e) => [...e.primaryMuscles, ...e.secondaryMuscles].reduce((a, x) => a + x.p, 0) === 100),
     'Base : la repartition musculaire fait 100 % partout');
   store.userData.settings.customExercises = [];
-  store.userData.settings.exerciseBrand = {};
   store.userData.settings.exerciseEquip = {};
-  store.userData.settings.customBrands = [];
   assert(workout.customRefMap().custom_22a584ca.coef === 2, 'Rangs : la reference des exos perso est conservee');
   assert(workout.customRefMap().custom_c6a2d0dd.refId === 'cablePushdown', 'Rangs : exercice de reference conserve');
 
-  // ---- Un historique par marque
+  // ---- v6 : plus de marques, l'historique est commun
+  assert(typeof workout.hasBrand === 'undefined' && typeof workout.currentBrand === 'undefined', 'Marques : retirees du module');
+  assert(typeof exdata.BRANDS === 'undefined' && typeof exdata.BRANDED_EQUIP === 'undefined', 'Marques : retirees des donnees');
   store.userData.workouts = [];
   store.addWorkout({ id: 'br1', date: todayISO(-4), totalTime: 600, exercises: [{ exerciseId: 'legPress', sets: [{ weight: 200, reps: 10 }] }] });
+  // Une ancienne seance enregistree avec une marque reste dans l'historique
   store.addWorkout({ id: 'br2', date: todayISO(-2), totalTime: 600, exercises: [{ exerciseId: 'legPress', brand: 'Panatta', sets: [{ weight: 150, reps: 10 }] }] });
-  assert(workout.hasBrand('legPress'), 'Marque : proposee sur un exercice sur machine');
-  assert(!workout.hasBrand('barbellCurl'), 'Marque : pas proposee sur un exercice a la barre');
 
   workout.render(pages.workout);
   pages.workout.querySelector('#btn-new-session').click();
@@ -947,9 +939,8 @@ console.log('== v5.7 : materiel, marques, editeur d\'exercice ==');
   let ed = openDetail();
   assert(ed, 'Fiche exo ouverte');
   assert(!ed.querySelector('#ed-rest'), 'Fiche exo : le reglage du repos a quitte l\'historique');
-  assert(ed.querySelector('.ed-brand-tag').textContent === 'Aucune marque', 'Fiche exo : marque courante affichee');
-  assert(ed.querySelectorAll('.ed-hist-item').length === 1 && ed.textContent.includes('200 kg'),
-    'Marque : sans marque, on ne voit que les seances sans marque');
+  assert(!ed.querySelector('.ed-brand-tag'), 'Fiche exo : plus d\'etiquette de marque');
+  assert(ed.querySelectorAll('.ed-hist-item').length === 2, 'Historique : toutes les seances, marque ou non');
 
   // Le crayon NE FERME PAS la fiche
   ed.querySelector('.sheet-action').click();
@@ -957,8 +948,8 @@ console.log('== v5.7 : materiel, marques, editeur d\'exercice ==');
   const edit = document.querySelector('.modal .ex-edit');
   assert(edit, 'Editeur : fenetre ouverte par-dessus');
   const rowKeys = [...edit.querySelectorAll('.ex-row')].map((r) => r.dataset.open);
-  assert(rowKeys.join(',') === 'rank,prim,sec,equip,brand,rest',
-    'Editeur : une ligne-bouton par reglage (rang, muscles, equipement, marque, repos)');
+  assert(rowKeys.join(',') === 'rank,prim,sec,equip,rest',
+    'Editeur : une ligne-bouton par reglage (rang, muscles, equipement, repos), sans marque');
   assert(edit.querySelector('#xe-name').value === 'Presse à cuisses', 'Editeur : le nom se modifie directement');
   assert(edit.querySelector('.ex-total').classList.contains('ok'), 'Editeur : total musculaire a 100 %');
 
@@ -988,32 +979,16 @@ console.log('== v5.7 : materiel, marques, editeur d\'exercice ==');
   eqSheet.querySelector('[data-done]').click();
   assert([...edit.querySelectorAll('.ex-row')].find((r) => r.dataset.open === 'equip').textContent.includes('Banc'),
     'Equipement : le bouton resume le materiel choisi');
-
-  // Marque : choix dans la liste
-  edit.querySelector('[data-open="brand"]').click();
-  const brSheet = [...document.querySelectorAll('.sheet')].find((s) => s.querySelector('.brand-item'));
-  assert(brSheet.querySelectorAll('.brand-item').length === exdata.BRANDS.length + 1, 'Marques : liste fournie + « Aucune »');
-  [...brSheet.querySelectorAll('.brand-item')].find((b) => b.dataset.b === 'Panatta').click();
-  assert([...edit.querySelectorAll('.ex-row')].find((r) => r.dataset.open === 'brand').textContent.includes('Panatta'),
-    'Marque : selection reportee sur le bouton');
+  assert(!edit.querySelector('[data-open="brand"]'), 'Equipement : choisir une machine ne fait plus apparaitre de marque');
 
   // Enregistrement
-  [...document.querySelectorAll('.modal')].pop();
   const saveBtn = [...document.querySelectorAll('.modal-actions .btn')].find((b) => b.textContent === 'Enregistrer');
   saveBtn.click();
-  assert(store.userData.settings.exerciseBrand.legPress === 'Panatta', 'Enregistrement : marque memorisee');
   assert((store.userData.settings.exerciseEquip.legPress || []).includes('bench'), 'Enregistrement : materiel memorise');
-  assert(workout.currentBrand('legPress') === 'Panatta', 'Marque courante lue depuis les reglages');
+  assert(store.userData.settings.exerciseBrand === undefined, 'Enregistrement : aucune marque ecrite');
   document.querySelectorAll('.scrim').forEach((s) => s.remove());
 
-  // L'historique suit la marque courante
-  ed = openDetail();
-  assert(ed.querySelector('.ed-brand-tag').textContent === 'Panatta', 'Fiche exo : marque courante affichee');
-  assert(ed.querySelectorAll('.ed-hist-item').length === 1 && ed.textContent.includes('150 kg'),
-    'Marque : chaque marque a son propre historique');
-  document.querySelectorAll('.scrim').forEach((s) => s.remove());
-
-  // La seance en cours enregistre la marque du moment
+  // La seance enregistree ne porte plus de marque
   const cardL = ov7.querySelector('#s-exos .exo-card');
   cardL.querySelector('.sr-kg').value = '160';
   cardL.querySelector('.sr-reps').value = '10';
@@ -1021,8 +996,101 @@ console.log('== v5.7 : materiel, marques, editeur d\'exercice ==');
   ov7.querySelector('#s-finish').click();
   [...document.querySelectorAll('.modal-actions .btn')].find((b) => b.textContent.includes('Valider')).click();
   const lastW = store.userData.workouts[store.userData.workouts.length - 1];
-  assert(lastW.exercises[0].brand === 'Panatta', 'Seance : la marque du moment est enregistree avec l\'exercice');
+  assert(lastW.exercises[0].brand === undefined, 'Seance : plus de marque enregistree avec l\'exercice');
   clearOverlays();
+}
+
+console.log('== v6.0 : iPhone, percentile, progression, fluidite ==');
+{
+  // ---- iPhone : la barre de statut opaque fait descendre la vue jusqu'en bas
+  const idx = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  assert(/apple-mobile-web-app-status-bar-style" content="black"/.test(idx),
+    'iPhone : barre de statut opaque (black-translucent laissait ~1 cm vide en bas sous iOS 26)');
+  assert(/viewport-fit=cover/.test(idx), 'iPhone : viewport-fit=cover conserve (zone de l\'indicateur d\'accueil)');
+  assert(/Archivo/.test(idx), 'Design : police Archivo chargee');
+
+  // ---- Percentile parmi les pratiquants
+  const ranksP = await import('./utils/ranks.js');
+  const std = JSON.parse(fs.readFileSync(new URL('./standards.json', import.meta.url), 'utf8'));
+  const lv = ranksP.resolveStandardLevels('benchPress', std);
+  // Pile au standard Intermediaire : plus fort que la moitie des pratiquants
+  const atInter = ranksP.liftPercentile('benchPress', lv.intermediate * 80, 1, 80 * (1 + 1 / 30), std);
+  assert(Math.round(atInter.percentile) === 50 && atInter.top === 50, `Percentile : standard Intermediaire = top 50 % (${atInter.top})`);
+  const atElite = ranksP.liftPercentile('benchPress', lv.elite * 80, 1, 80 * (1 + 1 / 30), std);
+  assert(atElite.top === 5, `Percentile : standard Elite = top 5 % (${atElite.top})`);
+  const huge = ranksP.liftPercentile('benchPress', 300, 1, 80, std);
+  assert(huge.top > 0 && huge.top < 1, `Percentile : jamais « top 0 % », meme tres fort (${huge.top})`);
+  const a = ranksP.liftPercentile('benchPress', 80, 5, 80, std).percentile;
+  const b = ranksP.liftPercentile('benchPress', 80, 8, 80, std).percentile;
+  assert(b > a, 'Percentile : plus de reps au meme poids = mieux classe');
+  const plank = ranksP.liftPercentile('plank', 0, 60, 80, std);
+  assert(plank.percentile === null, 'Percentile : pas de chiffre invente pour un exercice sans standard');
+  const viaRef = ranksP.liftPercentile('custom_22a584ca', 100, 8, 80, std, { refId: 'seatedCableRow', coef: 2 });
+  const direct = ranksP.liftPercentile('seatedCableRow', 50, 8, 80, std);
+  assert(Math.abs(viaRef.percentile - direct.percentile) < 0.01, 'Percentile : exercice classe via sa reference (100 kg x0.5)');
+  assert(typeof ranksP.estimateRankFromLift === 'undefined', 'Ancien calculateur de rang retire');
+
+  // Dans l'app, app.js charge les standards au démarrage ; ici on le fait à la main.
+  ranksP.setStandards(std);
+  settings.render(pages.settings);
+  pages.settings.querySelector('#btn-rank-ladder').click();
+  const rm = [...document.querySelectorAll('.modal')].pop();
+  assert(rm.querySelector('#pct-exo') && rm.querySelector('#pct-weight') && rm.querySelector('#pct-reps'), 'Percentile : exercice, poids et reps a saisir');
+  assert(!rm.querySelector('#calc-run'), 'Percentile : plus de bouton « Calculer » (resultat en direct)');
+  rm.querySelector('#pct-exo').click();
+  const pp = document.querySelector('.picker-overlay');
+  pp.querySelector('#exo-search').value = 'Bench Press';
+  fire(pp.querySelector('#exo-search'), 'input');
+  [...pp.querySelectorAll('.exo-search-item')].find((it) => it.querySelector('span').textContent === 'Développé couché').click();
+  rm.querySelector('#pct-weight').value = '100';
+  fire(rm.querySelector('#pct-weight'), 'input');
+  rm.querySelector('#pct-reps').value = '5';
+  fire(rm.querySelector('#pct-reps'), 'input');
+  assert(/TOP\s*\d+/.test(rm.querySelector('#pct-result').textContent), 'Percentile : « Top X % » affiche en direct');
+  assert(rm.querySelector('.pct-gauge .pct-fill'), 'Percentile : jauge avec les niveaux');
+  assert(rm.querySelectorAll('.ladder-row').length === 8, 'Echelle des rangs conservee');
+  clearOverlays();
+
+  // ---- Progression en seance : meilleure serie du jour vs seance precedente
+  store.userData.workouts = [];
+  store.addWorkout({ id: 'p1', date: todayISO(-3), totalTime: 600, exercises: [{ exerciseId: 'benchPress', sets: [{ weight: 80, reps: 8 }, { weight: 70, reps: 10 }] }] });
+  workout.render(pages.workout);
+  pages.workout.querySelector('#btn-new-session').click();
+  document.querySelector('.sheet .ns-empty').click();
+  const ovP = document.querySelector('.session-overlay');
+  ovP.querySelector('#s-add-exo').click();
+  const pkP = document.querySelector('.picker-overlay');
+  pkP.querySelector('#exo-search').value = 'Bench Press';
+  fire(pkP.querySelector('#exo-search'), 'input');
+  [...pkP.querySelectorAll('.exo-search-item')].find((it) => it.querySelector('span').textContent === 'Développé couché').click();
+  const rowsP = () => [...ovP.querySelectorAll('#s-exos .exo-card .set-row')];
+  rowsP()[0].querySelector('.sr-kg').value = '80';
+  rowsP()[0].querySelector('.sr-reps').value = '8';
+  rowsP()[0].querySelector('.sr-check').click();
+  let badge = ovP.querySelector('#s-exos .exo-card .badge');
+  assert(badge && badge.textContent.trim() === '+0%', `Seance : meme meilleure serie que la fois precedente = +0 % (${badge && badge.textContent})`);
+  // Une serie de fin plus legere ne fait pas baisser la progression
+  rowsP()[1].querySelector('.sr-kg').value = '50';
+  rowsP()[1].querySelector('.sr-reps').value = '8';
+  rowsP()[1].querySelector('.sr-check').click();
+  badge = ovP.querySelector('#s-exos .exo-card .badge');
+  assert(badge.textContent.trim() === '+0%', 'Seance : une serie de fin plus legere ne fait pas chuter le badge');
+  ovP.querySelector('#s-quit').click();
+  [...document.querySelectorAll('.modal-actions .btn')].find((b) => b.textContent.includes('Confirmer')).click();
+  clearOverlays();
+
+  // ---- Fluidite : navigation
+  const appSrc = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+  assert(/renderedAt\[i\] !== store\.version/.test(appSrc), 'Navigation : une page n\'est redessinee que si les donnees ont change');
+  assert(/place\(currentPage, drag\.dx, false\)/.test(appSrc), 'Navigation : le carrousel suit le doigt');
+  assert(/prerenderOthers/.test(appSrc), 'Navigation : onglets voisins prepares a l\'avance');
+  assert(/el\.scrollTop = y/.test(appSrc), 'Navigation : position de defilement conservee au rendu');
+  const v0 = store.version;
+  store.addWater(todayISO(), 0.25);
+  assert(store.version === v0 + 1, 'Stockage : chaque ecriture incremente la version');
+  const cssF = fs.readFileSync(new URL('./style.css', import.meta.url), 'utf8');
+  assert(!/backdrop-filter/.test(cssF), 'Fluidite : plus aucun flou d\'arriere-plan (couteux sur iPhone)');
+  assert(!/#app-container \{[^}]*will-change: transform/.test(cssF), 'Fluidite : pas de couche GPU permanente de 5 ecrans');
 }
 
 console.log(`\n===== RÉSULTAT : ${pass} OK / ${fail} FAIL =====`);

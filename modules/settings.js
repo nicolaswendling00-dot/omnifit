@@ -2,12 +2,18 @@
 import { store, parseStepsPayload } from '../utils/storage.js';
 import { harrisBenedict } from '../utils/math.js';
 import { EQUIPMENT_TYPES } from '../data/exercises.js';
-import { el, esc, icons, openModal, toast, confirmModal, setIconSet } from '../utils/ui.js';
-import { RANK_ORDER, RANK_META, DIV_LP, ONYX_LP, rankBadge, estimateRankFromLift, getStandards, setRankStyle } from '../utils/ranks.js';
-import { openExercisePicker } from './workout.js';
+import { el, esc, icons, openModal, toast, confirmModal } from '../utils/ui.js';
+import { RANK_ORDER, RANK_META, DIV_LP, ONYX_LP, rankBadge, liftPercentile, LEVEL_PERCENTILE, getStandards } from '../utils/ranks.js';
+import { openExercisePicker, customRefMap, exerciseLookup } from './workout.js';
 import { backfillNutritionGoals, freezePastGoals } from './nutrition.js';
 
-const VERSION = '5.5';
+const VERSION = '6.0';
+
+// Familles de matériel (filtre de la base d'exercices), en français.
+const EQUIP_FAMILY_FR = {
+  Band: 'Élastique', Barbell: 'Barre', Bodyweight: 'Poids du corps', Cable: 'Poulie',
+  Dumbbells: 'Haltères', Kettlebell: 'Kettlebell', Machine: 'Machine', Other: 'Autre', Plate: 'Disque',
+};
 
 function toggleRow(label, key, sub = '') {
   const s = store.userData.settings;
@@ -102,9 +108,9 @@ export function render(container) {
       <div id="row-db-full"></div>
       <div class="settings-row" style="flex-direction:column;align-items:stretch">
         <div class="row-label" style="margin-bottom:6px">Filtre équipement <span class="muted">(aucun = tout)</span></div>
-        <div id="equip-filter" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+        <div id="equip-filter" class="equip-grid"></div>
       </div>
-      <button class="btn btn-secondary btn-block" id="btn-rank-ladder" style="margin-top:10px">${icons.book} Classement des rangs & calculateur</button>
+      <button class="btn btn-secondary btn-block" id="btn-rank-ladder" style="margin-top:10px">${icons.book} Rangs & Top %</button>
     </div>
 
     <!-- 4. ACTIVITÉ -->
@@ -120,13 +126,6 @@ export function render(container) {
     <!-- 5. INTERFACE -->
     <div class="card settings-section">
       <h3>Interface</h3>
-      <div class="settings-row">
-        <span class="row-label">Thème</span>
-        <div class="segment" style="max-width:230px" id="seg-shape">
-          <button data-v="amoled" class="${(s.shape || 'amoled') === 'amoled' ? 'active' : ''}">AMOLED</button>
-          <button data-v="8bit" class="${s.shape === '8bit' ? 'active' : ''}">8-bit</button>
-        </div>
-      </div>
       <div class="settings-row">
         <span class="row-label">Couleur</span>
         <div class="segment" style="max-width:230px" id="seg-palette">
@@ -178,7 +177,7 @@ export function render(container) {
   const eqHost = root.querySelector('#equip-filter');
   for (const eq of EQUIPMENT_TYPES) {
     const active = s.equipmentFilter.includes(eq);
-    const chip = el(`<button class="badge ${active ? '' : 'violet'}" style="cursor:pointer;min-height:32px;${active ? 'background:rgba(0,217,255,0.2)' : 'opacity:0.6'}">${eq}</button>`);
+    const chip = el(`<button class="equip-chip${active ? ' on' : ''}">${EQUIP_FAMILY_FR[eq] || eq}</button>`);
     chip.addEventListener('click', () => {
       const cur = new Set(store.userData.settings.equipmentFilter);
       if (cur.has(eq)) cur.delete(eq); else cur.add(eq);
@@ -201,12 +200,6 @@ export function render(container) {
   // L'objectif d'eau se règle depuis la carte Eau de l'accueil, là où on le lit.
   bindRange('#set-rest', '#rest-val', 'restTimerDefault', (v) => `${v}s`, (v) => parseInt(v, 10));
 
-  root.querySelector('#seg-shape').addEventListener('click', (e) => {
-    const b = e.target.closest('button'); if (!b) return;
-    store.saveUserData({ settings: { shape: b.dataset.v } });
-    applyTheme();
-    rerender();
-  });
   root.querySelector('#seg-palette').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
     store.saveUserData({ settings: { palette: b.dataset.v } });
@@ -253,42 +246,13 @@ export function render(container) {
   });
 }
 
-// Police pixel du thème 8-bit : chargée à la demande (et mise en cache par le
-// navigateur). Hors ligne, le repli monospace garde l'aspect rétro.
-function ensurePixelFont() {
-  if (document.getElementById('font-8bit')) return;
-  const link = document.createElement('link');
-  link.id = 'font-8bit';
-  link.rel = 'stylesheet';
-  link.href = 'https://fonts.googleapis.com/css2?family=VT323&display=swap';
-  document.head.appendChild(link);
-}
-
+// Une seule forme d'interface ; seule la palette (sombre / claire) se choisit.
 export function applyTheme() {
-  const s = store.userData.settings;
-  const shape = s.shape || 'amoled';   // 'amoled' | '8bit'
-  const palette = s.palette || 'dark'; // 'dark' | 'light'
-  const is8bit = shape === '8bit';
-
-  document.body.classList.toggle('shape-amoled', shape === 'amoled');
-  document.body.classList.toggle('shape-8bit', is8bit);
+  const palette = store.userData.settings.palette || 'dark'; // 'dark' | 'light'
   document.body.classList.toggle('palette-light', palette === 'light');
-
-  // Icônes et badges de rang suivent la FORME
-  setIconSet(is8bit ? '8bit' : 'default');
-  setRankStyle(is8bit ? '8bit' : 'default');
-  if (is8bit) ensurePixelFont();
-  // Les icônes de la barre de navigation sont écrites en dur dans index.html :
-  // on les remplace pour qu'elles suivent le jeu d'icônes courant.
-  const navKeys = ['home', 'nutrition', 'workout', 'activity', 'settings'];
-  document.querySelectorAll('#bottom-nav .nav-btn').forEach((btn, i) => {
-    const svg = btn.querySelector('svg');
-    const next = icons[navKeys[i]];
-    if (svg && next) svg.outerHTML = next;
-  });
-  // Densité : l'application est désormais toujours en « spacieux ».
-  document.body.classList.remove('density-compact');
-  document.body.classList.add('density-spacious');
+  // La barre de statut iOS suit la palette (elle est opaque, cf. index.html).
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', palette === 'light' ? '#F4F6FB' : '#000000');
 }
 
 function openExportModal() {
@@ -429,8 +393,7 @@ function openClearHistoryModal(rerender) {
 }
 
 function openRankLadderModal() {
-  const nameOverrides = store.userData.settings.exerciseNames || {};
-  let selected = null; // { id, name }
+  let selected = null; // id d'exercice
 
   const ladderRows = RANK_ORDER.map((id, i) => {
     const meta = RANK_META[id];
@@ -442,56 +405,71 @@ function openRankLadderModal() {
     </div>`;
   }).join('');
 
-  const content = el(`<div>
-    <h3 style="margin:0 0 8px">Échelle des rangs</h3>
-    <div class="ladder-list">${ladderRows}</div>
+  // Repères de la jauge : les niveaux StrengthLevel, placés à leur percentile.
+  const LEVEL_FR = { beginner: 'Débutant', novice: 'Novice', intermediate: 'Intermédiaire', advanced: 'Avancé', elite: 'Élite' };
+  // Repères de la jauge abrégés : Débutant (5 %) et Novice (20 %) sont trop
+  // proches pour leurs noms complets sur un écran de téléphone.
+  const LEVEL_SHORT = { beginner: 'Déb.', novice: 'Nov.', intermediate: 'Int.', advanced: 'Av.', elite: 'Élite' };
+  const marks = Object.entries(LEVEL_PERCENTILE)
+    .map(([l, p]) => `<i style="left:${p}%"></i><span style="left:${p}%">${LEVEL_SHORT[l]}</span>`).join('');
 
-    <h3 style="margin:18px 0 8px">Calculateur de rang</h3>
-    <div class="muted" style="font-size:0.75rem;margin-bottom:10px">
-      Estime le rang qu'un exercice te donnerait avec le poids de corps actuel de ton profil.
-      Basé uniquement sur le poids de corps (l'âge n'entre pas dans le calcul).
-    </div>
-    <div class="field-stack">
-      <label class="field"><span>Exercice</span>
-        <button type="button" class="btn btn-secondary btn-block" id="calc-exo-btn" style="justify-content:space-between">
-          <span id="calc-exo-label">Choisir un exercice…</span>${icons.chevron}
-        </button>
-      </label>
+  const content = el(`<div>
+    <div class="pct-block">
+      <div class="eyebrow">Où te situes-tu ?</div>
+      <p class="muted pct-intro">Entre une série : on te place parmi les pratiquants de musculation, d'après les standards StrengthLevel et ton poids de corps (${store.userData.profile.weight} kg).</p>
+      <button type="button" class="ex-row" id="pct-exo">
+        <span class="ex-row-l">Exercice</span><span class="ex-row-v" id="pct-exo-label">Choisir…</span>${icons.chevron}
+      </button>
       <div class="grid-2">
-        <label class="field"><span>Poids (kg)</span><input id="calc-weight" type="number" step="0.5" min="0" placeholder="80"></label>
-        <label class="field"><span>Répétitions</span><input id="calc-reps" type="number" step="1" min="1" placeholder="8"></label>
+        <label class="field"><span>Poids (kg)</span><input id="pct-weight" type="number" inputmode="decimal" step="0.5" min="0" placeholder="80"></label>
+        <label class="field"><span>Répétitions</span><input id="pct-reps" type="number" inputmode="numeric" step="1" min="1" placeholder="8"></label>
+      </div>
+      <div class="pct-result" id="pct-result">
+        <div class="pct-empty">Choisis un exercice, un poids et des répétitions.</div>
       </div>
     </div>
-    <button class="btn btn-primary btn-block" id="calc-run" style="margin-top:6px">Calculer</button>
-    <div id="calc-result" style="margin-top:12px"></div>
+
+    <div class="eyebrow" style="margin-top:22px">Échelle des rangs</div>
+    <div class="ladder-list">${ladderRows}</div>
   </div>`);
 
-  openModal({ title: 'Rangs & calculateur', content, wide: true, actions: [] });
+  openModal({ title: 'Rangs', content, wide: true, actions: [] });
 
-  content.querySelector('#calc-exo-btn').addEventListener('click', () => {
-    openExercisePicker((exo) => {
-      selected = { id: exo.id, name: nameOverrides[exo.id] || exo.name };
-      content.querySelector('#calc-exo-label').textContent = selected.name;
-    }, 'Choisir un exercice');
-  });
-
-  content.querySelector('#calc-run').addEventListener('click', () => {
-    const weight = parseFloat(content.querySelector('#calc-weight').value);
-    const reps = parseInt(content.querySelector('#calc-reps').value, 10);
-    const resultHost = content.querySelector('#calc-result');
-    if (!selected) { resultHost.innerHTML = '<div class="empty-state">Choisis un exercice</div>'; return; }
-    if (!weight || !reps) { resultHost.innerHTML = '<div class="empty-state">Renseigne un poids et des répétitions</div>'; return; }
+  const resultHost = content.querySelector('#pct-result');
+  // Calcul en direct : pas de bouton « Calculer », le résultat suit la saisie.
+  const update = () => {
+    const weight = parseFloat(content.querySelector('#pct-weight').value);
+    const reps = parseInt(content.querySelector('#pct-reps').value, 10);
+    if (!selected || !weight || !reps) {
+      resultHost.innerHTML = '<div class="pct-empty">Choisis un exercice, un poids et des répétitions.</div>';
+      return;
+    }
     const bw = store.userData.profile.weight;
-    const r = estimateRankFromLift(selected.id, weight, reps, bw, getStandards());
-    const tierLabel = { beginner: 'Débutant', novice: 'Novice', intermediate: 'Intermédiaire', advanced: 'Avancé', elite: 'Élite' };
+    const r = liftPercentile(selected, weight, reps, bw, getStandards(), customRefMap()[selected] || null);
+    if (r.percentile == null) {
+      resultHost.innerHTML = `<div class="pct-empty">Pas de standard de force fiable pour cet exercice (gainage, cardio, mouvement trop spécifique). 1RM estimé : <b>${r.orm} kg</b>.</div>`;
+      return;
+    }
+    const pct = Math.round(r.percentile);
     resultHost.innerHTML = `
-      <div class="calc-result-card">
-        <div class="calc-result-row"><span>1RM estimé</span><span class="num" style="color:var(--accent)">${r.orm} kg</span></div>
-        <div class="calc-result-row"><span>Niveau StrengthLevel</span><span>${r.hasStandard ? (r.levelTier ? tierLabel[r.levelTier] : 'En dessous de Débutant') : 'Non disponible pour cet exo'}</span></div>
-        <div class="calc-result-row">
-          <span>Rang obtenu</span>
-          <span style="display:flex;align-items:center;gap:8px;color:${r.rank.color};font-weight:700">${r.rank.division ? `${r.rank.name} ${r.rank.division}` : r.rank.name}</span>
-        </div>
-      </div>`;
+      <div class="pct-hero">
+        <div class="pct-top"><small>TOP</small>${String(r.top).replace('.', ',')}<small>%</small></div>
+        <div class="pct-sub">Plus fort que <b>${pct} %</b> des pratiquants</div>
+      </div>
+      <div class="pct-gauge"><div class="pct-fill" style="width:${r.percentile}%"></div><div class="pct-marks">${marks}</div></div>
+      <div class="pct-meta">
+        <span>1RM estimé <b class="num">${r.orm} kg</b></span>
+        <span>Niveau <b>${r.level ? LEVEL_FR[r.level] : 'Avant Débutant'}</b></span>
+      </div>
+      ${store.userData.profile.sex === 'F' ? '<div class="pct-note">Les standards disponibles sont ceux des hommes : le classement est sous-estimé pour une femme.</div>' : ''}`;
+  };
+  content.querySelector('#pct-weight').addEventListener('input', update);
+  content.querySelector('#pct-reps').addEventListener('input', update);
+  content.querySelector('#pct-exo').addEventListener('click', () => {
+    openExercisePicker((exo) => {
+      selected = exo.id;
+      content.querySelector('#pct-exo-label').textContent = (exerciseLookup(exo.id) || exo).name;
+      update();
+    }, 'Choisir un exercice');
   });
 }

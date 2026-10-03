@@ -42,8 +42,6 @@ function defaultUserData() {
       exerciseMuscleOverrides: {},
       exerciseEquip: {},        // { exoId: ['barbell','bench'] } — matériel redéfini
       exerciseRefs: {},         // { exoId: { refExercise, refCoef } } — classement redéfini
-      exerciseBrand: {},        // { exoId: 'Panatta' } — marque en cours (historique séparé)
-      customBrands: [],         // marques ajoutées à la main
       showCExo: true,
       secondaryRatio: 0.5,
       exerciseDbFull: true,
@@ -54,7 +52,6 @@ function defaultUserData() {
         quads: 12, hamstrings: 8, glutes: 10, calves: 6, core: 8, lowerback: 4,
       },
       theme: 'amoled',
-      shape: 'amoled',
       palette: 'dark',
       density: 'spacious',
       soundEnabled: false,
@@ -138,6 +135,9 @@ class StorageManager {
   constructor() {
     this.userData = this.loadUserData();
     this.listeners = [];
+    // Incrémenté à chaque écriture : la navigation s'en sert pour savoir si une
+    // page doit être redessinée (données changées) ou peut être montrée telle quelle.
+    this.version = 0;
   }
 
   loadUserData() {
@@ -169,16 +169,17 @@ class StorageManager {
         if (data.settings.theme === 'dark') data.settings.theme = 'amoled';
         data.settings._v331 = true;
       }
-      // Migration v3.33 : le thème unique éclate en deux axes indépendants
-      //   shape (amoled | 8bit) + palette (dark | light).
+      // Migration v3.33 : l'ancien thème « clair » devient la palette claire.
       if (!data.settings._v333) {
-        const t = data.settings.theme;
-        if (t === '8bit') { data.settings.shape = '8bit'; data.settings.palette = data.settings.palette || 'dark'; }
-        else if (t === 'light') { data.settings.shape = 'amoled'; data.settings.palette = 'light'; }
-        else { data.settings.shape = 'amoled'; data.settings.palette = 'dark'; }
+        data.settings.palette = data.settings.theme === 'light' ? 'light' : (data.settings.palette || 'dark');
         data.settings.density = 'spacious';
         data.settings._v333 = true;
       }
+      // v6.0 : le thème 8-bit a disparu (une seule forme) et les marques de
+      // machines ont été abandonnées : on retire les réglages devenus sans objet.
+      delete data.settings.shape;
+      delete data.settings.exerciseBrand;
+      delete data.settings.customBrands;
       return data;
     } catch (e) {
       console.error('Erreur chargement userData', e);
@@ -187,6 +188,7 @@ class StorageManager {
   }
 
   persist() {
+    this.version += 1;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.userData));
     } catch (e) {

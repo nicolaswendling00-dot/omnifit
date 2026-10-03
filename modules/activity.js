@@ -244,9 +244,9 @@ export function render(container) {
   container.innerHTML = '';
   container.appendChild(el(`
     <div>
-      <div class="page-title">
+      <div class="page-title page-title-actions">
         <h1>Activité</h1>
-        <div style="display:flex;gap:6px">
+        <div class="title-actions">
           <button class="btn btn-ghost btn-sm" id="btn-import-steps" title="Importer les pas depuis Santé">${icons.download}</button>
           <button class="btn btn-ghost btn-sm" id="btn-step-goal">${icons.edit} Objectif</button>
           <button class="btn btn-primary btn-sm" id="btn-log-steps">${icons.plus} Log</button>
@@ -271,10 +271,10 @@ export function render(container) {
       </div>
 
       <div class="grid-2">
-        <div class="card" style="margin:0"><div class="muted">Moyenne hebdo</div><div class="num" style="font-size:1.3rem;color:var(--accent)">${weekAvg.toLocaleString('fr-FR')}</div></div>
-        <div class="card" style="margin:0"><div class="muted">Record 30 j</div><div class="num" style="font-size:1.3rem;color:var(--accent)">${record.v.toLocaleString('fr-FR')}</div></div>
-        <div class="card" style="margin:0"><div class="muted">Jours actifs</div><div class="num" style="font-size:1.3rem;color:var(--success)">${activeDays}</div></div>
-        <div class="card" style="margin:0"><div class="muted">Tendance</div><div class="num" style="font-size:1.3rem;color:${trend >= 0 ? 'var(--success)' : 'var(--danger)'}">${trend >= 0 ? '+' : ''}${trend}%</div></div>
+        <div class="card" style="margin:0"><div class="muted">Moyenne hebdo</div><div class="num">${weekAvg.toLocaleString('fr-FR')}</div></div>
+        <div class="card" style="margin:0"><div class="muted">Record 30 j</div><div class="num">${record.v.toLocaleString('fr-FR')}</div></div>
+        <div class="card" style="margin:0"><div class="muted">Jours actifs</div><div class="num">${activeDays}</div></div>
+        <div class="card" style="margin:0"><div class="muted">Tendance</div><div class="num" style="color:${trend >= 0 ? 'var(--success)' : 'var(--danger)'}">${trend >= 0 ? '+' : ''}${trend}%</div></div>
       </div>
 
       <div class="card" style="margin-top:var(--space)">

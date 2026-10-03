@@ -247,7 +247,7 @@ function renderWeightChart(canvas) {
       position: 'left',
       grid: { display: false, drawBorder: false },
       border: { display: false },
-      ticks: { color: '#FB923C', font: { size: 10, family: 'Inter' }, maxTicksLimit: 4, padding: 6 },
+      ticks: { color: '#FB923C', font: { size: 10, family: 'Archivo' }, maxTicksLimit: 4, padding: 6 },
     };
   }
 

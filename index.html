@@ -4,9 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
   <meta name="description" content="OmniFit — Suivi fitness complet : poids, nutrition, entraînement, activité.">
-  <meta name="theme-color" content="#0A0E27">
+  <meta name="theme-color" content="#000000">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <!-- Barre de statut OPAQUE (et non black-translucent) : depuis iOS 26, une app
+       installée en black-translucent est dimensionnée à la hauteur « sûre » mais
+       collée en haut de l'écran, ce qui laisse en bas une bande morte de la
+       hauteur de la barre de statut (~1 cm), hors de la vue web. En opaque, iOS
+       réserve sa propre bande en haut et la vue web descend jusqu'au bord bas.
+       Sur fond noir, la différence est invisible en haut. -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="OmniFit">
   <title>OmniFit</title>
   <link rel="manifest" href="./assets/manifest.json">
@@ -14,11 +20,13 @@
   <link rel="icon" type="image/png" href="./assets/icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Archivo : grotesque à largeur variable (axe wdth), proche de la typographie
+       de l'Esports World Cup. Les chiffres et titres sont composés en « élargi ». -->
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,400..900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./style.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
 </head>
-<body class="theme-dark density-normal">
+<body>
 
   <div id="app-container">
     <div class="page" id="page-home"></div>

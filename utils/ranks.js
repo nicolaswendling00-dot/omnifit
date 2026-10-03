@@ -1,4 +1,3 @@
-import { pixelRankBadge, pixelRankChip } from './pixelArt.js';
 // OmniFit / GymBruh — Système de rangs & calcul de LP
 // Rangs : Bronze → Or → Platine → Diamant → Émeraude → Saphir → Rubis → Onyx (ultime).
 
@@ -179,21 +178,52 @@ export function standardBasedLP(exerciseId, bestOrm, bodyweight, standards) {
   return interpLP(ratio, points);
 }
 
-// Calculateur : à partir d'un exercice + poids + reps + poids de corps, estime
-// le 1RM (Epley), le niveau StrengthLevel atteint (Débutant..Élite, ou null si
-// l'exo n'a pas de standard fiable) et le rang OmniFit correspondant.
-export function estimateRankFromLift(exerciseId, weight, reps, bodyweight, standards = STANDARDS) {
-  const orm = weight > 0 && reps > 0 ? weight * (1 + reps / 30) : 0;
-  const levels = resolveStandardLevels(exerciseId, standards);
-  let levelTier = null;
-  if (levels && bodyweight) {
-    const ratio = orm / bodyweight;
-    const order = ['elite', 'advanced', 'intermediate', 'novice', 'beginner'];
-    for (const lvl of order) { if (ratio >= levels[lvl]) { levelTier = lvl; break; } }
+// ============================================================
+//  PERCENTILE PARMI LES PRATIQUANTS
+//  Les niveaux StrengthLevel sont définis par la part des pratiquants qu'ils
+//  dépassent : Débutant = plus fort que 5 % d'entre eux, Novice 20 %,
+//  Intermédiaire 50 %, Avancé 80 %, Élite 95 %. On interpole entre ces
+//  repères (en ratio 1RM / poids de corps) pour situer n'importe quelle série.
+//  Au-delà d'Élite, la courbe tend vers 100 % sans l'atteindre : à 1,4 × le
+//  standard Élite, on est autour du top 0,5 %.
+// ============================================================
+export const LEVEL_PERCENTILE = { beginner: 5, novice: 20, intermediate: 50, advanced: 80, elite: 95 };
+const PERCENTILE_LEVELS = ['beginner', 'novice', 'intermediate', 'advanced', 'elite'];
+
+export function percentileFromRatio(ratio, levels) {
+  if (!levels || !(ratio > 0)) return 0;
+  const pts = [{ r: 0, p: 0 }, ...PERCENTILE_LEVELS.map((l) => ({ r: levels[l], p: LEVEL_PERCENTILE[l] }))];
+  for (let i = 1; i < pts.length; i++) {
+    if (ratio <= pts[i].r) {
+      const a = pts[i - 1]; const b = pts[i];
+      return a.p + ((ratio - a.r) / ((b.r - a.r) || 1)) * (b.p - a.p);
+    }
   }
-  const floor = bodyweight ? standardBasedLP(exerciseId, orm, bodyweight, standards) : null;
-  const lp = floor != null ? floor : 0;
-  return { orm: Math.round(orm), levelTier, rank: rankFromLP(lp), hasStandard: !!(levels && levels.elite >= ONYX_OVERRIDE_MIN_RATIO) };
+  const over = ratio / levels.elite - 1;
+  return Math.min(99.9, 95 + 4.9 * (1 - Math.exp(-6.26 * over)));
+}
+
+// Où se situe une série (poids × reps) parmi les pratiquants ?
+//   ref : { refId, coef } pour un exercice classé via un mouvement de
+//         référence (les kilos sont convertis en équivalent sur ce dernier).
+// → { orm, percentile, top, level, hasStandard }
+//   percentile = part des pratiquants dépassés ; top = 100 − percentile.
+export function liftPercentile(exerciseId, weight, reps, bodyweight, standards = STANDARDS, ref = null) {
+  const orm = weight > 0 && reps > 0 ? weight * (1 + reps / 30) : 0;
+  const stdId = ref && ref.refId ? ref.refId : exerciseId;
+  const stdOrm = ref && ref.coef > 0 ? orm / ref.coef : orm;
+  const levels = resolveStandardLevels(stdId, standards);
+  if (!levels || !bodyweight || !orm) {
+    return { orm: Math.round(orm), percentile: null, top: null, level: null, hasStandard: !!levels };
+  }
+  const ratio = stdOrm / bodyweight;
+  const percentile = percentileFromRatio(ratio, levels);
+  let level = null;
+  for (const l of PERCENTILE_LEVELS) if (ratio >= levels[l]) level = l;
+  // Arrondi lisible : au pour-cent près, au dixième dans le haut du tableau.
+  const rawTop = 100 - percentile;
+  const top = rawTop < 1 ? Math.max(0.1, Math.round(rawTop * 10) / 10) : Math.round(rawTop);
+  return { orm: Math.round(orm), percentile, top, level, hasStandard: true };
 }
 
 // Résout le poids de corps EFFECTIF à une date donnée à partir du journal de pesées :
@@ -293,14 +323,10 @@ const PAL = {
 
 let _uid = 0;
 
-// Style des badges : 'default' (illustré) ou '8bit' (pixel-art).
-let RANK_STYLE = 'default';
-export function setRankStyle(mode) { RANK_STYLE = mode === '8bit' ? '8bit' : 'default'; }
 
 // Badge complet (stats). size ~120.
 export function rankBadge(rankId, size = 120) {
   const id = RANK_META[rankId] ? rankId : 'bronze';
-  if (RANK_STYLE === '8bit') return pixelRankBadge(id, RANK_META[id].color, size);
   const P = PAL[id];
   const u = 'rb' + (++_uid);
   const rim = P.holo ? `url(#${u}-holo)` : `url(#${u}-edge)`;
@@ -342,7 +368,6 @@ export function rankBadge(rankId, size = 120) {
 // Puce compacte (listes / séance). size ~30.
 export function rankChip(rankId, size = 30) {
   const id = RANK_META[rankId] ? rankId : 'bronze';
-  if (RANK_STYLE === '8bit') return pixelRankChip(id, RANK_META[id].color, size);
   const P = PAL[id];
   const u = 'rc' + (++_uid);
   const rim = P.holo ? `url(#${u}-holo)` : P.edge[1];

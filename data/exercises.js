@@ -295,25 +295,6 @@ export const EQUIPMENT = [
   { id: 'bodyweight', label: 'Poids du corps' },
 ];
 export const equipLabel = (id) => (EQUIPMENT.find((e) => e.id === id) || { label: id }).label;
-// Matériel dont la marque change complètement les charges : deux machines de
-// marques différentes ne se comparent pas. C'est ce qui déclenche le bouton
-// « Marque » dans l'éditeur, et un historique séparé par marque.
-export const BRANDED_EQUIP = ['machine', 'cable', 'smith'];
-
-// Marques de machines. « Autre » permet d'en ajouter une à la volée, mémorisée
-// ensuite dans les réglages (settings.customBrands).
-export const BRANDS = [
-  'Panatta', 'Hammer Strength', 'Technogym', 'Life Fitness', 'Cybex', 'Nautilus',
-  'Precor', 'Matrix', 'Hoist', 'Atlantis', 'Arsenal Strength', 'Prime Fitness',
-  'Watson', 'Gym80', 'Eleiko', 'Rogue', 'Body-Solid', 'Star Trac', 'FreeMotion',
-  'Muscle D', 'Legend Fitness', 'Sorinex', 'Nebula', 'Strive', 'BodyCraft',
-  'Powertec', 'Icarian', 'Paramount', 'Salter', 'BH Fitness', 'Impulse',
-  'DHZ Fitness', 'Jerai', 'Milon', 'Pendulum', 'Ironmaster', 'Primal Strength',
-  'Force USA', 'Titan Fitness', 'Domyos', 'Care Fitness', 'Heubozen', 'SportsArt',
-  'Marbo Sport', 'Nordic Gym', 'Gymleco', 'Exigo', 'TuffStuff', 'Vectra', 'Keiser',
-  'Schnell', 'Proxomed', 'Ergo-Fit', 'Bodytone', 'Pullum', 'Indigo Fitness',
-];
-
 // Matériel réellement nécessaire, exercice par exercice.
 const EQUIP_BY_ID = {
   // Pectoraux
