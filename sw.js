@@ -1,5 +1,5 @@
 // OmniFit — Service worker (PWA offline)
-const CACHE_NAME = 'omniffit-v6-3';
+const CACHE_NAME = 'omniffit-v6-4';
 const ASSETS = [
   './',
   './index.html',
@@ -30,9 +30,15 @@ const ASSETS = [
   './assets/icon-180.png',
 ];
 
+// Installation : on télécharge chaque fichier en CONTOURNANT le cache HTTP
+// (`cache: 'reload'`). GitHub Pages autorise le navigateur à garder ses
+// fichiers 10 minutes : sans ça, une version publiée peu après la précédente
+// se remplissait avec les ANCIENS fichiers.
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting())
+    caches.open(CACHE_NAME)
+      .then((cache) => cache.addAll(ASSETS.map((u) => new Request(u, { cache: 'reload' }))))
+      .then(() => self.skipWaiting())
   );
 });
 
@@ -44,24 +50,21 @@ self.addEventListener('activate', (e) => {
   );
 });
 
-// Cache-first pour les assets locaux, network-first pour le reste (CDN, fonts)
+// Réseau d'abord, cache en secours : en ligne, l'app charge toujours la
+// dernière version publiée ; hors ligne, elle retombe sur la copie en cache.
+// (Avant : cache d'abord, ce qui affichait l'ancienne version jusqu'à un
+// redémarrage complet de l'app.)
 self.addEventListener('fetch', (e) => {
+  if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
-  if (url.origin === location.origin) {
-    e.respondWith(
-      caches.match(e.request).then((cached) => cached || fetch(e.request).then((res) => {
+  const sameOrigin = url.origin === location.origin;
+  e.respondWith(
+    fetch(e.request, sameOrigin ? { cache: 'no-cache' } : undefined).then((res) => {
+      if (res && res.ok) {
         const clone = res.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
-        return res;
-      }))
-    );
-  } else {
-    e.respondWith(
-      fetch(e.request).then((res) => {
-        const clone = res.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
-        return res;
-      }).catch(() => caches.match(e.request))
-    );
-  }
+      }
+      return res;
+    }).catch(() => caches.match(e.request, { ignoreSearch: true }))
+  );
 });

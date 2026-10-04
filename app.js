@@ -235,8 +235,25 @@ fetch('./standards.json')
     prerenderOthers();
   });
 
+// ---------- Mises à jour ----------
+// Quand une nouvelle version prend la main, on recharge une fois pour
+// l'afficher tout de suite. On ne le fait pas à la toute première
+// installation (pas d'ancienne version à remplacer).
 if ('serviceWorker' in navigator) {
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloading) return;
+    reloading = true;
+    window.location.reload();
+  });
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then((reg) => {
+      // Sur iPhone, l'app installée reprend souvent sans être relancée : on
+      // cherche une mise à jour à chaque retour au premier plan.
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') reg.update().catch(() => {});
+      });
+    }).catch(() => {});
   });
 }
