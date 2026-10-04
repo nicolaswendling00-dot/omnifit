@@ -1,20 +1,50 @@
-// OmniFit — Base d'exercices (169 exercices, materiel inclus)
+// OmniFit — Base d'exercices (169 exercices, materiel et anatomie detaillee inclus)
 // Structure : { id, name, category, primaryMuscles:[{m,p}], secondaryMuscles:[{m,p}], difficulty, equipment }
 
 export const MUSCLES = [
-  { id: 'chest', label: 'Pectoraux' },
-  { id: 'back', label: 'Dos' },
-  { id: 'shoulders', label: 'Épaules' },
-  { id: 'biceps', label: 'Biceps' },
-  { id: 'triceps', label: 'Triceps' },
-  { id: 'forearms', label: 'Avant-bras' },
-  { id: 'quads', label: 'Quadriceps' },
-  { id: 'hamstrings', label: 'Ischios' },
-  { id: 'glutes', label: 'Fessiers' },
-  { id: 'calves', label: 'Mollets' },
-  { id: 'core', label: 'Abdos / Core' },
-  { id: 'lowerback', label: 'Lombaires' },
+  { id: 'chest', label: 'Pectoraux', short: 'Pecs', group: 'Pectoraux' },
+  { id: 'frontDelts', label: 'Deltoïdes antérieurs', short: 'Delt. ant.', group: 'Épaules' },
+  { id: 'sideDelts', label: 'Deltoïdes latéraux', short: 'Delt. lat.', group: 'Épaules' },
+  { id: 'rearDelts', label: 'Deltoïdes postérieurs', short: 'Delt. post.', group: 'Épaules' },
+  { id: 'traps', label: 'Trapèzes', short: 'Trapèzes', group: 'Dos' },
+  { id: 'rhomboids', label: 'Rhomboïdes', short: 'Rhomb.', group: 'Dos' },
+  { id: 'lats', label: 'Grands dorsaux', short: 'Dorsaux', group: 'Dos' },
+  { id: 'lowerback', label: 'Lombaires', short: 'Lomb.', group: 'Dos' },
+  { id: 'biceps', label: 'Biceps', short: 'Biceps', group: 'Bras' },
+  { id: 'triceps', label: 'Triceps', short: 'Triceps', group: 'Bras' },
+  { id: 'forearms', label: 'Avant-bras', short: 'Av-bras', group: 'Bras' },
+  { id: 'abs', label: 'Abdominaux', short: 'Abdos', group: 'Tronc' },
+  { id: 'obliques', label: 'Obliques', short: 'Obliques', group: 'Tronc' },
+  { id: 'glutes', label: 'Fessiers', short: 'Fessiers', group: 'Jambes' },
+  { id: 'quads', label: 'Quadriceps', short: 'Quadris', group: 'Jambes' },
+  { id: 'hamstrings', label: 'Ischios', short: 'Ischios', group: 'Jambes' },
+  { id: 'adductors', label: 'Adducteurs', short: 'Adduct.', group: 'Jambes' },
+  { id: 'calves', label: 'Mollets', short: 'Mollets', group: 'Jambes' },
 ];
+
+// Anciens grands groupes (avant la v6.1) → répartition sur les muscles fins.
+// Sert à convertir les exercices personnels, les répartitions modifiées et les
+// sauvegardes importées.
+export const LEGACY_SPLIT = {
+  shoulders: [['frontDelts', 0.5], ['sideDelts', 0.3], ['rearDelts', 0.2]],
+  back: [['lats', 0.6], ['rhomboids', 0.25], ['traps', 0.15]],
+  core: [['abs', 0.75], ['obliques', 0.25]],
+};
+// Convertit une liste [{m, p}] qui contient d'anciens groupes. Les parts sont
+// arrondies à l'unité ; le reste d'arrondi va à la plus grosse part, pour que
+// le total reste exactement le même. Renvoie la liste telle quelle sinon.
+export function splitLegacyMuscles(list) {
+  if (!Array.isArray(list) || !list.some((x) => LEGACY_SPLIT[x.m])) return list;
+  const acc = new Map();
+  for (const { m, p } of list) {
+    if (!LEGACY_SPLIT[m]) { acc.set(m, (acc.get(m) || 0) + p); continue; }
+    const parts = LEGACY_SPLIT[m].map(([id, k]) => [id, Math.round(p * k)]);
+    const diff = p - parts.reduce((a, [, v]) => a + v, 0);
+    parts[0][1] += diff;
+    for (const [id, v] of parts) if (v > 0) acc.set(id, (acc.get(id) || 0) + v);
+  }
+  return [...acc.entries()].map(([m, p]) => ({ m, p })).sort((a, b) => b.p - a.p);
+}
 
 export const muscleLabel = (id) => (MUSCLES.find((m) => m.id === id) || { label: id }).label;
 
@@ -250,6 +280,156 @@ for (const e of IMPORTED) {
   const r = IMPORTED_REFS[e.id];
   if (r) { e.refExercise = r[0]; e.refCoef = r[1]; }
   EXERCISES.push(e);
+}
+
+// ============================================================
+// ANATOMIE DÉTAILLÉE (v6.1)
+// ============================================================
+// Les grands groupes « épaules », « dos » et « abdos » sont éclatés : trois
+// faisceaux du deltoïde, trapèzes / rhomboïdes / grands dorsaux, abdominaux /
+// obliques, plus les adducteurs. Chaque exercice concerné est réécrit ici,
+// muscle par muscle (format « principaux | secondaires », total = 100 %).
+// Les exercices absents de la table gardent leur répartition d'origine.
+const MUSCLE_MAP = {
+  // Pectoraux
+  benchPress: 'chest 65, frontDelts 15 | triceps 20',
+  inclineBench: 'chest 55, frontDelts 25 | triceps 20',
+  declineBench: 'chest 72 | triceps 20, frontDelts 8',
+  dbBenchPress: 'chest 65, frontDelts 15 | triceps 20',
+  dbInclinePress: 'chest 55, frontDelts 25 | triceps 20',
+  dbFly: 'chest 85 | frontDelts 15',
+  cableFly: 'chest 85 | frontDelts 15',
+  pecDeck: 'chest 90 | frontDelts 10',
+  pushUp: 'chest 55, frontDelts 15 | triceps 20, abs 10',
+  dips: 'chest 50, triceps 30 | frontDelts 20',
+  machinePress: 'chest 65, frontDelts 15 | triceps 20',
+  pullover: 'chest 45, lats 35 | triceps 20',
+  svendPress: 'chest 80 | frontDelts 10, triceps 10',
+  landminePress: 'chest 45, frontDelts 35 | triceps 15, abs 5',
+  lo_smithBenchPress: 'chest 65, frontDelts 15 | triceps 20',
+  lo_smithDeclinePress: 'chest 72 | triceps 20, frontDelts 8',
+  lo_smithInclinePress: 'chest 55, frontDelts 25 | triceps 20',
+  custom_e8c04362: 'chest 75 | frontDelts 12, triceps 13',
+  custom_1ad5f699: 'chest 62, frontDelts 23 | triceps 15',
+  // Dos
+  pullUp: 'lats 55, biceps 15 | rhomboids 10, rearDelts 5, traps 5, forearms 10',
+  chinUp: 'lats 50, biceps 25 | rhomboids 10, rearDelts 5, forearms 10',
+  latPulldown: 'lats 55, biceps 15 | rhomboids 10, rearDelts 5, traps 5, forearms 10',
+  custom_e1389208: 'lats 55, biceps 20 | rhomboids 10, rearDelts 5, forearms 10',
+  barbellRow: 'lats 35, rhomboids 20, traps 10 | rearDelts 10, biceps 10, lowerback 10, forearms 5',
+  pendlayRow: 'lats 35, rhomboids 20, traps 10 | rearDelts 10, biceps 10, lowerback 15',
+  dbRow: 'lats 50, rhomboids 15 | biceps 15, rearDelts 10, forearms 10',
+  seatedCableRow: 'lats 40, rhomboids 25 | traps 10, biceps 15, rearDelts 10',
+  custom_22a584ca: 'lats 40, rhomboids 25 | traps 10, biceps 15, rearDelts 10',
+  tBarRow: 'lats 35, rhomboids 25, traps 10 | biceps 10, rearDelts 10, lowerback 10',
+  machineRow: 'lats 40, rhomboids 25 | biceps 15, rearDelts 10, traps 10',
+  lo_smithRow: 'lats 35, rhomboids 20, traps 10 | rearDelts 10, biceps 10, lowerback 10, forearms 5',
+  invertedRow: 'lats 35, rhomboids 25 | biceps 15, rearDelts 10, abs 15',
+  deadlift: 'glutes 25, hamstrings 20, lowerback 15 | traps 10, lats 10, quads 10, forearms 10',
+  rackPull: 'lowerback 20, traps 20, glutes 20 | lats 15, hamstrings 10, forearms 15',
+  facePull: 'rearDelts 50, rhomboids 20 | traps 15, biceps 10, sideDelts 5',
+  straightArmPulldown: 'lats 80 | triceps 15, rearDelts 5',
+  shrugs: 'traps 90 | forearms 10',
+  // Épaules
+  overheadPress: 'frontDelts 45, sideDelts 20 | triceps 20, traps 5, abs 10',
+  dbShoulderPress: 'frontDelts 45, sideDelts 25 | triceps 20, traps 10',
+  lo_smithShoulderPress: 'frontDelts 45, sideDelts 25 | triceps 20, traps 10',
+  arnoldPress: 'frontDelts 50, sideDelts 25 | triceps 25',
+  machineShoulderPress: 'frontDelts 50, sideDelts 20 | triceps 25, traps 5',
+  pushPress: 'frontDelts 40, sideDelts 15 | triceps 20, quads 15, abs 10',
+  lateralRaise: 'sideDelts 80 | traps 15, frontDelts 5',
+  cableLateralRaise: 'sideDelts 85 | traps 10, frontDelts 5',
+  custom_d549dec2: 'sideDelts 80 | traps 15, frontDelts 5',
+  lo_yRaiseIncline: 'sideDelts 45, traps 30 | rearDelts 15, frontDelts 10',
+  frontRaise: 'frontDelts 80 | sideDelts 10, chest 10',
+  plateFrontRaise: 'frontDelts 80 | sideDelts 5, abs 15',
+  rearDeltFly: 'rearDelts 70 | rhomboids 20, traps 10',
+  reversePecDeck: 'rearDelts 70 | rhomboids 20, traps 10',
+  uprightRow: 'sideDelts 45, traps 35 | biceps 10, frontDelts 10',
+  cubanRotation: 'rearDelts 70 | sideDelts 15, forearms 15',
+  // Triceps
+  closeGripBench: 'triceps 55, chest 30 | frontDelts 15',
+  tricepsDips: 'triceps 70 | chest 20, frontDelts 10',
+  overheadExtension: 'triceps 90 | abs 10',
+  kickback: 'triceps 95 | rearDelts 5',
+  overheadCableExt: 'triceps 90 | abs 10',
+  diamondPushUp: 'triceps 60, chest 25 | frontDelts 15',
+  jmPress: 'triceps 75, chest 15 | frontDelts 10',
+  machineDips: 'triceps 70, chest 20 | frontDelts 10',
+  // Avant-bras
+  farmersWalk: 'forearms 50 | traps 25, abs 15, obliques 10',
+  deadHang: 'forearms 70 | lats 20, abs 10',
+  wristRoller: 'forearms 90 | frontDelts 10',
+  // Jambes
+  squat: 'quads 50, glutes 25 | adductors 10, hamstrings 5, lowerback 10',
+  pauseSquat: 'quads 50, glutes 25 | adductors 10, hamstrings 5, lowerback 10',
+  frontSquat: 'quads 60, glutes 15 | abs 10, adductors 5, lowerback 10',
+  gobletSquat: 'quads 55, glutes 20 | adductors 10, abs 15',
+  legPress: 'quads 60, glutes 20 | adductors 10, hamstrings 10',
+  hackSquat: 'quads 70, glutes 15 | adductors 10, hamstrings 5',
+  smithSquat: 'quads 55, glutes 25 | adductors 10, hamstrings 10',
+  lo_beltSquat: 'quads 65, glutes 20 | adductors 10, hamstrings 5',
+  bulgarianSplitSquat: 'quads 45, glutes 35 | adductors 10, hamstrings 10',
+  walkingLunge: 'quads 40, glutes 35 | adductors 10, hamstrings 10, calves 5',
+  stepUp: 'quads 45, glutes 35 | hamstrings 10, calves 10',
+  sissySquat: 'quads 90 | abs 10',
+  pistolSquat: 'quads 50, glutes 30 | adductors 5, abs 10, calves 5',
+  wallSit: 'quads 85 | glutes 15',
+  nordicCurl: 'hamstrings 85 | glutes 10, calves 5',
+  singleLegRDL: 'hamstrings 45, glutes 35 | lowerback 10, abs 5, obliques 5',
+  swissBallCurl: 'hamstrings 75 | glutes 15, abs 10',
+  gluteBridge: 'glutes 75 | hamstrings 20, abs 5',
+  sumoDeadlift: 'glutes 30, quads 20, adductors 15 | hamstrings 15, lowerback 10, traps 5, forearms 5',
+  lo_adduction: 'adductors 100',
+  custom_hipAdduction: 'adductors 100',
+  curtsyLunge: 'glutes 45, quads 30 | adductors 15, hamstrings 10',
+  singleLegCalfRaise: 'calves 95 | abs 5',
+  // Abdos et lombaires
+  plank: 'abs 70 | obliques 20, frontDelts 10',
+  sidePlank: 'obliques 70 | abs 20, glutes 10',
+  crunch: 'abs 100',
+  cableCrunch: 'abs 85 | obliques 15',
+  hangingLegRaise: 'abs 70, obliques 15 | forearms 15',
+  lyingLegRaise: 'abs 85 | obliques 10, quads 5',
+  russianTwist: 'obliques 70 | abs 30',
+  abWheel: 'abs 70 | lats 15, obliques 15',
+  deadBug: 'abs 80 | obliques 20',
+  birdDog: 'lowerback 50, abs 20 | glutes 30',
+  palofPress: 'obliques 60, abs 30 | glutes 10',
+  mountainClimber: 'abs 50 | quads 20, frontDelts 15, obliques 15',
+  vUp: 'abs 85 | obliques 10, quads 5',
+  dragonFlag: 'abs 80 | lats 10, obliques 10',
+  superman: 'lowerback 70 | glutes 20, rearDelts 10',
+  jeffersonCurl: 'lowerback 50, hamstrings 30 | glutes 20',
+  catCow: 'lowerback 70 | abs 30',
+  // Corps entier
+  kettlebellSwing: 'glutes 40, hamstrings 25 | lowerback 15, frontDelts 10, abs 10',
+  burpee: 'quads 30, chest 25 | frontDelts 15, abs 15, calves 15',
+  thruster: 'quads 35, frontDelts 30 | glutes 15, triceps 10, abs 10',
+  cleanAndPress: 'quads 20, frontDelts 25, traps 15 | glutes 15, triceps 15, hamstrings 10',
+  kbClean: 'glutes 30, traps 20, hamstrings 20 | forearms 15, frontDelts 15',
+  kbSnatch: 'glutes 30, frontDelts 20, hamstrings 20 | traps 15, lowerback 15',
+  turkishGetUp: 'frontDelts 30, abs 30 | glutes 20, obliques 20',
+  bearCrawl: 'frontDelts 30, abs 30 | quads 20, triceps 20',
+  battleRopes: 'frontDelts 40, sideDelts 10 | abs 20, forearms 15, biceps 15',
+  sledPush: 'quads 45, glutes 25 | calves 15, abs 15',
+  boxJump: 'quads 45, glutes 25 | calves 20, hamstrings 10',
+  jumpSquat: 'quads 45, glutes 30 | calves 15, abs 10',
+  rowingErg: 'lats 30, quads 25, hamstrings 15 | biceps 10, rhomboids 10, abs 10',
+  assaultBike: 'quads 40, frontDelts 15 | hamstrings 20, calves 10, abs 15',
+  jumpRope: 'calves 50 | frontDelts 15, forearms 15, abs 20',
+  manMaker: 'chest 25, lats 20, quads 20 | frontDelts 15, abs 20',
+  devilPress: 'frontDelts 30, quads 25, chest 20 | glutes 15, abs 10',
+};
+const parseSide = (s) => (s || '').split(',').map((x) => x.trim()).filter(Boolean)
+  .map((x) => { const [m, p] = x.split(/\s+/); return { m, p: +p }; });
+for (const e of EXERCISES) {
+  const spec = MUSCLE_MAP[e.id];
+  if (spec) {
+    const [prim, sec] = spec.split('|');
+    e.primaryMuscles = parseSide(prim);
+    e.secondaryMuscles = parseSide(sec);
+  }
 }
 
 export const CATEGORIES = [...new Set(EXERCISES.map((e) => e.category))];

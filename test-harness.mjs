@@ -207,7 +207,7 @@ clearOverlays();
 overlay.querySelector('#s-finish').click();
 const modal = document.querySelector('.modal');
 assert(modal.textContent.includes('atténuation'), 'Résumé : coefficients d\'atténuation');
-assert(modal.textContent.includes('0.70'), 'Résumé : atténuation Pectoraux ≈ 0.70 (chest 70% principal)');
+assert(modal.textContent.includes('0.65'), 'Résumé : atténuation Pectoraux ≈ 0.65 (chest 65% principal, anatomie v6.1)');
 assert(modal.textContent.includes('Séries'), 'Résumé : nb de séries (volume retiré des résultats)');
 assert(!modal.textContent.includes('640'), 'Résumé : volume total NON affiché');
 assert(modal.querySelector('.volume-table'), 'Résumé : table par muscle présente');
@@ -233,7 +233,7 @@ calOverlay.querySelector('#cal-close').click();
 console.log('== Volume tracking ==');
 const volTable = pages.workout.querySelector('#volume-host .volume-table');
 assert(volTable.textContent.includes('Pectoraux'), 'Volume hebdo liste les muscles');
-const chestRow = [...volTable.querySelectorAll('tbody tr')].find((r) => r.textContent.includes('Pectoraux'));
+const chestRow = [...volTable.querySelectorAll('tbody tr.vol-row')].find((r) => r.textContent.includes('Pectoraux'));
 assert(chestRow && chestRow.textContent.includes('1'), 'Pectoraux : 1 set comptabilisé');
 
 console.log('== Routines ==');
@@ -956,7 +956,7 @@ console.log('== v5.7 : materiel, editeur d\'exercice ==');
   // Muscles : plus de cases a cocher
   edit.querySelector('[data-open="prim"]').click();
   const musSheet = [...document.querySelectorAll('.sheet')].find((s) => s.querySelector('.mus-edit-row'));
-  assert(musSheet.querySelectorAll('.mus-edit-row').length === 12, 'Muscles : les 12 muscles sont proposes');
+  assert(musSheet.querySelectorAll('.mus-edit-row').length === 18, 'Muscles : les 18 muscles sont proposes');
   assert(!musSheet.querySelector('input[type="checkbox"]'), 'Muscles : plus de case a cocher');
   assert(musSheet.querySelectorAll('.mus-edit-row.on').length > 0, 'Muscles : un pourcentage non nul allume la ligne');
   const quadInput = musSheet.querySelector('.mus-edit-p[data-m="quads"]');
@@ -1091,6 +1091,109 @@ console.log('== v6.0 : iPhone, percentile, progression, fluidite ==');
   const cssF = fs.readFileSync(new URL('./style.css', import.meta.url), 'utf8');
   assert(!/backdrop-filter/.test(cssF), 'Fluidite : plus aucun flou d\'arriere-plan (couteux sur iPhone)');
   assert(!/#app-container \{[^}]*will-change: transform/.test(cssF), 'Fluidite : pas de couche GPU permanente de 5 ecrans');
+}
+
+console.log('== v6.1 : anatomie detaillee et carte du corps ==');
+{
+  const exd = await import('./data/exercises.js');
+  const ids = new Set(exd.MUSCLES.map((m) => m.id));
+  assert(exd.MUSCLES.length === 18, 'Anatomie : 18 muscles');
+  for (const m of ['frontDelts', 'sideDelts', 'rearDelts', 'traps', 'rhomboids', 'lats', 'abs', 'obliques', 'adductors']) {
+    assert(ids.has(m), `Anatomie : ${m} present`);
+  }
+  assert(!['shoulders', 'back', 'core'].some((m) => ids.has(m)), 'Anatomie : anciens grands groupes retires');
+  assert(exd.EXERCISES.every((e) => [...e.primaryMuscles, ...e.secondaryMuscles].every((x) => ids.has(x.m))),
+    'Exercices : tous decrits avec la nouvelle anatomie');
+  assert(exd.EXERCISES.every((e) => [...e.primaryMuscles, ...e.secondaryMuscles].reduce((a, x) => a + x.p, 0) === 100),
+    'Exercices : repartition a 100 % partout');
+  const used = new Set(exd.EXERCISES.flatMap((e) => [...e.primaryMuscles, ...e.secondaryMuscles].map((x) => x.m)));
+  assert([...ids].every((m) => used.has(m)), 'Anatomie : chaque muscle est travaille par au moins un exercice');
+  const lat = exd.EXERCISES.find((e) => e.id === 'lateralRaise');
+  assert(lat.primaryMuscles[0].m === 'sideDelts', 'Elevations laterales : deltoide lateral');
+  const fp = exd.EXERCISES.find((e) => e.id === 'facePull');
+  assert(fp.primaryMuscles[0].m === 'rearDelts', 'Face pull : deltoide posterieur');
+  const add = exd.EXERCISES.find((e) => e.id === 'custom_hipAdduction');
+  assert(add.primaryMuscles[0].m === 'adductors', 'Adduction de hanche : adducteurs (et non fessiers)');
+
+  // Conversion des anciennes donnees
+  const conv = exd.splitLegacyMuscles([{ m: 'back', p: 70 }, { m: 'biceps', p: 20 }, { m: 'core', p: 10 }]);
+  assert(conv.reduce((a, x) => a + x.p, 0) === 100 && conv.every((x) => ids.has(x.m)), 'Conversion : total conserve, muscles fins');
+  const stg = await import('./utils/storage.js');
+  const old = { settings: {
+    customExercises: [{ id: 'cx', primaryMuscles: [{ m: 'shoulders', p: 80 }], secondaryMuscles: [{ m: 'back', p: 20 }] }],
+    exerciseMuscleOverrides: { benchPress: { primaryMuscles: [{ m: 'chest', p: 85 }], secondaryMuscles: [{ m: 'shoulders', p: 15 }] } },
+    volumeGoals: { chest: 16, back: 14, shoulders: 10, core: 8 },
+  } };
+  stg.migrateMuscleData(old);
+  const cx = old.settings.customExercises[0];
+  assert([...cx.primaryMuscles, ...cx.secondaryMuscles].every((x) => ids.has(x.m)), 'Conversion : exercices perso convertis');
+  assert(!old.settings.exerciseMuscleOverrides.benchPress, 'Conversion : ancienne repartition modifiee d\'un exo de la base remplacee par la nouvelle repartition fine');
+  assert(old.settings.volumeGoals.chest === 16 && !('back' in old.settings.volumeGoals) && old.settings.volumeGoals.lats > 0,
+    'Conversion : objectif personnalise garde, anciens groupes remplaces');
+
+  // Carte du corps
+  const bm = await import('./utils/bodyMap.js');
+  const svg = bm.bodyMapSVG({ chest: 1, lats: 0.5 }, { size: 100 });
+  assert(document.getElementById('bm-sprite'), 'Carte : sprite partage injecte');
+  bm.bodyMapSVG({}, { size: 50 });
+  assert(document.querySelectorAll('#bm-sprite').length === 1, 'Carte : pas de doublon de sprite');
+  for (const m of ids) {
+    assert(document.getElementById(`bm-f-${m}`) || document.getElementById(`bm-b-${m}`), `Carte : ${m} dessine`);
+  }
+  assert(svg.includes(bm.intensityColor(1)) && svg.includes(bm.intensityColor(0.5)), 'Carte : couleur selon l\'intensite');
+  assert(bm.intensityColor(0.2) !== bm.intensityColor(0.9), 'Carte : degrade (intensites differentes, couleurs differentes)');
+  assert((svg.match(/<use /g) || []).length < 50, 'Carte : legere (quelques <use>, formes partagees)');
+
+  // Calendrier
+  store.userData.workouts = [];
+  store.addWorkout({ id: 'bm1', date: todayISO(-1), totalTime: 600, exercises: [{ exerciseId: 'squat', sets: [{ weight: 100, reps: 5 }, { weight: 100, reps: 5 }] }] });
+  workout.render(pages.workout);
+  const cell = pages.workout.querySelector(`.cal-day[data-date="${todayISO(-1)}"]`);
+  assert(cell.querySelector('svg.body-map'), 'Calendrier : silhouettes dans la case');
+  assert(cell.querySelector('.cal-dnum').textContent === String(Number(todayISO(-1).slice(8))), 'Calendrier : numero du jour par-dessus');
+  assert(!cell.querySelector('.cal-mus'), 'Calendrier : plus de libelle de muscle');
+  const quadFill = cell.querySelector('use[href="#bm-f-quads"]').getAttribute('fill');
+  const chestFill = cell.querySelector('use[href="#bm-f-chest"]').getAttribute('fill');
+  assert(quadFill === bm.intensityColor(1), 'Calendrier : squat -> quadriceps au plus fort');
+  assert(chestFill === 'var(--body-muscle)', 'Calendrier : muscle non travaille non colore');
+  assert(!pages.workout.querySelector('.cal-day:not(.has-session) svg'), 'Calendrier : jour sans seance sans silhouette');
+
+  // Detail de seance
+  cell.click();
+  const wd = [...document.querySelectorAll('.modal')].pop();
+  assert(wd.querySelector('.bm-card svg.body-map'), 'Detail de seance : carte du corps en tete');
+  clearOverlays();
+
+  // Fiche d'exercice : recto carte du corps, verso rang
+  workout.render(pages.workout);
+  pages.workout.querySelector('#btn-new-session').click();
+  document.querySelector('.sheet .ns-empty').click();
+  const ovB = document.querySelector('.session-overlay');
+  ovB.querySelector('#s-add-exo').click();
+  const pkB = document.querySelector('.picker-overlay');
+  pkB.querySelector('#exo-search').value = 'Squat';
+  fire(pkB.querySelector('#exo-search'), 'input');
+  [...pkB.querySelectorAll('.exo-search-item')].find((it) => it.querySelector('span').textContent === 'Squat').click();
+  ovB.querySelector('#s-exos .exo-card [data-detail]').click();
+  const sheetB = [...document.querySelectorAll('.sheet')].find((s) => s.querySelector('#ed-history'));
+  const flip = sheetB.querySelector('#ed-rank');
+  assert(flip.querySelector('.rank-front svg.body-map'), 'Fiche exo : carte du corps au recto');
+  assert(flip.querySelector('.rank-back .rank-name') || flip.querySelector('.rank-back .rank-back-sub'), 'Fiche exo : rang au verso');
+  flip.click();
+  assert(flip.classList.contains('flipped'), 'Fiche exo : la carte se retourne au toucher');
+  flip.click();
+  assert(!flip.classList.contains('flipped'), 'Fiche exo : et revient');
+  ovB.querySelector('#s-quit').click();
+  [...document.querySelectorAll('.modal-actions .btn')].find((b) => b.textContent.includes('Confirmer')).click();
+  clearOverlays();
+
+  // Volume hebdo
+  workout.render(pages.workout);
+  const vh = pages.workout.querySelector('#volume-host');
+  assert(vh.querySelector('.bm-week svg.body-map'), 'Volume hebdo : carte du corps de la semaine');
+  const groups = [...vh.querySelectorAll('.vol-group')].map((g) => g.textContent.trim());
+  assert(groups.join(',') === 'Pectoraux,Épaules,Dos,Bras,Tronc,Jambes', `Volume hebdo : muscles groupes par zone (${groups.join(',')})`);
+  assert(vh.querySelectorAll('.vol-row').length === 18, 'Volume hebdo : une ligne par muscle');
 }
 
 console.log(`\n===== RÉSULTAT : ${pass} OK / ${fail} FAIL =====`);

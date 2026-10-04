@@ -1,3 +1,4 @@
 .claude/
 node_modules/
 _demo.json
+_*.html

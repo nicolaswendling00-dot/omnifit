@@ -6,6 +6,7 @@ import { EXERCISES, MUSCLES, muscleLabel, AKA, EQUIPMENT, equipLabel } from '../
 import { formatTime, workoutMuscleVolume, weeklySetsByMuscle, muscleAttenuation } from '../utils/math.js';
 import { el, esc, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, fmtDateFull, celebrateLP, makeChart, normalizeStr, closeAllOverlays } from '../utils/ui.js';
 import { lineChartOptions, lineDataset } from '../utils/charts.js';
+import { bodyMapSVG } from '../utils/bodyMap.js';
 import { computeExerciseLP, computeExerciseLPDetailed, rankFromLP, rankBadge, getStandards } from '../utils/ranks.js';
 
 let volumeChart = null;
@@ -91,10 +92,15 @@ function exerciseRank(exerciseId, lpMap) {
 }
 // Synonymes anglais/familiers par muscle et catégorie (recherche inclusive)
 const MUSCLE_SYN = {
-  chest: 'chest pecs pectoraux', back: 'back dos lats dorsaux', shoulders: 'shoulders epaules delts deltoides',
-  biceps: 'biceps', triceps: 'triceps', forearms: 'forearms avant-bras grip',
+  chest: 'chest pecs pectoraux',
+  frontDelts: 'shoulders epaules delts deltoides anterieurs front delt',
+  sideDelts: 'shoulders epaules delts deltoides lateraux side delt',
+  rearDelts: 'shoulders epaules delts deltoides posterieurs rear delt',
+  traps: 'back dos traps trapezes', rhomboids: 'back dos rhomboides', lats: 'back dos lats dorsaux',
+  lowerback: 'lower back lombaires', biceps: 'biceps', triceps: 'triceps', forearms: 'forearms avant-bras grip',
+  abs: 'core abs abdos abdominaux', obliques: 'core obliques abdos',
   quads: 'quads quadriceps legs jambes cuisses', hamstrings: 'hamstrings ischios legs jambes',
-  glutes: 'glutes fessiers', calves: 'calves mollets', core: 'core abs abdos abdominaux', lowerback: 'lower back lombaires',
+  glutes: 'glutes fessiers', adductors: 'adductors adducteurs legs jambes', calves: 'calves mollets',
 };
 const CAT_SYN = {
   Chest: 'chest pecs', Back: 'back dos', Shoulders: 'shoulders epaules', Biceps: 'biceps', Triceps: 'triceps',
@@ -299,28 +305,36 @@ const impBadge = (imp, small = true) => {
   return `<span class="badge ${cls}" style="${small ? 'font-size:0.62rem;padding:2px 6px' : ''}">${sign}${imp}%</span>`;
 };
 
-// Libellés courts des muscles (cases du calendrier)
-const MUSCLE_SHORT = {
-  chest: 'Pecs', back: 'Dos', shoulders: 'Delts', biceps: 'Biceps', triceps: 'Triceps',
-  forearms: 'Av-B', quads: 'Quads', hamstrings: 'Ischio', glutes: 'Fess.', calves: 'Mollet',
-  core: 'Abdos', lowerback: 'Lomb.',
-};
-
-// Muscle le plus travaillé d'une séance — pondéré par le NOMBRE DE SÉRIES
-// (et non le volume : sinon les mollets/presse à fortes charges faussent tout)
-function topMuscle(w) {
-  const ratio = store.userData.settings.secondaryRatio;
+// ---------- Carte du corps ----------
+// Charge de chaque muscle sur une liste d'exercices : chaque série validée
+// compte pour la part du muscle (principal p %, secondaire p % × ratio). Les
+// valeurs sont ensuite ramenées entre 0 et 1, le muscle le plus sollicité
+// valant 1 : c'est ce qui donne le dégradé de couleur.
+function muscleLoad(exercises) {
+  const ratio = store.userData.settings.secondaryRatio ?? 0.5;
   const acc = {};
-  for (const wx of w.exercises) {
+  for (const wx of exercises) {
     const def = exerciseLookup(wx.exerciseId);
-    if (!def || !wx.sets.length) continue;
-    const n = wx.sets.length;
+    const n = doneSets(wx).length;
+    if (!def || !n) continue;
     for (const pm of def.primaryMuscles) acc[pm.m] = (acc[pm.m] || 0) + (pm.p / 100) * n;
     for (const sm of def.secondaryMuscles) acc[sm.m] = (acc[sm.m] || 0) + (sm.p / 100) * ratio * n;
   }
-  let best = null; let bv = -1;
-  for (const [m, v] of Object.entries(acc)) if (v > bv) { bv = v; best = m; }
-  return best;
+  return acc;
+}
+function normalizeLoad(acc) {
+  const max = Math.max(0, ...Object.values(acc));
+  const out = {};
+  if (max > 0) for (const [m, v] of Object.entries(acc)) out[m] = v / max;
+  return out;
+}
+const workoutIntensity = (w) => normalizeLoad(muscleLoad(w.exercises));
+// Muscles d'un exercice seul, d'après sa répartition (secondaires atténués)
+function exerciseIntensity(def) {
+  const acc = {};
+  for (const pm of def.primaryMuscles) acc[pm.m] = pm.p;
+  for (const sm of def.secondaryMuscles) acc[sm.m] = sm.p * 0.6;
+  return normalizeLoad(acc);
 }
 
 // Historique {date, id, score, imp} d'un exo, trié par date. `imp` est la
@@ -511,9 +525,10 @@ function openExerciseEditor(onSaved, existing = null) {
     const otherTotal = other.reduce((a, x) => a + x.p, 0);
     const c = el(`<div>
       <div class="mus-edit">
-        ${MUSCLES.map((m) => {
+        ${MUSCLES.map((m, i) => {
     const f = list.find((x) => x.m === m.id);
-    return `<div class="mus-edit-row${f ? ' on' : ''}" data-m="${m.id}">
+    const head = i === 0 || MUSCLES[i - 1].group !== m.group ? `<div class="mus-group">${m.group}</div>` : '';
+    return `${head}<div class="mus-edit-row${f ? ' on' : ''}" data-m="${m.id}">
             <span class="mus-edit-l">${m.label}</span>
             <input class="mus-edit-p" type="number" inputmode="numeric" min="0" max="100" step="5"
               data-m="${m.id}" placeholder="0" value="${f ? f.p : ''}">
@@ -873,22 +888,24 @@ function buildExerciseDetail(exerciseId) {
     }
   }
 
+  // Carte recto-verso : au recto les muscles de l'exercice, au verso son rang.
   const rk = exerciseRank(exerciseId);
-  const rankBlock = rk
-    ? `<div class="rank-flip" id="ed-rank" title="Toucher pour voir les LP">
-        <div class="rank-flip-inner">
-          <div class="rank-face rank-front">
-            ${rankBadge(rk.id, 132)}
-            <div class="rank-name" style="color:${rk.color}">${rk.division ? `${rk.name} ${rk.division}` : rk.name}</div>
-          </div>
-          <div class="rank-face rank-back" style="border-color:${rk.color}">
-            <div class="rank-back-rank" style="color:${rk.color}">${rk.division ? `${rk.name} ${rk.division}` : rk.name}</div>
-            <div class="rank-back-lp">${rk.division ? `${rk.lp} / ${rk.lpNeeded} LP` : `${rk.lp} LP`}</div>
-            ${rk.division ? `<div class="rank-back-bar"><div style="width:${rk.lp}%;background:${rk.color}"></div></div>` : '<div class="rank-back-sub">Rang ultime atteint</div>'}
-          </div>
+  const rankName = rk ? (rk.division ? `${rk.name} ${rk.division}` : rk.name) : '';
+  const rankBlock = `<div class="rank-flip" id="ed-rank" title="Toucher pour voir le rang">
+      <div class="rank-flip-inner">
+        <div class="rank-face rank-front">
+          ${bodyMapSVG(exerciseIntensity(def), { size: 214, label: 'Muscles sollicités par l\'exercice' })}
+          <div class="flip-hint">${icons.swap} Rang</div>
         </div>
-      </div>`
-    : '<div class="rank-unranked">Non classé — réalise cet exercice pour obtenir un rang</div>';
+        <div class="rank-face rank-back"${rk ? ` style="border-color:${rk.color}"` : ''}>
+          ${rk ? `${rankBadge(rk.id, 120)}
+            <div class="rank-name" style="color:${rk.color}">${rankName}</div>
+            <div class="rank-back-lp">${rk.division ? `${rk.lp} / ${rk.lpNeeded} LP` : `${rk.lp} LP`}</div>
+            ${rk.division ? `<div class="rank-back-bar"><div style="width:${rk.lp}%;background:${rk.color}"></div></div>` : '<div class="rank-back-sub">Rang ultime atteint</div>'}`
+    : '<div class="rank-back-sub" style="padding:0 24px;text-align:center">Non classé — réalise cet exercice pour obtenir un rang</div>'}
+        </div>
+      </div>
+    </div>`;
 
   const form = el(`<div>
     ${rankBlock}
@@ -964,6 +981,7 @@ function openWorkoutDetail(w, highlightId = null) {
         <button class="icon-btn" id="wd-edit" aria-label="Modifier la séance">${icons.edit}</button>
       </div>
     </div>
+    <div class="bm-card">${bodyMapSVG(workoutIntensity(w), { size: 210, label: 'Muscles travaillés pendant la séance' })}</div>
     ${w.notes ? `<div class="wd-note">${esc(w.notes)}</div>` : ''}
     ${w.exercises.map((wx, i) => {
       const def = exerciseLookup(wx.exerciseId) || { name: wx.exerciseId };
@@ -1782,7 +1800,8 @@ function openRoutineEditor(routine, rerender) {
 // ============================================================
 function openVolumeGoalsModal(rerender) {
   const goals = store.userData.settings.volumeGoals;
-  const form = el(`<div>${MUSCLES.map((m) => `
+  const form = el(`<div>${MUSCLES.map((m, i) => `
+    ${i === 0 || MUSCLES[i - 1].group !== m.group ? `<div class="mus-group">${m.group}</div>` : ''}
     <div class="settings-row" style="padding:7px 0">
       <span class="row-label">${m.label}</span>
       <input type="number" inputmode="numeric" data-m="${m.id}" min="0" max="40" value="${goals[m.id] || 0}" style="width:80px;min-height:40px">
@@ -1835,17 +1854,11 @@ function earliestDataDate() {
 function dayCell(iso, byDate, todayIso, dim) {
   const ws = byDate[iso];
   const has = ws && ws.length;
-  let extra = '';
-  if (has) {
-    const w = ws[ws.length - 1];
-    const tm = topMuscle(w);
-    const imp = sessionImprovement(w);
-    extra = `<span class="cal-mus">${tm ? (MUSCLE_SHORT[tm] || muscleLabel(tm)) : ''}</span>
-      ${imp != null ? `<span class="cal-imp ${imp >= 0 ? 'up' : 'down'}">${imp >= 0 ? '+' : ''}${imp}%</span>` : ''}`;
-  }
+  // Plusieurs séances le même jour : on cumule leurs muscles.
+  const body = has ? bodyMapSVG(normalizeLoad(muscleLoad(ws.flatMap((w) => w.exercises))), { size: 64, gap: 4, cls: 'bm-cal' }) : '';
   return el(`<button class="cal-day${has ? ' has-session' : ''}${iso === todayIso ? ' is-today' : ''}${dim ? ' dim' : ''}" ${has ? '' : 'disabled'} data-date="${iso}">
+    ${body}
     <span class="cal-dnum">${Number(iso.slice(8))}</span>
-    ${extra}
   </button>`);
 }
 
@@ -1948,6 +1961,10 @@ function renderVolumeDashboard(host, rerender) {
     const pct = goal ? Math.round((done / goal) * 100) : 0;
     return { m, done, goal, pct };
   });
+  // La carte se colore selon l'avancement vers l'objectif de la semaine :
+  // un muscle à 100 % (ou plus) prend la teinte la plus soutenue.
+  const progress = {};
+  for (const r of rows) if (r.goal) progress[r.m.id] = Math.min(1, r.done / r.goal);
 
   const card = el(`<div class="card${volumeOpen ? '' : ' collapsed'}">
     <div class="card-row collapse-head" id="vol-toggle" style="margin-bottom:6px;cursor:pointer">
@@ -1956,10 +1973,13 @@ function renderVolumeDashboard(host, rerender) {
     </div>
 
     <div class="collapse-body collapse-body-tall">
+      <div class="bm-card bm-week">${bodyMapSVG(progress, { size: 190, label: 'Avancement des objectifs de la semaine' })}
+        <div class="bm-legend"><span>0 %</span><i></i><span>Objectif atteint</span></div>
+      </div>
       <table class="volume-table" id="vol-table">
         <thead><tr><th>Muscle</th><th>Sets</th><th>Obj.</th><th>%</th></tr></thead>
         <tbody>
-          ${rows.map((r) => `<tr class="vol-row" data-m="${r.m.id}">
+          ${rows.map((r, i) => `${i === 0 || rows[i - 1].m.group !== r.m.group ? `<tr class="vol-group"><td colspan="4">${r.m.group}</td></tr>` : ''}<tr class="vol-row" data-m="${r.m.id}">
             <td>${r.m.label}</td>
             <td class="tnum">${r.done}</td>
             <td class="tnum">${r.goal}</td>
@@ -2007,7 +2027,7 @@ function renderVolumeDashboard(host, rerender) {
   };
   volumeChart = makeChart(card.querySelector('#vol-chart'), {
     type: 'bar',
-    data: { labels: MUSCLES.map((m) => m.label), datasets: [{ data: MUSCLES.map((m) => Math.round(acc[m.id] || 0)), backgroundColor: 'rgba(0,217,255,0.55)', borderRadius: 5 }] },
+    data: { labels: MUSCLES.map((m) => m.short), datasets: [{ data: MUSCLES.map((m) => Math.round(acc[m.id] || 0)), backgroundColor: 'rgba(0,217,255,0.55)', borderRadius: 5 }] },
     options: chartOpts,
   }, volumeChart);
 

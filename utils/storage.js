@@ -1,4 +1,5 @@
 // OmniFit — StorageManager : persistance localStorage avec merge profond
+import { splitLegacyMuscles } from '../data/exercises.js';
 
 const STORAGE_KEY = 'omniffit_userData';
 
@@ -9,6 +10,48 @@ export function todayISO(offset = 0) {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+// Séries hebdomadaires visées par muscle (anatomie détaillée v6.1).
+export const DEFAULT_VOLUME_GOALS = {
+  chest: 12, frontDelts: 6, sideDelts: 10, rearDelts: 8,
+  traps: 6, rhomboids: 8, lats: 12, lowerback: 4,
+  biceps: 8, triceps: 8, forearms: 4, abs: 8, obliques: 4,
+  glutes: 10, quads: 12, hamstrings: 8, adductors: 4, calves: 6,
+};
+
+// v6.1 : les grands groupes « épaules », « dos » et « abdos » sont éclatés en
+// muscles fins. On convertit tout ce que l'utilisateur a pu enregistrer avec
+// l'ancienne anatomie. Sans effet sur des données déjà converties.
+export function migrateMuscleData(data) {
+  const s = data && data.settings;
+  if (!s) return data;
+  for (const e of s.customExercises || []) {
+    e.primaryMuscles = splitLegacyMuscles(e.primaryMuscles);
+    e.secondaryMuscles = splitLegacyMuscles(e.secondaryMuscles);
+  }
+  // Répartition modifiée d'un exercice de la BASE, écrite avec l'ancienne
+  // anatomie : la nouvelle répartition de la base, muscle par muscle, est plus
+  // juste qu'un découpage automatique (qui mettrait par ex. 45 % de deltoïde
+  // antérieur sur des élévations latérales). On retire donc la surcharge ; le
+  // nom personnalisé, stocké à part, est conservé.
+  const ov = s.exerciseMuscleOverrides || {};
+  const legacy = (l) => (l || []).some((x) => ['shoulders', 'back', 'core'].includes(x.m));
+  for (const id of Object.keys(ov)) {
+    if (legacy(ov[id].primaryMuscles) || legacy(ov[id].secondaryMuscles)) delete ov[id];
+  }
+  // Objectifs de volume : les anciens groupes n'ont plus d'équivalent direct
+  // (14 séries de « dos » ne disent pas combien pour les trapèzes) ; on les
+  // remplace par les valeurs par défaut des nouveaux muscles et on garde
+  // celles que l'utilisateur avait réglées sur les muscles inchangés.
+  if (s.volumeGoals) {
+    const vg = s.volumeGoals;
+    if ('shoulders' in vg || 'back' in vg || 'core' in vg || !('lats' in vg)) {
+      for (const k of ['shoulders', 'back', 'core']) delete vg[k];
+      for (const [k, v] of Object.entries(DEFAULT_VOLUME_GOALS)) if (!(k in vg)) vg[k] = v;
+    }
+  }
+  return data;
 }
 
 function defaultUserData() {
@@ -47,10 +90,7 @@ function defaultUserData() {
       exerciseDbFull: true,
       equipmentFilter: [],
       customExercises: [],
-      volumeGoals: {
-        chest: 12, back: 14, shoulders: 10, biceps: 8, triceps: 8, forearms: 4,
-        quads: 12, hamstrings: 8, glutes: 10, calves: 6, core: 8, lowerback: 4,
-      },
+      volumeGoals: { ...DEFAULT_VOLUME_GOALS },
       theme: 'amoled',
       palette: 'dark',
       density: 'spacious',
@@ -180,6 +220,7 @@ class StorageManager {
       delete data.settings.shape;
       delete data.settings.exerciseBrand;
       delete data.settings.customBrands;
+      migrateMuscleData(data);
       return data;
     } catch (e) {
       console.error('Erreur chargement userData', e);
@@ -447,6 +488,8 @@ class StorageManager {
       merged.weights.sort((a, b) => String(a.date).localeCompare(String(b.date)));
       this.userData = merged;
     }
+    // Une sauvegarde ancienne peut contenir l'anatomie d'avant la v6.1
+    migrateMuscleData(this.userData);
     this.persist();
   }
 

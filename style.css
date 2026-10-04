@@ -70,6 +70,11 @@
 
   --sk-warmup: #F59E0B;
   --sk-drop: #38BDF8;
+
+  /* Carte du corps : peau, muscle au repos, liserés entre les muscles */
+  --body-skin: #E3E4EE;
+  --body-muscle: #C3C5D4;
+  --body-line: #EDEEF5;
 }
 
 /* --- Palette claire --- */
@@ -96,6 +101,9 @@ body.palette-light {
   --header-bg: rgba(243, 245, 249, 0.96);
   --scrim: rgba(16, 19, 28, 0.45);
   --shadow-2: 0 24px 60px rgba(16, 19, 28, 0.18);
+  --body-skin: #D9DBE5;
+  --body-muscle: #B4B7C8;
+  --body-line: #E9EAF1;
 }
 body.palette-light .bc-cam-reticle { box-shadow: 0 0 0 2000px rgba(16, 19, 28, 0.35); }
 
@@ -888,7 +896,9 @@ body[data-page="1"] #fab-nutrition-wrap { display: flex; }
 /* Calendrier de nutrition (historique complet) */
 .cal-overlay .picker-topbar { margin-bottom: 12px; }
 .cal-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: calc(24px + var(--safe-b)); }
-.cal-month { margin-bottom: 22px; }
+/* Des centaines de silhouettes dans l'historique complet : le navigateur ne
+   dessine que les mois à l'écran (les autres gardent juste leur place). */
+.cal-month { margin-bottom: 22px; content-visibility: auto; contain-intrinsic-size: auto 470px; }
 .cal-month-title { font-weight: 800; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; color: var(--text-2); }
 
 /* ============================================================
@@ -899,19 +909,29 @@ body[data-page="1"] #fab-nutrition-wrap { display: flex; }
 .cal-wd span { text-align: center; font-size: 0.58rem; font-weight: 800; letter-spacing: 0.06em; color: var(--text-3); }
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
 .cal-day {
-  position: relative; min-height: 62px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 1px;
+  position: relative; min-height: 76px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 1px;
   padding: 5px 2px; background: var(--surface-2); border: 1px solid transparent; border-radius: 12px;
   color: var(--text-2); font-variant-numeric: tabular-nums; font-weight: 700; font-size: 0.8rem; cursor: default; overflow: hidden;
 }
 .cal-day.dim { opacity: 0.3; }
-.cal-day.has-session { color: var(--text); border-color: rgba(var(--accent-rgb), 0.55); background: rgba(var(--accent-rgb), 0.1); cursor: pointer; }
+.cal-day.has-session { color: var(--text); border-color: var(--line-2); background: var(--surface-2); cursor: pointer; }
 .cal-day.is-today { box-shadow: inset 0 0 0 1.5px var(--accent-2); }
 .cal-dnum { line-height: 1; }
+/* Jour de séance : les deux silhouettes occupent la case, le numéro du jour
+   se pose par-dessus, comme sur un calendrier de compétition. */
+.cal-day.has-session { justify-content: center; padding: 3px 1px; }
+.cal-day .bm-cal { width: 100%; height: auto; max-height: 68px; display: block; }
+.cal-day.has-session .cal-dnum {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  font-size: 0.95rem; font-weight: 800; font-stretch: var(--wide); color: #fff;
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.9), 0 0 10px rgba(0, 0, 0, 0.6);
+}
+.cal-day:not(.has-session) .cal-dnum { margin: auto 0; font-size: 0.95rem; }
 .cal-mus { font-size: 0.54rem; font-weight: 800; color: var(--accent); line-height: 1.05; text-align: center; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: auto; }
 .cal-imp { font-size: 0.54rem; font-weight: 800; line-height: 1; }
 .cal-imp.up { color: var(--success); }
 .cal-imp.down { color: var(--danger); }
-.cal-empty { min-height: 62px; }
+.cal-empty { min-height: 76px; }
 
 .routine-exos { list-style: none; counter-reset: rexo; margin: 8px 0 12px; padding: 0; }
 .routine-exos li { counter-increment: rexo; font-size: 0.86rem; color: var(--text-2); padding: 4px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1167,11 +1187,27 @@ body[data-page="1"] #fab-nutrition-wrap { display: flex; }
 .rank-inline svg { display: block; }
 .rank-inline-session { margin-right: 2px; }
 .rank-unranked { text-align: center; color: var(--text-2); font-size: 0.82rem; background: var(--surface-2); border: 1px dashed var(--line-2); border-radius: 16px; padding: 16px 12px; margin-bottom: 14px; }
-.rank-flip { perspective: 900px; height: 188px; margin-bottom: 14px; cursor: pointer; }
+.rank-flip { perspective: 1200px; height: 252px; margin-bottom: 14px; cursor: pointer; }
 .rank-flip-inner { position: relative; width: 100%; height: 100%; transition: transform 0.6s var(--ease); transform-style: preserve-3d; }
 .rank-flip.flipped .rank-flip-inner { transform: rotateY(180deg); }
 .rank-face { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.rank-front { background: var(--surface-2); border-radius: 18px; }
 .rank-back { transform: rotateY(180deg); background: var(--surface-2); border: 1.5px solid var(--accent); border-radius: 18px; }
+.flip-hint {
+  position: absolute; right: 10px; bottom: 10px; display: inline-flex; align-items: center; gap: 5px;
+  font-size: 0.58rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--text-2); background: var(--surface-3); padding: 5px 9px; border-radius: 999px;
+}
+.flip-hint svg { width: 12px; height: 12px; }
+/* Carte du corps en grand (détail de séance, volume hebdo) */
+.bm-card { display: flex; flex-direction: column; align-items: center; gap: 8px; background: var(--surface-2); border-radius: 18px; padding: 14px 10px; margin-bottom: 12px; }
+.body-map { display: block; max-width: 100%; height: auto; }
+.bm-legend { display: flex; align-items: center; gap: 8px; font-size: 0.58rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); }
+.bm-legend i { width: 90px; height: 6px; border-radius: 4px; background: linear-gradient(90deg, var(--body-muscle), rgb(158, 182, 246), rgb(92, 124, 250), rgb(70, 72, 230)); }
+/* En-têtes de zone (Épaules, Dos…) dans les listes de muscles */
+.mus-group { font-size: 0.6rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.09em; color: var(--text-3); padding: 12px 10px 4px; }
+.mus-group:first-child { padding-top: 0; }
+.vol-group td { font-size: 0.6rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.09em; color: var(--text-3); padding: 12px 4px 4px; border-bottom: none; }
 .rank-name, .rank-back-rank { font-weight: 800; font-stretch: var(--wide); letter-spacing: 0.04em; text-transform: uppercase; font-size: 1rem; }
 .rank-back-lp { font-size: 1.9rem; font-weight: 800; font-stretch: var(--wide); font-variant-numeric: tabular-nums; color: var(--text); }
 .rank-back-bar { width: 70%; height: 8px; border-radius: 5px; background: var(--surface-3); overflow: hidden; margin-top: 4px; }
