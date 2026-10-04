@@ -15,7 +15,7 @@
 //   1. silhouette pleine avec un fin contour sombre (deux passes de trait) ;
 //   2. zones claires (visage, mains, genoux, chevilles, pieds) ;
 //   3. muscles, séparés par des liserés clairs ;
-//   4. cheveux et oreilles.
+//   4. liserés clairs par-dessus, tête ronde et uniforme.
 
 const W = 120;
 const H = 306;
@@ -51,8 +51,8 @@ const FRONT = {
   triceps: ['M101.4,89.6 C105.4,92 107.8,97.6 107.6,104.4 C107.4,109 106.4,112 104.6,114 L100.2,113.6 C102.6,108 103.4,99.6 101.4,89.6 Z'],
   forearms: ARM_FOREARM,
   abs: [
-    rr(61, 96.8, 7.2, 9.6, 2.4), rr(61, 108.6, 7.2, 9.6, 2.4), rr(61, 120.4, 7.2, 9.6, 2.4),
-    'M61,132.2 H68.2 C68.8,137 67.8,143.4 64.6,148 C62.6,149.2 61,148.6 61,146.4 Z',
+    rr(61, 96.2, 7.9, 10.8, 2.6), rr(61, 108, 7.9, 10.8, 2.6), rr(61, 119.8, 7.9, 10.8, 2.6),
+    'M61,131.6 H68.9 C69.5,137 68.5,143.8 65,148.6 C62.8,149.8 61,149.2 61,146.8 Z',
   ],
   obliques: ['M70.2,95.6 C77.4,95.6 82,100 82.6,108 C83,120 81.6,131 78,140 L70.4,143.6 C71.4,131 71.4,108 70.2,95.6 Z'],
   quads: [
@@ -66,11 +66,13 @@ const FRONT = {
     'M77.6,219 C82.6,219.6 87,227 87.6,236 C88,249 85,261 81,271 L77,271 C78.6,257 79,234 77.6,219 Z',
   ],
 };
-// Volumes « neutres » : de la couleur du corps, jamais colorés (cou, flancs,
-// bras). Ils remplissent la silhouette sous les muscles.
+// Zones qui ne sont pas des muscles (cou, flancs, bras, cuisses sous les
+// muscles) : peintes en BLANC, comme la maquette. Elles remplissent la
+// silhouette sous les muscles ; seuls de fins liserés restent visibles.
 const FRONT_NEUTRAL = [
   'M53,46 L67,46 L68,57 L60.6,60 L52,57 Z',
   'M60.6,58 L80,64 C90,74 92,85 86,96 C84,110 82,125 84,140 C88,144 90,147 89,150 L60.6,152 Z',
+  'M61,150 C70,146 82,143 89,146 C95,160 95,190 87,209 L66,210 C62,195 61,170 61,150 Z', // cuisse
   ARM_BASE,
 ];
 const FRONT_LIGHT = [
@@ -80,9 +82,7 @@ const FRONT_LIGHT = [
   'M68.6,270 L81,271 C80.6,277 80.6,283 81,288 L70.6,288 C70,282 69.6,276 68.6,270 Z', // cheville
   'M70.6,288 L81,288 C86,291 93,294.6 96.6,297.6 C98.6,300.6 96,303.8 91,303.8 L70,303.8 C68.6,298.6 69,293 70.6,288 Z', // pied, pointe vers l'extérieur
 ];
-const FRONT_FACE = 'M60,19.6 C67,19.6 71.6,25 71.6,33 C71.6,43 66.6,50.6 60,51.6 C53.4,50.6 48.4,43 48.4,33 C48.4,25 53,19.6 60,19.6 Z';
-const FRONT_HAIR = 'M42,31 C39.4,14 47.6,4 60.6,4 C62.6,1.6 65.6,0.4 68.2,1.8 C66.4,2.6 65.6,3.8 66.2,4.8 C74.6,7 80.6,15 78.4,31 C77,25 74,21.4 70,20.8 C64,22 56,22 50,20.8 C46,21.4 43.4,25 42,31 Z';
-const EARS = 'M48.6,32 C45.6,30.6 43.8,33.6 44.3,36.6 C44.8,39.8 46.8,42 48.9,41.6 Z';
+const HEAD = 'M60,10 C68.6,10 74.6,17.6 74.6,27.6 C74.6,37.6 68.6,45.6 60,45.6 C51.4,45.6 45.4,37.6 45.4,27.6 C45.4,17.6 51.4,10 60,10 Z';
 
 // ---------------------------------------------------------------- DOS
 const BACK = {
@@ -100,7 +100,7 @@ const BACK = {
     'M101.6,90 C105.6,92.6 107.8,98 107.6,104.6 C107.4,109 106.4,112 104.6,114 L100.2,113.6 C102.6,108 103,99 101.6,90 Z',
   ],
   forearms: ARM_FOREARM,
-  glutes: ['M60.6,137 C66,129 79,126 89,130 C96,136 96,148 89,154 C81,158 68,157 60.6,152 Z'],
+  glutes: ['M60.6,140 C66,133.5 76,131.5 84,134 C89.6,138.5 90.2,148 85.4,153.6 C79,157.8 67.6,157.4 60.6,153 Z'],
   hamstrings: [
     'M62,155 C64.6,154 67.6,154.6 70,155.6 C70.2,173 69.6,190 68.2,206 L65.2,206 C62.8,190 61.8,172 62,155 Z',
     'M70,155.6 C74,154.6 78,154.6 81,155.8 C81.2,173 80,190 77.8,206 L68.2,206 C69.6,190 70.2,173 70,155.6 Z',
@@ -113,7 +113,8 @@ const BACK = {
   ],
 };
 const BACK_NEUTRAL = [
-  'M60.6,46 L80,64 C90,74 93,85 89,96 C86,110 85,125 89,131 C95,137 96,146 92,154 L60.6,155 Z',
+  'M60.6,46 L80,64 C90,74 93,85 89,96 C86,110 85,125 89,131 C93,137 93,146 90,154 L60.6,155 Z',
+  'M60.6,152 C70,153 84,152 92,157 C95,175 91,195 85,208 L64,208 C61,190 60.4,170 60.6,152 Z', // cuisse
   ARM_BASE,
 ];
 const BACK_LIGHT = [
@@ -122,7 +123,6 @@ const BACK_LIGHT = [
   'M66.8,261 L79.6,261 C78,268 77.6,276 78.6,288 L70,288 C70,278 68.6,268 66.8,261 Z', // tendon d'Achille
   'M70,288 L78.6,288 C82,292 86,296 86.6,299.6 C86.6,302.6 83.6,303.8 80,303.8 L69.6,303.8 C68.6,298.6 68.6,293 70,288 Z', // talon
 ];
-const BACK_HAIR = 'M60,4 C72,4 79,12 79,26 C79,38 74,47.6 60,49 C46,47.6 41,38 41,26 C41,12 48,4 60,4 Z M64,2.6 C66.6,0.4 69.4,0.2 70.8,1.8 C68.6,2.6 67.6,3.8 68.2,5.2 Z';
 
 const MIRROR = `matrix(-1 0 0 1 ${W} 0)`;
 const both = (d) => `<path d="${d}"/><path d="${d}" transform="${MIRROR}"/>`;
@@ -133,18 +133,17 @@ export function ensureBodySprite(doc = (typeof document !== 'undefined' ? docume
   if (!doc || spriteReady || doc.getElementById('bm-sprite')) { spriteReady = true; return; }
   const defs = [];
   const views = [
-    ['f', FRONT, FRONT_NEUTRAL, FRONT_LIGHT, `<path d="${FRONT_HAIR}"/>${both(EARS)}`, `<path d="${FRONT_FACE}"/>`],
-    ['b', BACK, BACK_NEUTRAL, BACK_LIGHT, `<path d="${BACK_HAIR}"/>${both(EARS)}`, ''],
+    ['f', FRONT, FRONT_NEUTRAL, FRONT_LIGHT, '', `<path d="${HEAD}"/>`],
+    ['b', BACK, BACK_NEUTRAL, BACK_LIGHT, '', `<path d="${HEAD}"/>`],
   ];
-  for (const [v, map, neutral, light, hair, face] of views) {
+  for (const [v, map, neutral, light, , face] of views) {
     for (const [m, paths] of Object.entries(map)) defs.push(`<g id="bm-${v}-${m}">${paths.map(both).join('')}</g>`);
     defs.push(`<g id="bm-${v}-neutral">${neutral.map(both).join('')}</g>`);
     defs.push(`<g id="bm-${v}-light">${light.map(both).join('')}</g>`);
-    defs.push(`<g id="bm-${v}-hair">${hair}</g>`);
     if (face) defs.push(`<g id="bm-${v}-face">${face}</g>`);
     // Silhouette pleine : toutes les formes réunies, utilisées avec un trait
     // épais pour combler les interstices et tracer le contour d'un seul tenant.
-    defs.push(`<g id="bm-${v}-sil">${Object.values(map).flat().map(both).join('')}${neutral.map(both).join('')}${light.map(both).join('')}${hair}${face}</g>`);
+    defs.push(`<g id="bm-${v}-sil">${Object.values(map).flat().map(both).join('')}${neutral.map(both).join('')}${light.map(both).join('')}${face}</g>`);
   }
   const holder = doc.createElement('div');
   holder.innerHTML = `<svg id="bm-sprite" xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true"><defs>${defs.join('')}</defs></svg>`;
@@ -155,9 +154,9 @@ export function ensureBodySprite(doc = (typeof document !== 'undefined' ? docume
 export const FRONT_MUSCLES = Object.keys(FRONT);
 export const BACK_MUSCLES = Object.keys(BACK);
 
-// Dégradé d'intensité, dans les couleurs de l'app : bleu clair (peu sollicité)
-// → violet → rose (muscle le plus travaillé).
-const STOPS = [[0, [125, 211, 252]], [0.5, [139, 124, 246]], [1, [236, 72, 153]]];
+// Dégradé d'intensité : bleu clair (peu sollicité) → bleu foncé (muscle le
+// plus travaillé).
+const STOPS = [[0, [158, 182, 246]], [0.55, [92, 124, 250]], [1, [52, 66, 214]]];
 export function intensityColor(t) {
   const x = Math.max(0, Math.min(1, t));
   for (let i = 1; i < STOPS.length; i++) {
@@ -178,21 +177,22 @@ function figure(v, muscles, intensity, x, small) {
   // Sur les petites cartes (calendrier), les traits sont épaissis en
   // proportion pour rester lisibles.
   const k = small ? 1.6 : 1;
-  const uses = muscles.map((m) => {
+  const colors = muscles.map((m) => {
     const t = intensity[m] || 0;
-    const fill = t >= MIN_T ? intensityColor(t) : 'var(--body-muscle)';
-    return `<use href="#bm-${v}-${m}" fill="${fill}"/>`;
-  }).join('');
+    return [m, t >= MIN_T ? intensityColor(t) : 'var(--body-muscle)'];
+  });
+  const fills = colors.map(([m, c]) => `<use href="#bm-${v}-${m}" fill="${c}" stroke="${c}"/>`).join('');
+  const lines = muscles.map((m) => `<use href="#bm-${v}-${m}"/>`).join('');
   return `<g transform="translate(${x + PAD} 0)" stroke-linejoin="round">
     <use href="#bm-${v}-sil" fill="var(--body-muscle)" stroke="var(--body-outline)" stroke-width="${(4.6 * k).toFixed(1)}"/>
     <use href="#bm-${v}-sil" fill="var(--body-muscle)" stroke="var(--body-muscle)" stroke-width="${(3.2 * k).toFixed(1)}"/>
     <g stroke="var(--body-line)" stroke-width="${(1.1 * k).toFixed(2)}">
-      <use href="#bm-${v}-neutral" fill="var(--body-muscle)"/>
+      <use href="#bm-${v}-neutral" fill="var(--body-skin)"/>
       <use href="#bm-${v}-light" fill="var(--body-skin)"/>
-      ${uses}
+      <use href="#bm-${v}-face" fill="var(--body-skin)"/>
     </g>
-    <use href="#bm-${v}-hair" fill="var(--body-hair)" stroke="var(--body-line)" stroke-width="${(0.8 * k).toFixed(2)}"/>
-    ${v === 'f' ? `<use href="#bm-f-face" fill="var(--body-skin)"/>` : ''}
+    <g stroke-width="${(1.6 * k).toFixed(2)}">${fills}</g>
+    <g fill="none" stroke="var(--body-line)" stroke-width="${(0.9 * k).toFixed(2)}">${lines}</g>
   </g>`;
 }
 

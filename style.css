@@ -1127,7 +1127,7 @@ body[data-page="1"] #fab-nutrition-wrap { display: flex; }
 .wd-mus { display: grid; grid-template-columns: 1fr 84px 38px; align-items: center; gap: 8px; font-size: 0.74rem; font-weight: 600; margin-bottom: 4px; }
 .wd-mus span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wd-mus i { height: 6px; border-radius: 4px; background: var(--surface-3); overflow: hidden; }
-.wd-mus i b { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, rgb(125, 211, 252), rgb(139, 124, 246), rgb(236, 72, 153)); }
+.wd-mus i b { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, rgb(158, 182, 246), rgb(92, 124, 250), rgb(52, 66, 214)); }
 .wd-mus em { font-style: normal; font-size: 0.7rem; text-align: right; color: var(--text-2); }
 .wd-best-v { font-size: 0.86rem; font-weight: 700; }
 .wd-note .eyebrow { margin-bottom: 4px; }
@@ -1243,8 +1243,8 @@ button.wd-exo { display: block; width: 100%; text-align: left; border: none; col
 .bm-card { display: flex; flex-direction: column; align-items: center; gap: 8px; background: var(--surface-2); border-radius: 18px; padding: 14px 10px; margin-bottom: 12px; }
 .body-map { display: block; max-width: 100%; height: auto; }
 .bm-legend { display: flex; align-items: center; gap: 8px; font-size: 0.58rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); }
-/* Même dégradé que la carte (utils/bodyMap.js) : bleu clair → violet → rose */
-.bm-legend i { width: 90px; height: 6px; border-radius: 4px; background: linear-gradient(90deg, rgb(125, 211, 252), rgb(139, 124, 246), rgb(236, 72, 153)); }
+/* Même dégradé que la carte (utils/bodyMap.js) : bleu clair → bleu foncé */
+.bm-legend i { width: 90px; height: 6px; border-radius: 4px; background: linear-gradient(90deg, rgb(158, 182, 246), rgb(92, 124, 250), rgb(52, 66, 214)); }
 /* En-têtes de zone (Épaules, Dos…) dans les listes de muscles */
 .mus-group { font-size: 0.6rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.09em; color: var(--text-3); padding: 12px 10px 4px; }
 .mus-group:first-child { padding-top: 0; }

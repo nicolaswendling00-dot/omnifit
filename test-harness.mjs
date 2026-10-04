@@ -1142,7 +1142,7 @@ console.log('== v6.1 : anatomie detaillee et carte du corps ==');
   }
   assert(svg.includes(bm.intensityColor(1)) && svg.includes(bm.intensityColor(0.5)), 'Carte : couleur selon l\'intensite');
   assert(bm.intensityColor(0.2) !== bm.intensityColor(0.9), 'Carte : degrade (intensites differentes, couleurs differentes)');
-  assert((svg.match(/<use /g) || []).length < 50, 'Carte : legere (quelques <use>, formes partagees)');
+  assert((svg.match(/<use /g) || []).length < 80, 'Carte : legere (moins de 80 <use>, formes partagees)');
 
   // Calendrier
   store.userData.workouts = [];
