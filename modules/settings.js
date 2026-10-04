@@ -7,7 +7,7 @@ import { RANK_ORDER, RANK_META, DIV_LP, ONYX_LP, rankBadge, liftPercentile, LEVE
 import { openExercisePicker, customRefMap, exerciseLookup } from './workout.js';
 import { backfillNutritionGoals, freezePastGoals } from './nutrition.js';
 
-const VERSION = '6.4';
+const VERSION = '6.5';
 
 // Familles de matériel (filtre de la base d'exercices), en français.
 const EQUIP_FAMILY_FR = {
