@@ -154,6 +154,16 @@ export function ensureBodySprite(doc = (typeof document !== 'undefined' ? docume
 export const FRONT_MUSCLES = Object.keys(FRONT);
 export const BACK_MUSCLES = Object.keys(BACK);
 
+// Ordre de dessin : des grandes zones de fond vers les petits muscles posés
+// dessus. Chaque muscle est peint AVEC son contour avant le suivant : là où
+// deux formes se chevauchent, celle du dessus masque le trait de celle du
+// dessous, et il ne reste qu'une seule ligne à chaque frontière (au lieu de
+// deux contours qui se croisent).
+const DRAW_ORDER = {
+  f: ['chest', 'obliques', 'abs', 'traps', 'frontDelts', 'sideDelts', 'triceps', 'biceps', 'forearms', 'adductors', 'quads', 'calves'],
+  b: ['lats', 'lowerback', 'traps', 'rhomboids', 'rearDelts', 'sideDelts', 'triceps', 'forearms', 'glutes', 'adductors', 'hamstrings', 'calves'],
+};
+
 // Dégradé d'intensité : bleu clair (peu sollicité) → bleu foncé (muscle le
 // plus travaillé).
 const STOPS = [[0, [158, 182, 246]], [0.55, [92, 124, 250]], [1, [52, 66, 214]]];
@@ -177,12 +187,16 @@ function figure(v, muscles, intensity, x, small) {
   // Sur les petites cartes (calendrier), les traits sont épaissis en
   // proportion pour rester lisibles.
   const k = small ? 1.6 : 1;
-  const colors = muscles.map((m) => {
+  const ordered = [...DRAW_ORDER[v].filter((m) => muscles.includes(m)), ...muscles.filter((m) => !DRAW_ORDER[v].includes(m))];
+  const grow = (1.6 * k).toFixed(2);
+  const line = (0.9 * k).toFixed(2);
+  // Par muscle : 1) un trait de sa propre couleur l'agrandit légèrement,
+  // 2) on le repeint avec son liseré. Le muscle suivant recouvre ce qui dépasse.
+  const muscleLayers = ordered.map((m) => {
     const t = intensity[m] || 0;
-    return [m, t >= MIN_T ? intensityColor(t) : 'var(--body-muscle)'];
-  });
-  const fills = colors.map(([m, c]) => `<use href="#bm-${v}-${m}" fill="${c}" stroke="${c}"/>`).join('');
-  const lines = muscles.map((m) => `<use href="#bm-${v}-${m}"/>`).join('');
+    const c = t >= MIN_T ? intensityColor(t) : 'var(--body-muscle)';
+    return `<use href="#bm-${v}-${m}" fill="${c}" stroke="${c}" stroke-width="${grow}"/><use href="#bm-${v}-${m}" fill="${c}" stroke="var(--body-line)" stroke-width="${line}"/>`;
+  }).join('');
   return `<g transform="translate(${x + PAD} 0)" stroke-linejoin="round">
     <use href="#bm-${v}-sil" fill="var(--body-muscle)" stroke="var(--body-outline)" stroke-width="${(4.6 * k).toFixed(1)}"/>
     <use href="#bm-${v}-sil" fill="var(--body-muscle)" stroke="var(--body-muscle)" stroke-width="${(3.2 * k).toFixed(1)}"/>
@@ -191,8 +205,7 @@ function figure(v, muscles, intensity, x, small) {
       <use href="#bm-${v}-light" fill="var(--body-skin)"/>
       <use href="#bm-${v}-face" fill="var(--body-skin)"/>
     </g>
-    <g stroke-width="${(1.6 * k).toFixed(2)}">${fills}</g>
-    <g fill="none" stroke="var(--body-line)" stroke-width="${(0.9 * k).toFixed(2)}">${lines}</g>
+    ${muscleLayers}
   </g>`;
 }
 
