@@ -64,6 +64,15 @@ export function rankFromLP(totalLp) {
   return { id, name: RANK_META[id].name, color: RANK_META[id].color, division, lp: inRank % DIV_LP, lpNeeded: DIV_LP, total };
 }
 
+// Libellé des LP : toujours le TOTAL cumulé, jamais les LP dans la division.
+// Diamant II à 10 LP s'affiche « 1010 / 1100 LP » (le palier suivant), pas
+// « 10 / 100 LP ». Onyx, sans palier suivant : « 2140 LP ».
+export function lpLabel(rank) {
+  if (!rank) return '0 LP';
+  const total = rank.total ?? rank.lp;
+  return rank.lpNeeded ? `${total} / ${total - rank.lp + rank.lpNeeded} LP` : `${total} LP`;
+}
+
 // 1RM estimé (Epley)
 function ormOfSets(sets) {
   let orm = 0;

@@ -222,8 +222,8 @@ workout.render(pages.workout);
 const todayCell = pages.workout.querySelector(`#calendar-host .cal-day.has-session[data-date="${todayISO()}"]`);
 assert(todayCell, 'Calendrier : séance du jour marquée (has-session)');
 todayCell.click();
-const detail = document.querySelector('.modal');
-assert(detail && detail.textContent.includes('Séance du'), 'Calendrier : clic → détail de la séance');
+const detail = [...document.querySelectorAll('.sheet')].pop();
+assert(detail && detail.querySelector('.wd-hero'), 'Calendrier : clic → détail de la séance');
 clearOverlays();
 pages.workout.querySelector('#cal-more').click();
 const calOverlay = document.querySelector('.cal-overlay');
@@ -1161,7 +1161,7 @@ console.log('== v6.1 : anatomie detaillee et carte du corps ==');
   // Detail de seance
   cell.click();
   const wd = [...document.querySelectorAll('.modal')].pop();
-  assert(wd.querySelector('.bm-card svg.body-map'), 'Detail de seance : carte du corps en tete');
+  assert(wd.querySelector('#wd-flip svg.body-map'), 'Detail de seance : carte du corps en tete');
   clearOverlays();
 
   // Fiche d'exercice : recto carte du corps, verso rang
@@ -1194,6 +1194,70 @@ console.log('== v6.1 : anatomie detaillee et carte du corps ==');
   const groups = [...vh.querySelectorAll('.vol-group')].map((g) => g.textContent.trim());
   assert(groups.join(',') === 'Pectoraux,Épaules,Dos,Bras,Tronc,Jambes', `Volume hebdo : muscles groupes par zone (${groups.join(',')})`);
   assert(vh.querySelectorAll('.vol-row').length === 18, 'Volume hebdo : une ligne par muscle');
+}
+
+console.log('== v6.2 : LP totaux, panneaux, detail de seance ==');
+{
+  // ---- LP : toujours le total cumule
+  const rk = await import('./utils/ranks.js');
+  const d2 = rk.rankFromLP(1010);
+  assert(d2.name === 'Diamant' && d2.division === 'II', 'LP : 1010 LP = Diamant II');
+  assert(rk.lpLabel(d2) === '1010 / 1100 LP', `LP : affiche le total et le palier suivant (${rk.lpLabel(d2)})`);
+  assert(rk.lpLabel(rk.rankFromLP(2140)) === '2140 LP', 'LP : Onyx affiche son total');
+  assert(rk.lpLabel(rk.rankFromLP(0)) === '0 / 100 LP', 'LP : depart a 0');
+  for (const f of ['./modules/home.js', './modules/workout.js']) {
+    const src = fs.readFileSync(new URL(f, import.meta.url), 'utf8');
+    assert(!/\.lp\} \/ \$\{[^}]*lpNeeded\}/.test(src), `LP : plus de « lp / lpNeeded » dans ${f}`);
+  }
+  home.render(pages.home);
+  assert(/^\d+ \/ \d+ LP$|^\d+ LP$/.test(pages.home.querySelector('.gr-lp').textContent.trim()), 'Accueil : LP totaux sur la carte de rang');
+
+  // ---- Fenetres : toutes en panneaux montant du bas
+  const ui = await import('./utils/ui.js');
+  let closedByEsc = 0;
+  const m = ui.openModal({ title: 'Test', content: '<p>x</p>', actions: [{ label: 'OK' }], onClose: () => { closedByEsc += 1; } });
+  const sh = [...document.querySelectorAll('.sheet')].pop();
+  assert(sh.classList.contains('modal') && sh.closest('.sheet-scrim'), 'Fenetres : un panneau (sheet), plus une fenetre centree');
+  assert(sh.querySelector('.sheet-handle'), 'Fenetres : poignee pour glisser vers le bas');
+  assert(!document.querySelector('.modal-close'), 'Fenetres : plus de croix de fermeture');
+  assert(sh.querySelector('.modal-actions .btn'), 'Fenetres : barre d\'actions en bas');
+  document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape' }));
+  assert(closedByEsc === 1, 'Fenetres : Echap ferme le panneau du dessus');
+  m.close(); m.close();
+  assert(closedByEsc === 1, 'Fenetres : fermer plusieurs fois ne rappelle pas onClose');
+  clearOverlays();
+  const uiSrc = fs.readFileSync(new URL('./utils/ui.js', import.meta.url), 'utf8');
+  assert(!/class="modal-close"/.test(uiSrc) && !/class="modal \$\{wide/.test(uiSrc), 'Fenetres : ancien gabarit centre supprime');
+  const cssP = fs.readFileSync(new URL('./style.css', import.meta.url), 'utf8');
+  assert(!/^\.modal \{/m.test(cssP) && !/\.modal-wide/.test(cssP), 'CSS : plus de style de fenetre centree');
+
+  // ---- Detail de seance
+  store.userData.workouts = [];
+  store.addWorkout({ id: 'd62', date: todayISO(-2), totalTime: 2478, notes: 'Bonne seance', exercises: [
+    { exerciseId: 'benchPress', sets: [{ weight: 80, reps: 8 }, { weight: 80, reps: 7 }] },
+    { exerciseId: 'lateralRaise', sets: [{ weight: 12, reps: 14 }] },
+  ] });
+  workout.render(pages.workout);
+  pages.workout.querySelector(`.cal-day[data-date="${todayISO(-2)}"]`).click();
+  const wd = [...document.querySelectorAll('.sheet')].pop();
+  assert(wd.querySelector('.sheet-header h3').textContent === 'Séance', 'Detail : panneau « Séance »');
+  assert(wd.querySelector('.wd-day') && wd.querySelector('.wd-date').textContent.length > 4, 'Detail : jour et date mis en avant');
+  const tiles = [...wd.querySelectorAll('.wd-stat .eyebrow')].map((e) => e.textContent);
+  assert(tiles.join(',') === 'Durée,Progression,Séries', `Detail : tuiles Duree / Progression / Series (${tiles.join(',')})`);
+  assert(wd.querySelector('.wd-stat .num').textContent === '41:18', 'Detail : duree lisible');
+  const flipW = wd.querySelector('#wd-flip');
+  assert(flipW.querySelector('.rank-front svg.body-map'), 'Detail : carte du corps au recto');
+  assert(/Volume/.test(flipW.querySelector('.wd-back').textContent) && flipW.querySelectorAll('.wd-mus').length > 0, 'Detail : statistiques au verso (volume, muscles)');
+  assert(flipW.getAttribute('role') === 'button' && flipW.getAttribute('tabindex') === '0', 'Detail : carte accessible au clavier');
+  flipW.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  assert(flipW.classList.contains('flipped') && flipW.getAttribute('aria-pressed') === 'true', 'Detail : Entree retourne la carte');
+  assert(wd.querySelector('.sheet-action[aria-label="Modifier la séance"]'), 'Detail : « Modifier » en haut du panneau');
+  const acts = [...wd.querySelectorAll('.modal-actions .btn')].map((b) => b.textContent.trim());
+  assert(acts.length === 2 && /routines/i.test(acts[0]) && /Supprimer/.test(acts[1]), `Detail : actions routines + supprimer (${acts.join(' / ')})`);
+  assert(wd.querySelector('.modal-actions .btn-danger-soft'), 'Detail : suppression en rouge discret');
+  assert(wd.querySelectorAll('button.wd-exo').length === 2, 'Detail : exercices en boutons (accessibles)');
+  assert(wd.querySelector('.wd-note') && wd.textContent.includes('Bonne seance'), 'Detail : note affichee');
+  clearOverlays();
 }
 
 console.log(`\n===== RÉSULTAT : ${pass} OK / ${fail} FAIL =====`);

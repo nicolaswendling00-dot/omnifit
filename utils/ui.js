@@ -173,48 +173,27 @@ function releaseOverlayLock() {
   }
 }
 
-// ---------- Modal ----------
-export function openModal({ title, content, actions = [], onClose = null, wide = false }) {
-  document.body.classList.add('overlay-open');
-  // Le titre est du texte brut chez tous les appelants (nom d'exercice, de
-  // recette, date…) : on l'échappe ici plutôt qu'à chaque site d'appel.
-  const t = esc(title);
-  const scrim = el(`
-    <div class="scrim">
-      <div class="modal ${wide ? 'modal-wide' : ''}" role="dialog" aria-modal="true" aria-label="${t}">
-        <div class="modal-header">
-          <h3>${t}</h3>
-          <button class="icon-btn modal-close" aria-label="Fermer">${icons.close}</button>
-        </div>
-        <div class="modal-body"></div>
-        <div class="modal-actions"></div>
-      </div>
-    </div>`);
-  const body = scrim.querySelector('.modal-body');
-  if (typeof content === 'string') body.innerHTML = content;
-  else body.appendChild(content);
-
-  const actionsEl = scrim.querySelector('.modal-actions');
-  const close = () => {
-    scrim.classList.remove('visible');
-    setTimeout(() => { scrim.remove(); releaseOverlayLock(); }, 250);
-    if (onClose) onClose();
-  };
-  for (const a of actions) {
-    const btn = el(`<button class="btn ${a.variant || 'btn-secondary'}">${a.label}</button>`);
-    btn.addEventListener('click', () => {
-      const keep = a.onClick ? a.onClick(body, close) : null;
-      if (keep !== 'keep') close();
-    });
-    actionsEl.appendChild(btn);
+// ---------- Fenêtres ----------
+// Il n'y a plus de fenêtre centrée avec une croix : toutes les fenêtres sont
+// des panneaux qui montent du bas et se referment en glissant vers le bas,
+// comme les autres menus de l'app. `openModal` garde sa signature (titre,
+// contenu, boutons d'action) ; les actions forment une barre fixe en bas du
+// panneau, toujours accessible même quand le contenu défile.
+export function openModal({ title, content, actions = [], onClose = null, headerAction = null }) {
+  const sh = openSheet({ title, content, onClose, headerAction, variant: 'modal' });
+  if (actions.length) {
+    const bar = el('<div class="modal-actions"></div>');
+    for (const a of actions) {
+      const btn = el(`<button class="btn ${a.variant || 'btn-secondary'}">${a.label}</button>`);
+      btn.addEventListener('click', () => {
+        const keep = a.onClick ? a.onClick(sh.body, sh.close) : null;
+        if (keep !== 'keep') sh.close();
+      });
+      bar.appendChild(btn);
+    }
+    sh.sheet.appendChild(bar);
   }
-  if (!actions.length) actionsEl.remove();
-
-  scrim.querySelector('.modal-close').addEventListener('click', close);
-  scrim.addEventListener('click', (e) => { if (e.target === scrim) close(); });
-  document.body.appendChild(scrim);
-  requestAnimationFrame(() => scrim.classList.add('visible'));
-  return { close, body };
+  return { close: sh.close, body: sh.body, setTitle: sh.setTitle };
 }
 
 export function confirmModal(title, message, onConfirm, danger = false) {
@@ -241,12 +220,12 @@ export function closeAllOverlays() {
 
 // ---------- Bottom Sheet ----------
 // headerAction (facultatif) : { icon, label, onClick } -> bouton en haut à droite.
-export function openSheet({ title, content, onClose = null, headerAction = null }) {
+export function openSheet({ title, content, onClose = null, headerAction = null, variant = '' }) {
   document.body.classList.add('overlay-open');
   const t = esc(title); // texte brut chez tous les appelants (cf. openModal)
   const scrim = el(`
     <div class="scrim sheet-scrim">
-      <div class="sheet" role="dialog" aria-modal="true" aria-label="${t}">
+      <div class="sheet${variant === 'modal' ? ' modal' : ''}" role="dialog" aria-modal="true" aria-label="${t}">
         <div class="sheet-handle"></div>
         <div class="sheet-header">
           <h3>${t}</h3>
@@ -260,11 +239,15 @@ export function openSheet({ title, content, onClose = null, headerAction = null 
   else body.appendChild(content);
 
   const sheet = scrim.querySelector('.sheet');
+  let closed = false;
   const close = () => {
+    if (closed) return; // déjà fermé (clic sur le fond après une action, etc.)
+    closed = true;
     scrim.classList.remove('visible');
     setTimeout(() => { scrim.remove(); releaseOverlayLock(); }, 210);
     if (onClose) onClose();
   };
+  scrim._close = close; // pour la touche Échap
   // Le titre peut changer sans rouvrir le panneau (renommage d'un exercice
   // depuis la fiche restée ouverte).
   const setTitle = (txt) => { sheet.querySelector('.sheet-header h3').textContent = txt; };
@@ -370,7 +353,16 @@ export function openSheet({ title, content, onClose = null, headerAction = null 
 
   document.body.appendChild(scrim);
   requestAnimationFrame(() => scrim.classList.add('visible'));
-  return { close, body, setTitle };
+  return { close, body, setTitle, sheet };
+}
+
+// Échap ferme le panneau du dessus (clavier, lecteurs d'écran).
+if (typeof document !== 'undefined') {
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const top = [...document.querySelectorAll('.scrim')].pop();
+    if (top && top._close) top._close();
+  });
 }
 
 // Normalise une chaîne pour la recherche : minuscules, sans accents ni signes

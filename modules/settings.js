@@ -7,7 +7,7 @@ import { RANK_ORDER, RANK_META, DIV_LP, ONYX_LP, rankBadge, liftPercentile, LEVE
 import { openExercisePicker, customRefMap, exerciseLookup } from './workout.js';
 import { backfillNutritionGoals, freezePastGoals } from './nutrition.js';
 
-const VERSION = '6.1';
+const VERSION = '6.2';
 
 // Familles de matériel (filtre de la base d'exercices), en français.
 const EQUIP_FAMILY_FR = {
@@ -433,7 +433,7 @@ function openRankLadderModal() {
     <div class="ladder-list">${ladderRows}</div>
   </div>`);
 
-  openModal({ title: 'Rangs', content, wide: true, actions: [] });
+  openModal({ title: 'Rangs', content, actions: [] });
 
   const resultHost = content.querySelector('#pct-result');
   // Calcul en direct : pas de bouton « Calculer », le résultat suit la saisie.

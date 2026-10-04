@@ -7,7 +7,7 @@ import { formatTime, workoutMuscleVolume, weeklySetsByMuscle, muscleAttenuation 
 import { el, esc, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, fmtDateFull, celebrateLP, makeChart, normalizeStr, closeAllOverlays } from '../utils/ui.js';
 import { lineChartOptions, lineDataset } from '../utils/charts.js';
 import { bodyMapSVG } from '../utils/bodyMap.js';
-import { computeExerciseLP, computeExerciseLPDetailed, rankFromLP, rankBadge, getStandards } from '../utils/ranks.js';
+import { computeExerciseLP, computeExerciseLPDetailed, rankFromLP, rankBadge, getStandards, lpLabel } from '../utils/ranks.js';
 
 let volumeChart = null;
 let impChart = null;
@@ -635,7 +635,6 @@ function openExerciseEditor(onSaved, existing = null) {
   openModal({
     title: existing ? 'Modifier l\'exercice' : 'Créer un exercice',
     content: form,
-    wide: true,
     actions: [
       { label: 'Annuler' },
       {
@@ -891,7 +890,7 @@ function buildExerciseDetail(exerciseId) {
   // Carte recto-verso : au recto les muscles de l'exercice, au verso son rang.
   const rk = exerciseRank(exerciseId);
   const rankName = rk ? (rk.division ? `${rk.name} ${rk.division}` : rk.name) : '';
-  const rankBlock = `<div class="rank-flip" id="ed-rank" title="Toucher pour voir le rang">
+  const rankBlock = `<div class="rank-flip" id="ed-rank" role="button" tabindex="0" aria-pressed="false" aria-label="Carte des muscles. Toucher pour afficher le rang">
       <div class="rank-flip-inner">
         <div class="rank-face rank-front">
           ${bodyMapSVG(exerciseIntensity(def), { size: 214, label: 'Muscles sollicités par l\'exercice' })}
@@ -900,7 +899,7 @@ function buildExerciseDetail(exerciseId) {
         <div class="rank-face rank-back"${rk ? ` style="border-color:${rk.color}"` : ''}>
           ${rk ? `${rankBadge(rk.id, 120)}
             <div class="rank-name" style="color:${rk.color}">${rankName}</div>
-            <div class="rank-back-lp">${rk.division ? `${rk.lp} / ${rk.lpNeeded} LP` : `${rk.lp} LP`}</div>
+            <div class="rank-back-lp">${lpLabel(rk)}</div>
             ${rk.division ? `<div class="rank-back-bar"><div style="width:${rk.lp}%;background:${rk.color}"></div></div>` : '<div class="rank-back-sub">Rang ultime atteint</div>'}`
     : '<div class="rank-back-sub" style="padding:0 24px;text-align:center">Non classé — réalise cet exercice pour obtenir un rang</div>'}
         </div>
@@ -928,7 +927,14 @@ function buildExerciseDetail(exerciseId) {
   </div>`);
 
   const rankEl = form.querySelector('#ed-rank');
-  if (rankEl) rankEl.addEventListener('click', () => rankEl.classList.toggle('flipped'));
+  if (rankEl) {
+    const toggle = () => {
+      rankEl.classList.toggle('flipped');
+      rankEl.setAttribute('aria-pressed', rankEl.classList.contains('flipped') ? 'true' : 'false');
+    };
+    rankEl.addEventListener('click', toggle);
+    rankEl.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+  }
 
   const hostH = form.querySelector('#ed-history');
   // Séance retenue comme référence (colonne PRÉC) : on la met en évidence.
@@ -967,61 +973,143 @@ function buildExerciseDetail(exerciseId) {
   return form;
 }
 
-// Vue d'une séance complète (séries empilées, coefficient d'amélioration, exos cliquables)
+// Vue d'une séance complète, en panneau :
+//   en-tête (jour, date) · chiffres clés · carte du corps qui se retourne sur
+//   les statistiques · exercices · actions (modifier en haut, routines /
+//   supprimer en bas).
 function openWorkoutDetail(w, highlightId = null) {
   const sessImp = sessionImprovement(w);
   const lpMap = lpMapAll();
-  const content = el(`<div>
-    <div class="wd-top">
-      <span class="muted">${formatTime(w.totalTime || 0)}</span>
-      <div style="display:flex;align-items:center;gap:8px">
-        ${sessImp != null
-          ? `<span class="wd-sess-imp ${sessImp >= 0 ? 'up' : 'down'}">Amélioration ${sessImp >= 0 ? '+' : ''}${sessImp}%</span>`
-          : '<span class="muted">Séance de référence</span>'}
-        <button class="icon-btn" id="wd-edit" aria-label="Modifier la séance">${icons.edit}</button>
+  const d = parseISO(w.date);
+  const weekday = d.toLocaleDateString('fr-FR', { weekday: 'long' });
+
+  // ---- Statistiques de la séance (séries validées uniquement)
+  const sets = w.exercises.flatMap((wx) => doneSets(wx));
+  const nSets = sets.length;
+  const nReps = sets.reduce((a, s) => a + (s.reps || 0), 0);
+  const volume = Math.round(w.exercises.reduce((a, wx) => a + exoVolume(wx), 0));
+  const load = muscleLoad(w.exercises);
+  const loadTotal = Object.values(load).reduce((a, v) => a + v, 0) || 1;
+  const topMuscles = Object.entries(load).sort((a, b) => b[1] - a[1]).slice(0, 4)
+    .map(([m, v]) => ({ m, pct: Math.round((v / loadTotal) * 100) }));
+  // LP rapportés par la séance et montées de rang
+  const lpRows = (computeExerciseLPDetailed(store.userData.workouts, {
+    bodyweight: store.userData.profile.weight,
+    weights: store.userData.weights,
+    standards: getStandards(),
+    customRefs: customRefMap(),
+  }).perWorkout[w.id] || []);
+  const lpGain = lpRows.reduce((a, r) => a + Math.max(0, r.gain), 0);
+  const promotions = lpRows.filter((r) => {
+    const a = rankFromLP(r.before); const b = rankFromLP(r.after);
+    return a.id !== b.id || a.division !== b.division;
+  }).length;
+  // Meilleure progression de la séance
+  let bestProg = null;
+  for (const wx of w.exercises) {
+    const imp = exoImprovementAt(wx.exerciseId, w);
+    if (imp != null && (!bestProg || imp > bestProg.imp)) bestProg = { id: wx.exerciseId, imp };
+  }
+  const nameOf = (id) => (exerciseLookup(id) || { name: id }).name;
+  const impTxt = (v) => `${v > 0 ? '+' : ''}${v} %`;
+  const impCls = (v) => (v > 0 ? 'up' : v < 0 ? 'down' : 'flat');
+
+  const content = el(`<div class="wd">
+    <div class="wd-hero">
+      <div class="wd-day">${weekday}</div>
+      <div class="wd-date">${fmtDateFull(w.date)}</div>
+    </div>
+
+    <div class="wd-stats">
+      <div class="wd-stat"><span class="eyebrow">Durée</span><b class="num">${formatTime(w.totalTime || 0)}</b></div>
+      <div class="wd-stat"><span class="eyebrow">Progression</span>
+        ${sessImp != null ? `<b class="num ${impCls(sessImp)}">${impTxt(sessImp)}</b>` : '<b class="num flat">1re</b>'}</div>
+      <div class="wd-stat"><span class="eyebrow">Séries</span><b class="num">${nSets}</b></div>
+    </div>
+
+    <div class="rank-flip wd-flip" id="wd-flip" role="button" tabindex="0" aria-pressed="false"
+      aria-label="Carte du corps. Toucher pour afficher les statistiques de la séance">
+      <div class="rank-flip-inner">
+        <div class="rank-face rank-front">
+          ${bodyMapSVG(workoutIntensity(w), { size: 280, label: 'Muscles travaillés pendant la séance' })}
+          <div class="flip-hint">${icons.swap} Stats</div>
+        </div>
+        <div class="rank-face rank-back wd-back">
+          <div class="wd-back-grid">
+            <div><span class="eyebrow">Volume</span><b class="num">${volume.toLocaleString('fr-FR')}<small> kg</small></b></div>
+            <div><span class="eyebrow">Répétitions</span><b class="num">${nReps}</b></div>
+            <div><span class="eyebrow">Exercices</span><b class="num">${w.exercises.length}</b></div>
+            <div><span class="eyebrow">LP gagnés</span><b class="num lp">+${lpGain}</b>${promotions ? `<i class="wd-promo">${promotions} rang${promotions > 1 ? 's' : ''} ↑</i>` : ''}</div>
+          </div>
+          <div class="wd-muscles">
+            <span class="eyebrow">Muscles les plus sollicités</span>
+            ${topMuscles.map((t) => `<div class="wd-mus"><span>${muscleLabel(t.m)}</span><i><b style="width:${t.pct}%"></b></i><em class="num">${t.pct} %</em></div>`).join('')}
+          </div>
+          ${bestProg ? `<div class="wd-best"><span class="eyebrow">Meilleure progression</span><span class="wd-best-v">${esc(nameOf(bestProg.id))} <b class="${impCls(bestProg.imp)}">${impTxt(bestProg.imp)}</b></span></div>` : ''}
+        </div>
       </div>
     </div>
-    <div class="bm-card">${bodyMapSVG(workoutIntensity(w), { size: 210, label: 'Muscles travaillés pendant la séance' })}</div>
-    ${w.notes ? `<div class="wd-note">${esc(w.notes)}</div>` : ''}
-    ${w.exercises.map((wx, i) => {
+
+    ${w.notes ? `<div class="wd-note"><span class="eyebrow">Note</span>${esc(w.notes)}</div>` : ''}
+
+    <div class="wd-list-head"><span class="eyebrow">Exercices · ${w.exercises.length}</span><span class="muted">Toucher pour le détail</span></div>
+    ${w.exercises.map((wx) => {
       const def = exerciseLookup(wx.exerciseId) || { name: wx.exerciseId };
       const hl = wx.exerciseId === highlightId;
       const imp = exoImprovementAt(wx.exerciseId, w);
       const rk = exerciseRank(wx.exerciseId, lpMap);
       const labels = setLabels(wx.sets);
-      const vol = exoVolume(wx);
-      return `<div class="wd-exo${hl ? ' hl' : ''}" data-exo="${wx.exerciseId}">
-        <div class="wd-exo-head">
-          <span class="wd-exo-rank">${rk ? rankBadge(rk.id, 44) : ''}</span>
+      const top = topSet(wx);
+      return `<button type="button" class="wd-exo${hl ? ' hl' : ''}" data-exo="${wx.exerciseId}" aria-label="${esc(def.name)}, voir le détail">
+        <span class="wd-exo-head">
+          <span class="wd-exo-rank">${rk ? rankBadge(rk.id, 40) : ''}</span>
           <span class="wd-exo-title">
             <span class="wd-exo-name">${esc(def.name)}</span>
-            <span class="wd-exo-sub">
-              ${rk ? `<b style="color:${rk.color}">${rk.division ? `${rk.name} ${rk.division}` : rk.name}</b> · ` : ''}
-              ${wx.sets.length} série${wx.sets.length > 1 ? 's' : ''} · ${vol.toLocaleString('fr-FR')} kg
-            </span>
+            <span class="wd-exo-sub">${rk ? `<b style="color:${rk.color}">${rk.division ? `${rk.name} ${rk.division}` : rk.name}</b> · ` : ''}${wx.sets.length} série${wx.sets.length > 1 ? 's' : ''}</span>
           </span>
           <span class="wd-exo-meta">
             ${wx.ss ? `<span class="ss-chip">SS${wx.ss}</span>` : ''}
-            ${imp != null ? impBadge(imp, false) : '<span class="badge" style="font-size:0.58rem">nouveau</span>'}
+            ${imp != null ? `<span class="ed-imp ${impCls(imp)}">${impTxt(imp)}</span>` : '<span class="ed-imp first">1re</span>'}
           </span>
-        </div>
-        <div class="wd-sets">
-          ${wx.sets.map((s, j) => `<div class="wd-set"><span class="wd-set-n ${labels[j].cls}">${labels[j].text}</span><span class="wd-set-v">${s.weight} kg × ${s.reps}</span></div>`).join('')}
-        </div>
-      </div>`;
+        </span>
+        <span class="wd-sets">
+          ${wx.sets.map((s, j) => `<span class="wd-set${s === top ? ' is-top' : ''}"><span class="wd-set-n ${labels[j].cls}">${labels[j].text}</span><span class="wd-set-v">${s.weight} kg × ${s.reps}</span></span>`).join('')}
+        </span>
+      </button>`;
     }).join('')}
-    <div class="muted" style="text-align:center;font-size:0.7rem;margin-top:6px">Touchez un exercice pour ses statistiques</div>
   </div>`);
+
+  const flip = content.querySelector('#wd-flip');
+  const toggleFlip = () => {
+    flip.classList.toggle('flipped');
+    flip.setAttribute('aria-pressed', flip.classList.contains('flipped') ? 'true' : 'false');
+    haptic();
+  };
+  flip.addEventListener('click', toggleFlip);
+  flip.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleFlip(); } });
   content.addEventListener('click', (e) => {
     const exo = e.target.closest('.wd-exo');
     if (exo) openExerciseDetailSheet(exo.dataset.exo);
   });
-  const { close } = openModal({
-    title: `Séance du ${fmtDateFull(w.date)}`,
+
+  openModal({
+    title: 'Séance',
     content,
-    wide: true,
+    // Modifier : en haut à droite, comme sur les fiches d'exercice
+    headerAction: {
+      icon: icons.edit,
+      label: 'Modifier la séance',
+      onClick: ({ close }) => {
+        close();
+        // On vient souvent d'une fiche exercice restée ouverte derrière : sans
+        // ça, la séance s'ouvrirait sous elle.
+        closeAllOverlays();
+        if (pageRerender) openSession(pageRerender, null, w);
+      },
+    },
     actions: [
-      { label: 'Supprimer', variant: 'btn-danger', onClick: (body, closeModal) => {
+      { label: `${icons.plus} Ajouter aux routines`, variant: 'btn-secondary', onClick: () => { addSessionToRoutine(w); } },
+      { label: `${icons.trash} Supprimer`, variant: 'btn-danger-soft', onClick: (body, closeModal) => {
         closeModal();
         confirmModal('Supprimer la séance', `Supprimer définitivement la séance du ${fmtDateFull(w.date)} ?`, () => {
           store.deleteWorkout(w.id);
@@ -1030,15 +1118,7 @@ function openWorkoutDetail(w, highlightId = null) {
         }, true);
         return 'keep';
       } },
-      { label: 'Ajouter aux routines', onClick: () => { addSessionToRoutine(w); } },
     ],
-  });
-  content.querySelector('#wd-edit').addEventListener('click', () => {
-    close();
-    // On vient souvent d'une fiche exercice restée ouverte derrière : sans ça,
-    // la séance s'ouvrirait sous elle et il faudrait la fermer à la main.
-    closeAllOverlays();
-    if (pageRerender) openSession(pageRerender, null, w);
   });
 }
 
@@ -1651,7 +1731,6 @@ function showSummary(exercises, closeSession) {
   openModal({
     title: 'Résumé de séance',
     content,
-    wide: true,
     actions: [
       { label: 'Retour' },
       {
@@ -2242,7 +2321,6 @@ function openMuscleChart(muscleId) {
   openModal({
     title: `${muscleLabel(muscleId)}`,
     content,
-    wide: true,
     actions: [{ label: 'Fermer', variant: 'btn-primary' }],
     onClose: () => {
       if (musChart) { try { musChart.destroy(); } catch (_) { /* déjà détruit */ } musChart = null; }

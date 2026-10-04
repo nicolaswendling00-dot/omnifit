@@ -6,7 +6,7 @@ import { lineChartOptions, lineDataset } from '../utils/charts.js';
 import { goToPage, PAGE_NUTRITION, PAGE_ACTIVITY } from '../utils/nav.js';
 import { macroGoals, renderCoachCard } from './nutrition.js';
 import { computeGlobalRank } from '../utils/globalRank.js';
-import { rankBadge, rankFromLP } from '../utils/ranks.js';
+import { rankBadge, rankFromLP, lpLabel } from '../utils/ranks.js';
 
 let weightChart = null;
 let smaVisible = true;
@@ -138,7 +138,6 @@ function openChartModal(rerender) {
   const modal = openModal({
     title: 'Poids',
     content,
-    wide: true,
     actions: [],
     onClose: () => {
       if (weightChart) { try { weightChart.destroy(); } catch (_) { /* déjà détruit */ } weightChart = null; }
@@ -262,7 +261,7 @@ function openGlobalRankModal(gr) {
     <div class="grd-hero">
       ${rankBadge(gr.rank.id, 190)}
       <div class="grd-name" style="color:${gr.rank.color}">${label}</div>
-      <div class="grd-lp">${gr.rank.lpNeeded ? `${gr.rank.lp} / ${gr.rank.lpNeeded} LP` : `${gr.rank.lp} LP`}</div>
+      <div class="grd-lp">${lpLabel(gr.rank)}</div>
       ${gr.rank.lpNeeded ? `<div class="grd-bar"><i style="width:${pct}%;background:${gr.rank.color}"></i></div>` : '<div class="grd-ultime">Rang ultime atteint</div>'}
     </div>
     <div class="grd-stats">
@@ -271,7 +270,7 @@ function openGlobalRankModal(gr) {
       ${gr.lastSeasonPeak > 0 ? `<div class="grd-row"><span>Pic saison ${gr.season - 1}</span><b>${rankFromLP(gr.lastSeasonPeak).name}</b></div>` : ''}
     </div>
   </div>`);
-  openModal({ title: 'Rang global', content, wide: true, actions: [{ label: 'Fermer' }] });
+  openModal({ title: 'Rang global', content, actions: [{ label: 'Fermer' }] });
 }
 
 // Couleurs macros, alignées sur l'onglet Nutrition
@@ -426,7 +425,7 @@ export function render(container) {
           <div class="gr-badge">${rankBadge(gr.rank.id, 52)}</div>
           <div class="gr-info">
             <div class="gr-rank-name" style="color:${gr.rank.color}">${grRankLabel}</div>
-            <div class="gr-lp">${gr.rank.lpNeeded ? `${gr.rank.lp} / ${gr.rank.lpNeeded} LP` : `${gr.rank.lp} LP`}</div>
+            <div class="gr-lp">${lpLabel(gr.rank)}</div>
           </div>
           <div class="gr-streak" title="Jours consécutifs">${gr.streak > 0 ? `${icons.flame}<span>${gr.streak}</span>` : ''}</div>
         </div>

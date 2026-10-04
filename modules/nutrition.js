@@ -738,7 +738,6 @@ function openRecipeEditor(onSaved, existing = null) {
   openModal({
     title: existing ? 'Modifier la recette' : 'Nouvelle recette',
     content: form,
-    wide: true,
     actions: [
       { label: 'Annuler' },
       {
