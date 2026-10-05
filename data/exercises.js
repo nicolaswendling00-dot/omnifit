@@ -1,8 +1,9 @@
-// OmniFit — Base d'exercices (169 exercices, materiel et anatomie detaillee inclus)
+// OmniFit — Base d'exercices (materiel et anatomie detaillee inclus)
 // Structure : { id, name, category, primaryMuscles:[{m,p}], secondaryMuscles:[{m,p}], difficulty, equipment }
 
 export const MUSCLES = [
-  { id: 'chest', label: 'Pectoraux', short: 'Pecs', group: 'Pectoraux' },
+  { id: 'upperChest', label: 'Pectoraux (haut)', short: 'Pecs haut', group: 'Pectoraux' },
+  { id: 'lowerChest', label: 'Pectoraux (bas)', short: 'Pecs bas', group: 'Pectoraux' },
   { id: 'frontDelts', label: 'Deltoïdes antérieurs', short: 'Delt. ant.', group: 'Épaules' },
   { id: 'sideDelts', label: 'Deltoïdes latéraux', short: 'Delt. lat.', group: 'Épaules' },
   { id: 'rearDelts', label: 'Deltoïdes postérieurs', short: 'Delt. post.', group: 'Épaules' },
@@ -29,6 +30,8 @@ export const LEGACY_SPLIT = {
   shoulders: [['frontDelts', 0.5], ['sideDelts', 0.3], ['rearDelts', 0.2]],
   back: [['lats', 0.6], ['rhomboids', 0.25], ['traps', 0.15]],
   core: [['abs', 0.75], ['obliques', 0.25]],
+  // v6.7 : faisceau claviculaire (haut) et sternal (bas, le plus volumineux)
+  chest: [['lowerChest', 0.6], ['upperChest', 0.4]],
 };
 // Convertit une liste [{m, p}] qui contient d'anciens groupes. Les parts sont
 // arrondies à l'unité ; le reste d'arrondi va à la plus grosse part, pour que
@@ -260,7 +263,8 @@ const IMPORTED = [
   ex('lo_yRaiseIncline', 'Élévation en Y sur banc incliné avec haltères', 'Shoulders', [['shoulders', 100]], [], 'Dumbbells'),
   ex('custom_hipAdduction', 'Hip Adduction', 'Glutes', [['glutes', 100]], [], 'Machine'),
   ex('custom_e8c04362', 'Machine Chest Press Lying', 'Chest', [['chest', 80]], [['shoulders', 10], ['triceps', 10]], 'Machine'),
-  ex('custom_1ad5f699', 'Machine Chest Press Incline', 'Chest', [['chest', 70], ['shoulders', 20]], [['triceps', 10]], 'Machine'),
+  ex('custom_93e720d5', 'Machine Chest Press Incline', 'Chest', [['chest', 70], ['shoulders', 20]], [['triceps', 10]], 'Machine'),
+  ex('custom_30fb934c', 'Skull Crusher Haltères', 'Triceps', [['triceps', 100]], [], 'Dumbbells'),
   ex('custom_c6a2d0dd', 'Triceps Pushdown Unilateral', 'Triceps', [['triceps', 100]], [], 'Cable'),
   ex('custom_790bf953', 'Curl Machine', 'Biceps', [['biceps', 100]], [], 'Machine'),
   ex('custom_e1389208', 'Tirage vertical prise neutre', 'Back', [['back', 80], ['biceps', 20]], [], 'Cable'),
@@ -275,10 +279,66 @@ const IMPORTED_REFS = {
   custom_e1389208: ['latPulldown', 0.9],
   custom_d549dec2: ['lo_yRaiseIncline', 1.25],
   custom_22a584ca: ['seatedCableRow', 2],
+  custom_93e720d5: ['machinePress', 1.3],
+  custom_30fb934c: ['skullCrusher', 0.5],
 };
 for (const e of IMPORTED) {
   const r = IMPORTED_REFS[e.id];
   if (r) { e.refExercise = r[0]; e.refCoef = r[1]; }
+  EXERCISES.push(e);
+}
+
+// ============================================================
+// VARIANTES : ANGLES (PECTORAUX) ET PRISES (DOS)
+// ============================================================
+// Chaque variante est classée via le mouvement standard le plus proche :
+// refCoef = charge attendue sur la variante / charge sur la référence, à
+// niveau égal (ex. un rowing unilatéral se fait avec ~55 % de la charge
+// du tirage à deux bras). Les estimations suivent les écarts usuels relevés
+// sur StrengthLevel et les forums de musculation.
+//   [id, nom, catégorie, matériel (famille), difficulté, référence, coef]
+const VARIANTS = [
+  // Pectoraux : angles
+  ['lowInclineDbPress', 'Développé incliné bas haltères (15-30°)', 'Chest', 'Dumbbells', 'Intermediate', 'dbInclinePress', 1.05],
+  ['dbDeclinePress', 'Développé décliné haltères', 'Chest', 'Dumbbells', 'Intermediate', 'dbBenchPress', 1.05],
+  ['dbSqueezePress', 'Squeeze press haltères', 'Chest', 'Dumbbells', 'Beginner', 'dbBenchPress', 0.75],
+  ['inclineDbFly', 'Écartés inclinés haltères', 'Chest', 'Dumbbells', 'Intermediate', 'dbFly', 0.9],
+  ['declineDbFly', 'Écartés déclinés haltères', 'Chest', 'Dumbbells', 'Intermediate', 'dbFly', 1],
+  ['lowToHighCableFly', 'Écartés poulie basse vers haute', 'Chest', 'Cable', 'Beginner', 'cableFly', 0.85],
+  ['highToLowCableFly', 'Écartés poulie haute vers basse', 'Chest', 'Cable', 'Beginner', 'cableFly', 1.05],
+  ['inclineCableFly', 'Écartés poulie sur banc incliné', 'Chest', 'Cable', 'Intermediate', 'cableFly', 0.9],
+  ['declineMachinePress', 'Développé décliné machine', 'Chest', 'Machine', 'Beginner', 'machinePress', 1.1],
+  ['wideGripBench', 'Développé couché prise large', 'Chest', 'Barbell', 'Intermediate', 'benchPress', 0.97],
+  ['reverseGripBench', 'Développé couché prise inversée', 'Chest', 'Barbell', 'Advanced', 'benchPress', 0.9],
+  ['floorPress', 'Floor press', 'Chest', 'Barbell', 'Intermediate', 'benchPress', 0.9],
+  ['declinePushUp', 'Pompes pieds surélevés', 'Chest', 'Bodyweight', 'Intermediate', 'pushUp', 0.9],
+  ['inclinePushUp', 'Pompes mains surélevées', 'Chest', 'Bodyweight', 'Beginner', 'pushUp', 1.25],
+  // Dos : prises
+  ['wideGripPulldown', 'Tirage vertical prise large', 'Back', 'Cable', 'Beginner', 'latPulldown', 0.95],
+  ['closeGripPulldown', 'Tirage vertical prise serrée (triangle)', 'Back', 'Cable', 'Beginner', 'latPulldown', 1.05],
+  ['underhandPulldown', 'Tirage vertical supination', 'Back', 'Cable', 'Beginner', 'latPulldown', 1.05],
+  ['singleArmPulldown', 'Tirage vertical unilatéral', 'Back', 'Cable', 'Intermediate', 'latPulldown', 0.55],
+  ['wideGripPullUp', 'Tractions prise large', 'Back', 'Bodyweight', 'Advanced', 'pullUp', 0.95],
+  ['neutralPullUp', 'Tractions prise neutre', 'Back', 'Bodyweight', 'Intermediate', 'pullUp', 1.03],
+  ['closeGripCableRow', 'Tirage horizontal prise serrée (triangle)', 'Back', 'Cable', 'Beginner', 'seatedCableRow', 1],
+  ['wideGripCableRow', 'Tirage horizontal prise large', 'Back', 'Cable', 'Beginner', 'seatedCableRow', 0.9],
+  ['singleArmCableRow', 'Tirage horizontal unilatéral', 'Back', 'Cable', 'Intermediate', 'seatedCableRow', 0.55],
+  ['underhandBarbellRow', 'Rowing barre supination (Yates)', 'Back', 'Barbell', 'Intermediate', 'barbellRow', 1.05],
+  ['wideGripBarbellRow', 'Rowing barre prise large', 'Back', 'Barbell', 'Intermediate', 'barbellRow', 0.95],
+  ['sealRow', 'Seal row', 'Back', 'Barbell', 'Intermediate', 'barbellRow', 0.8],
+  ['chestSupportedDbRow', 'Rowing haltères buste appuyé', 'Back', 'Dumbbells', 'Beginner', 'dbRow', 0.85],
+  ['meadowsRow', 'Meadows row', 'Back', 'Barbell', 'Advanced', 'tBarRow', 0.5],
+  ['wideGripTBarRow', 'T-bar row prise large', 'Back', 'Barbell', 'Intermediate', 'tBarRow', 0.95],
+  ['wideGripMachineRow', 'Rowing machine prise large', 'Back', 'Machine', 'Beginner', 'machineRow', 0.95],
+  ['singleArmMachineRow', 'Rowing machine unilatéral', 'Back', 'Machine', 'Beginner', 'machineRow', 0.55],
+  ['ropeStraightArmPulldown', 'Pull-over poulie corde', 'Back', 'Cable', 'Beginner', 'straightArmPulldown', 0.95],
+  ['machinePullover', 'Pull-over machine', 'Back', 'Machine', 'Beginner', 'straightArmPulldown', 1.4],
+  ['dbShrug', 'Shrugs haltères', 'Back', 'Dumbbells', 'Beginner', 'shrugs', 0.5],
+];
+for (const [id, name, category, equipment, difficulty, ref, coef] of VARIANTS) {
+  // Répartition provisoire : la vraie est écrite dans MUSCLE_MAP juste après.
+  const e = ex(id, name, category, [], [], equipment, difficulty);
+  e.refExercise = ref; e.refCoef = coef;
   EXERCISES.push(e);
 }
 
@@ -291,31 +351,71 @@ for (const e of IMPORTED) {
 // muscle par muscle (format « principaux | secondaires », total = 100 %).
 // Les exercices absents de la table gardent leur répartition d'origine.
 const MUSCLE_MAP = {
-  // Pectoraux
-  benchPress: 'chest 65, frontDelts 15 | triceps 20',
-  inclineBench: 'chest 55, frontDelts 25 | triceps 20',
-  declineBench: 'chest 72 | triceps 20, frontDelts 8',
-  dbBenchPress: 'chest 65, frontDelts 15 | triceps 20',
-  dbInclinePress: 'chest 55, frontDelts 25 | triceps 20',
-  dbFly: 'chest 85 | frontDelts 15',
-  cableFly: 'chest 85 | frontDelts 15',
-  pecDeck: 'chest 90 | frontDelts 10',
-  pushUp: 'chest 55, frontDelts 15 | triceps 20, abs 10',
-  dips: 'chest 50, triceps 30 | frontDelts 20',
-  machinePress: 'chest 65, frontDelts 15 | triceps 20',
-  pullover: 'chest 45, lats 35 | triceps 20',
-  svendPress: 'chest 80 | frontDelts 10, triceps 10',
-  landminePress: 'chest 45, frontDelts 35 | triceps 15, abs 5',
-  lo_smithBenchPress: 'chest 65, frontDelts 15 | triceps 20',
-  lo_smithDeclinePress: 'chest 72 | triceps 20, frontDelts 8',
-  lo_smithInclinePress: 'chest 55, frontDelts 25 | triceps 20',
-  custom_e8c04362: 'chest 75 | frontDelts 12, triceps 13',
-  custom_1ad5f699: 'chest 62, frontDelts 23 | triceps 15',
+  // Pectoraux (v6.7 : haut = faisceau claviculaire, bas = faisceau sternal).
+  // Plus le banc est incliné, plus le haut et le deltoïde antérieur prennent
+  // le relais ; à plat et en décliné, c'est le bas qui domine.
+  benchPress: 'lowerChest 40, upperChest 25, frontDelts 15 | triceps 20',
+  wideGripBench: 'lowerChest 45, upperChest 25, frontDelts 15 | triceps 15',
+  reverseGripBench: 'upperChest 40, lowerChest 20 | triceps 25, frontDelts 15',
+  floorPress: 'lowerChest 35, triceps 35 | upperChest 15, frontDelts 15',
+  inclineBench: 'upperChest 40, lowerChest 15, frontDelts 25 | triceps 20',
+  declineBench: 'lowerChest 62, upperChest 10 | triceps 20, frontDelts 8',
+  dbBenchPress: 'lowerChest 40, upperChest 25, frontDelts 15 | triceps 20',
+  dbInclinePress: 'upperChest 40, lowerChest 15, frontDelts 25 | triceps 20',
+  lowInclineDbPress: 'upperChest 40, lowerChest 25, frontDelts 15 | triceps 20',
+  dbDeclinePress: 'lowerChest 60, upperChest 8 | triceps 22, frontDelts 10',
+  dbSqueezePress: 'lowerChest 40, upperChest 25 | triceps 25, frontDelts 10',
+  dbFly: 'lowerChest 50, upperChest 35 | frontDelts 15',
+  inclineDbFly: 'upperChest 55, lowerChest 20 | frontDelts 25',
+  declineDbFly: 'lowerChest 72, upperChest 13 | frontDelts 15',
+  cableFly: 'lowerChest 50, upperChest 35 | frontDelts 15',
+  lowToHighCableFly: 'upperChest 58, lowerChest 17 | frontDelts 25',
+  highToLowCableFly: 'lowerChest 72, upperChest 13 | frontDelts 15',
+  inclineCableFly: 'upperChest 55, lowerChest 20 | frontDelts 25',
+  pecDeck: 'lowerChest 55, upperChest 35 | frontDelts 10',
+  pushUp: 'lowerChest 35, upperChest 20, frontDelts 15 | triceps 20, abs 10',
+  declinePushUp: 'upperChest 35, lowerChest 15, frontDelts 20 | triceps 20, abs 10',
+  inclinePushUp: 'lowerChest 45, upperChest 10, frontDelts 10 | triceps 25, abs 10',
+  dips: 'lowerChest 45, triceps 30 | frontDelts 20, upperChest 5',
+  machinePress: 'lowerChest 40, upperChest 25, frontDelts 15 | triceps 20',
+  declineMachinePress: 'lowerChest 58, upperChest 10 | triceps 22, frontDelts 10',
+  pullover: 'lowerChest 35, lats 35 | upperChest 10, triceps 20',
+  svendPress: 'upperChest 40, lowerChest 40 | frontDelts 10, triceps 10',
+  landminePress: 'upperChest 35, frontDelts 35 | lowerChest 10, triceps 15, abs 5',
+  lo_smithBenchPress: 'lowerChest 40, upperChest 25, frontDelts 15 | triceps 20',
+  lo_smithDeclinePress: 'lowerChest 62, upperChest 10 | triceps 20, frontDelts 8',
+  lo_smithInclinePress: 'upperChest 40, lowerChest 15, frontDelts 25 | triceps 20',
+  custom_e8c04362: 'lowerChest 45, upperChest 30 | frontDelts 12, triceps 13',
+  custom_93e720d5: 'upperChest 45, lowerChest 20, frontDelts 15 | triceps 20',
   // Dos
   pullUp: 'lats 55, biceps 15 | rhomboids 10, rearDelts 5, traps 5, forearms 10',
   chinUp: 'lats 50, biceps 25 | rhomboids 10, rearDelts 5, forearms 10',
   latPulldown: 'lats 55, biceps 15 | rhomboids 10, rearDelts 5, traps 5, forearms 10',
   custom_e1389208: 'lats 55, biceps 20 | rhomboids 10, rearDelts 5, forearms 10',
+  // Prise large : plus de grand dorsal, moins de biceps. Serrée / supination :
+  // plus d'amplitude en extension d'épaule et davantage de biceps.
+  wideGripPulldown: 'lats 60, biceps 10 | rhomboids 10, rearDelts 5, traps 5, forearms 10',
+  closeGripPulldown: 'lats 55, biceps 20 | rhomboids 10, rearDelts 5, forearms 10',
+  underhandPulldown: 'lats 50, biceps 25 | rhomboids 10, rearDelts 5, forearms 10',
+  singleArmPulldown: 'lats 65, biceps 15 | rhomboids 5, rearDelts 5, forearms 10',
+  wideGripPullUp: 'lats 60, biceps 10 | rhomboids 10, rearDelts 5, traps 5, forearms 10',
+  neutralPullUp: 'lats 50, biceps 20 | rhomboids 10, rearDelts 5, forearms 15',
+  // Rowings : prise serrée = grand dorsal (coudes le long du corps), prise
+  // large = haut du dos (rhomboïdes, trapèzes, deltoïdes postérieurs).
+  closeGripCableRow: 'lats 45, rhomboids 20 | traps 10, biceps 15, rearDelts 10',
+  wideGripCableRow: 'rhomboids 30, traps 15, rearDelts 15 | lats 20, biceps 10, forearms 10',
+  singleArmCableRow: 'lats 50, rhomboids 20 | biceps 15, rearDelts 10, obliques 5',
+  underhandBarbellRow: 'lats 40, rhomboids 15, biceps 15 | traps 10, rearDelts 5, lowerback 10, forearms 5',
+  wideGripBarbellRow: 'rhomboids 25, lats 20, traps 15, rearDelts 15 | biceps 10, lowerback 10, forearms 5',
+  sealRow: 'lats 40, rhomboids 25 | rearDelts 15, biceps 15, traps 5',
+  chestSupportedDbRow: 'lats 40, rhomboids 25 | rearDelts 15, biceps 15, traps 5',
+  meadowsRow: 'lats 50, rhomboids 15 | rearDelts 10, biceps 15, forearms 10',
+  wideGripTBarRow: 'rhomboids 30, lats 25, traps 15 | rearDelts 15, biceps 10, lowerback 5',
+  wideGripMachineRow: 'rhomboids 30, traps 15, rearDelts 15 | lats 25, biceps 10, forearms 5',
+  singleArmMachineRow: 'lats 50, rhomboids 20 | biceps 15, rearDelts 10, traps 5',
+  ropeStraightArmPulldown: 'lats 80 | triceps 10, rearDelts 5, abs 5',
+  machinePullover: 'lats 75 | lowerChest 10, triceps 10, abs 5',
+  dbShrug: 'traps 90 | forearms 10',
   barbellRow: 'lats 35, rhomboids 20, traps 10 | rearDelts 10, biceps 10, lowerback 10, forearms 5',
   pendlayRow: 'lats 35, rhomboids 20, traps 10 | rearDelts 10, biceps 10, lowerback 15',
   dbRow: 'lats 50, rhomboids 15 | biceps 15, rearDelts 10, forearms 10',
@@ -341,21 +441,23 @@ const MUSCLE_MAP = {
   cableLateralRaise: 'sideDelts 85 | traps 10, frontDelts 5',
   custom_d549dec2: 'sideDelts 80 | traps 15, frontDelts 5',
   lo_yRaiseIncline: 'sideDelts 45, traps 30 | rearDelts 15, frontDelts 10',
-  frontRaise: 'frontDelts 80 | sideDelts 10, chest 10',
+  frontRaise: 'frontDelts 80 | sideDelts 10, upperChest 10',
   plateFrontRaise: 'frontDelts 80 | sideDelts 5, abs 15',
   rearDeltFly: 'rearDelts 70 | rhomboids 20, traps 10',
   reversePecDeck: 'rearDelts 70 | rhomboids 20, traps 10',
   uprightRow: 'sideDelts 45, traps 35 | biceps 10, frontDelts 10',
   cubanRotation: 'rearDelts 70 | sideDelts 15, forearms 15',
   // Triceps
-  closeGripBench: 'triceps 55, chest 30 | frontDelts 15',
-  tricepsDips: 'triceps 70 | chest 20, frontDelts 10',
+  closeGripBench: 'triceps 55, lowerChest 20, upperChest 10 | frontDelts 15',
+  tricepsDips: 'triceps 70 | lowerChest 20, frontDelts 10',
   overheadExtension: 'triceps 90 | abs 10',
   kickback: 'triceps 95 | rearDelts 5',
   overheadCableExt: 'triceps 90 | abs 10',
-  diamondPushUp: 'triceps 60, chest 25 | frontDelts 15',
-  jmPress: 'triceps 75, chest 15 | frontDelts 10',
-  machineDips: 'triceps 70, chest 20 | frontDelts 10',
+  diamondPushUp: 'triceps 60, lowerChest 15, upperChest 10 | frontDelts 15',
+  jmPress: 'triceps 75, lowerChest 15 | frontDelts 10',
+  machineDips: 'triceps 70, lowerChest 20 | frontDelts 10',
+  tatePress: 'triceps 90 | lowerChest 10',
+  custom_30fb934c: 'triceps 95 | forearms 5',
   // Avant-bras
   farmersWalk: 'forearms 50 | traps 25, abs 15, obliques 10',
   deadHang: 'forearms 70 | lats 20, abs 10',
@@ -404,7 +506,7 @@ const MUSCLE_MAP = {
   catCow: 'lowerback 70 | abs 30',
   // Corps entier
   kettlebellSwing: 'glutes 40, hamstrings 25 | lowerback 15, frontDelts 10, abs 10',
-  burpee: 'quads 30, chest 25 | frontDelts 15, abs 15, calves 15',
+  burpee: 'quads 30, lowerChest 15, upperChest 10 | frontDelts 15, abs 15, calves 15',
   thruster: 'quads 35, frontDelts 30 | glutes 15, triceps 10, abs 10',
   cleanAndPress: 'quads 20, frontDelts 25, traps 15 | glutes 15, triceps 15, hamstrings 10',
   kbClean: 'glutes 30, traps 20, hamstrings 20 | forearms 15, frontDelts 15',
@@ -418,8 +520,8 @@ const MUSCLE_MAP = {
   rowingErg: 'lats 30, quads 25, hamstrings 15 | biceps 10, rhomboids 10, abs 10',
   assaultBike: 'quads 40, frontDelts 15 | hamstrings 20, calves 10, abs 15',
   jumpRope: 'calves 50 | frontDelts 15, forearms 15, abs 20',
-  manMaker: 'chest 25, lats 20, quads 20 | frontDelts 15, abs 20',
-  devilPress: 'frontDelts 30, quads 25, chest 20 | glutes 15, abs 10',
+  manMaker: 'lowerChest 15, upperChest 10, lats 20, quads 20 | frontDelts 15, abs 20',
+  devilPress: 'frontDelts 30, quads 25, lowerChest 10, upperChest 10 | glutes 15, abs 10',
 };
 const parseSide = (s) => (s || '').split(',').map((x) => x.trim()).filter(Boolean)
   .map((x) => { const [m, p] = x.split(/\s+/); return { m, p: +p }; });
@@ -429,6 +531,9 @@ for (const e of EXERCISES) {
     const [prim, sec] = spec.split('|');
     e.primaryMuscles = parseSide(prim);
     e.secondaryMuscles = parseSide(sec);
+  } else {
+    e.primaryMuscles = splitLegacyMuscles(e.primaryMuscles);
+    e.secondaryMuscles = splitLegacyMuscles(e.secondaryMuscles);
   }
 }
 
@@ -556,9 +661,25 @@ const EQUIP_BY_ID = {
   lo_smithInclinePress: ['smith', 'inclineBench'], lo_smithRDL: ['smith'],
   lo_smithRow: ['smith'], lo_smithShoulderPress: ['smith', 'bench'],
   lo_yRaiseIncline: ['dumbbells', 'inclineBench'],
-  custom_hipAdduction: ['machine'], custom_e8c04362: ['machine'], custom_1ad5f699: ['machine'],
+  custom_hipAdduction: ['machine'], custom_e8c04362: ['machine'], custom_93e720d5: ['machine'],
+  custom_30fb934c: ['dumbbells', 'bench'],
   custom_c6a2d0dd: ['cable'], custom_790bf953: ['machine'], custom_e1389208: ['cable'],
   custom_d549dec2: ['dumbbells'], custom_22a584ca: ['machine'],
+  // Variantes
+  lowInclineDbPress: ['dumbbells', 'inclineBench'], dbDeclinePress: ['dumbbells', 'bench'],
+  dbSqueezePress: ['dumbbells', 'bench'], inclineDbFly: ['dumbbells', 'inclineBench'],
+  declineDbFly: ['dumbbells', 'bench'], lowToHighCableFly: ['cable'], highToLowCableFly: ['cable'],
+  inclineCableFly: ['cable', 'inclineBench'], declineMachinePress: ['machine'],
+  wideGripBench: ['barbell', 'bench', 'rack'], reverseGripBench: ['barbell', 'bench', 'rack'],
+  floorPress: ['barbell', 'rack'], declinePushUp: ['bodyweight', 'bench'], inclinePushUp: ['bodyweight', 'bench'],
+  wideGripPulldown: ['cable', 'machine'], closeGripPulldown: ['cable', 'machine'],
+  underhandPulldown: ['cable', 'machine'], singleArmPulldown: ['cable'],
+  wideGripPullUp: ['pullupBar', 'bodyweight'], neutralPullUp: ['pullupBar', 'bodyweight'],
+  closeGripCableRow: ['cable', 'machine'], wideGripCableRow: ['cable', 'machine'], singleArmCableRow: ['cable'],
+  underhandBarbellRow: ['barbell'], wideGripBarbellRow: ['barbell'], sealRow: ['barbell', 'bench'],
+  chestSupportedDbRow: ['dumbbells', 'inclineBench'], meadowsRow: ['barbell', 'landmine'],
+  wideGripTBarRow: ['barbell', 'landmine'], wideGripMachineRow: ['machine'], singleArmMachineRow: ['machine'],
+  ropeStraightArmPulldown: ['cable', 'rope'], machinePullover: ['machine'], dbShrug: ['dumbbells'],
 };
 // Repli sur la grande famille si un exercice n'est pas dans la table.
 const EQUIP_FALLBACK = {
@@ -734,6 +855,43 @@ export const AKA = {
   jumpRope: ['Jump Rope'],
   manMaker: ['Man Maker'],
   devilPress: ['Devil Press'],
+
+  custom_93e720d5: ['Développé incliné machine', 'Incline Machine Press', 'Incline Chest Press Machine', 'Développé incliné convergent'],
+  custom_30fb934c: ['Barre au front haltères', 'Dumbbell Skull Crusher', 'Dumbbell Lying Triceps Extension', 'Barre au front'],
+  lowInclineDbPress: ['Low Incline Dumbbell Press', 'Développé incliné haltères'],
+  dbDeclinePress: ['Decline Dumbbell Press', 'Decline Dumbbell Bench Press'],
+  dbSqueezePress: ['Dumbbell Squeeze Press', 'Crush Press'],
+  inclineDbFly: ['Incline Dumbbell Fly', 'Écartés incliné'],
+  declineDbFly: ['Decline Dumbbell Fly'],
+  lowToHighCableFly: ['Low to High Cable Fly', 'Low Cable Fly', 'Écartés poulie basse', 'Cable Crossover haut des pecs'],
+  highToLowCableFly: ['High to Low Cable Fly', 'High Cable Crossover', 'Écartés poulie haute', 'Cable Crossover'],
+  inclineCableFly: ['Incline Cable Fly'],
+  declineMachinePress: ['Decline Machine Press', 'Machine Chest Press Decline', 'Decline Chest Press Machine'],
+  wideGripBench: ['Wide Grip Bench Press'],
+  reverseGripBench: ['Reverse Grip Bench Press'],
+  floorPress: ['Floor Press', 'Barbell Floor Press'],
+  declinePushUp: ['Decline Push-Up', 'Feet Elevated Push-Up'],
+  inclinePushUp: ['Incline Push-Up'],
+  wideGripPulldown: ['Wide Grip Lat Pulldown', 'Tirage poitrine prise large'],
+  closeGripPulldown: ['Close Grip Lat Pulldown', 'V-Bar Pulldown', 'Tirage vertical triangle'],
+  underhandPulldown: ['Reverse Grip Lat Pulldown', 'Underhand Pulldown', 'Tirage vertical prise inversée'],
+  singleArmPulldown: ['Single Arm Lat Pulldown', 'One Arm Pulldown'],
+  wideGripPullUp: ['Wide Grip Pull-Up'],
+  neutralPullUp: ['Neutral Grip Pull-Up', 'Hammer Grip Pull-Up'],
+  closeGripCableRow: ['Close Grip Seated Cable Row', 'V-Bar Cable Row', 'Tirage horizontal triangle'],
+  wideGripCableRow: ['Wide Grip Seated Cable Row', 'Wide Grip Cable Row'],
+  singleArmCableRow: ['Single Arm Cable Row', 'One Arm Seated Cable Row'],
+  underhandBarbellRow: ['Underhand Barbell Row', 'Reverse Grip Barbell Row', 'Yates Row'],
+  wideGripBarbellRow: ['Wide Grip Barbell Row'],
+  sealRow: ['Seal Row', 'Rowing allongé'],
+  chestSupportedDbRow: ['Chest Supported Dumbbell Row', 'Incline Dumbbell Row'],
+  meadowsRow: ['Meadows Row'],
+  wideGripTBarRow: ['Wide Grip T-Bar Row'],
+  wideGripMachineRow: ['Wide Grip Machine Row'],
+  singleArmMachineRow: ['Single Arm Machine Row', 'Iso-Lateral Row'],
+  ropeStraightArmPulldown: ['Rope Straight Arm Pulldown', 'Rope Pullover'],
+  machinePullover: ['Machine Pullover', 'Pullover Machine'],
+  dbShrug: ['Dumbbell Shrug', 'Shrugs haltères'],
 };
 
 // ============================================================

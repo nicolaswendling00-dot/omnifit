@@ -44,9 +44,11 @@ const FRONT = {
   traps: ['M67.6,53 C73,58 82,60.6 92,62.6 L80,65 C75,63 70.6,60 67.6,57 Z'],
   frontDelts: ['M80,64.6 C86,62 91.6,62.6 94.6,66 C96,73 94.6,81 91.6,88 C89,82 85,75.6 80.6,70.6 Z'],
   sideDelts: ['M92,62.6 C98.6,64.6 102,69 102,76.6 C102,82.6 99.6,87.6 96,90.6 L91.6,88 C94.6,81 96,73 94.6,66 C93.8,64.6 93,63.4 92,62.6 Z'],
-  chest: [
-    'M60.6,60.6 L80,64.6 C85.6,70.6 90.6,79 91.6,87.6 C88,92 80.6,94.6 72,94.6 C66,94.6 62,93 60.6,90.6 Z',
-  ],
+  // Pectoraux coupés en deux le long des fibres : faisceau claviculaire (haut,
+  // de la clavicule vers l'aisselle) et faisceau sternal (bas). Le contour
+  // extérieur est la même courbe qu'avant, scindée en son milieu.
+  upperChest: ['M60.6,60.6 L80,64.6 C82.8,67.6 85.45,71.2 87.53,75.13 C80,73.6 70,72.4 60.6,72.4 Z'],
+  lowerChest: ['M60.6,72.4 C70,72.4 80,73.6 87.53,75.13 C89.6,79.05 91.1,83.3 91.6,87.6 C88,92 80.6,94.6 72,94.6 C66,94.6 62,93 60.6,90.6 Z'],
   biceps: ['M87.6,86.4 C94,84.4 100,89 101.4,97 C102.4,104 100.6,110 97.6,113 L92.6,113 C89.6,105 87.6,96 87.6,86.4 Z'],
   triceps: ['M101.4,89.6 C105.4,92 107.8,97.6 107.6,104.4 C107.4,109 106.4,112 104.6,114 L100.2,113.6 C102.6,108 103.4,99.6 101.4,89.6 Z'],
   forearms: ARM_FOREARM,
@@ -160,7 +162,7 @@ export const BACK_MUSCLES = Object.keys(BACK);
 // dessous, et il ne reste qu'une seule ligne à chaque frontière (au lieu de
 // deux contours qui se croisent).
 const DRAW_ORDER = {
-  f: ['chest', 'obliques', 'abs', 'traps', 'frontDelts', 'sideDelts', 'triceps', 'biceps', 'forearms', 'adductors', 'quads', 'calves'],
+  f: ['lowerChest', 'upperChest', 'obliques', 'abs', 'traps', 'frontDelts', 'sideDelts', 'triceps', 'biceps', 'forearms', 'adductors', 'quads', 'calves'],
   b: ['lats', 'lowerback', 'traps', 'rhomboids', 'rearDelts', 'sideDelts', 'triceps', 'forearms', 'glutes', 'adductors', 'hamstrings', 'calves'],
 };
 

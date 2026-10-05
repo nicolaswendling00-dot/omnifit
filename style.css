@@ -1115,8 +1115,10 @@ body[data-page="1"] #fab-nutrition-wrap { display: flex; }
 .num.up, b.up { color: var(--success); }
 .num.down, b.down { color: var(--danger); }
 .num.flat, b.flat { color: var(--text-2); }
-.wd-flip { height: 340px; }
-.rank-face.rank-back.wd-back { justify-content: flex-start; align-items: stretch; gap: 12px; padding: 16px 18px; border: 1px solid var(--line-2); text-align: left; }
+/* Plus haute que la carte de la fiche d'exercice : spécificité renforcée, sinon
+   la hauteur de .rank-flip (déclarée plus bas) l'emporte et le verso déborde. */
+.rank-flip.wd-flip { height: 312px; }
+.rank-face.rank-back.wd-back { justify-content: flex-start; align-items: stretch; gap: 12px; padding: 18px 18px 20px; border: 1px solid var(--line-2); text-align: left; }
 .wd-back-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
 .wd-back-grid .eyebrow { margin-bottom: 2px; font-size: 0.56rem; }
 .wd-back-grid b { font-size: 1.3rem; line-height: 1.05; }

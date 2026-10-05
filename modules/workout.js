@@ -92,7 +92,8 @@ function exerciseRank(exerciseId, lpMap) {
 }
 // Synonymes anglais/familiers par muscle et catégorie (recherche inclusive)
 const MUSCLE_SYN = {
-  chest: 'chest pecs pectoraux',
+  upperChest: 'chest pecs pectoraux haut upper chest clavicular',
+  lowerChest: 'chest pecs pectoraux bas lower chest sternal',
   frontDelts: 'shoulders epaules delts deltoides anterieurs front delt',
   sideDelts: 'shoulders epaules delts deltoides lateraux side delt',
   rearDelts: 'shoulders epaules delts deltoides posterieurs rear delt',

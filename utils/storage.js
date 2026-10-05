@@ -1,5 +1,5 @@
 // OmniFit — StorageManager : persistance localStorage avec merge profond
-import { splitLegacyMuscles } from '../data/exercises.js';
+import { splitLegacyMuscles, EXERCISES } from '../data/exercises.js';
 
 const STORAGE_KEY = 'omniffit_userData';
 
@@ -14,7 +14,7 @@ export function todayISO(offset = 0) {
 
 // Séries hebdomadaires visées par muscle (anatomie détaillée v6.1).
 export const DEFAULT_VOLUME_GOALS = {
-  chest: 12, frontDelts: 6, sideDelts: 10, rearDelts: 8,
+  upperChest: 10, lowerChest: 10, frontDelts: 6, sideDelts: 10, rearDelts: 8,
   traps: 6, rhomboids: 8, lats: 12, lowerback: 4,
   biceps: 8, triceps: 8, forearms: 4, abs: 8, obliques: 4,
   glutes: 10, quads: 12, hamstrings: 8, adductors: 4, calves: 6,
@@ -23,9 +23,35 @@ export const DEFAULT_VOLUME_GOALS = {
 // v6.1 : les grands groupes « épaules », « dos » et « abdos » sont éclatés en
 // muscles fins. On convertit tout ce que l'utilisateur a pu enregistrer avec
 // l'ancienne anatomie. Sans effet sur des données déjà converties.
+// Identifiants d'exercices remplacés : l'ancien est réécrit partout.
+// v6.7 : la « Machine Chest Press Incline » intégrée (jamais utilisée) cède la
+// place à celle de la bibliothèque perso, qui porte déjà l'historique.
+const ID_RENAMES = { custom_1ad5f699: 'custom_93e720d5' };
+
+// Exercices perso devenus des exercices de la base (même identifiant) : on
+// retire le doublon perso, la base prend le relais avec le même historique.
+// Les anciens identifiants renommés sont réécrits dans les séances, routines
+// et réglages par exercice.
+function migrateExerciseIds(data) {
+  const s = data.settings;
+  const builtIn = new Set(EXERCISES.map((e) => e.id));
+  if (Array.isArray(s.customExercises)) s.customExercises = s.customExercises.filter((e) => !builtIn.has(e.id));
+  const ren = (id) => ID_RENAMES[id] || id;
+  for (const w of data.workouts || []) for (const wx of w.exercises || []) wx.exerciseId = ren(wx.exerciseId);
+  for (const r of data.routines || []) if (Array.isArray(r.exercises)) r.exercises = r.exercises.map((x) => (typeof x === 'string' ? ren(x) : x));
+  for (const k of ['exerciseNames', 'exerciseMuscleOverrides', 'exerciseEquip', 'exerciseRefs', 'restByExercise']) {
+    const m = s[k];
+    if (!m || typeof m !== 'object') continue;
+    for (const [from, to] of Object.entries(ID_RENAMES)) {
+      if (from in m) { if (!(to in m)) m[to] = m[from]; delete m[from]; }
+    }
+  }
+}
+
 export function migrateMuscleData(data) {
   const s = data && data.settings;
   if (!s) return data;
+  migrateExerciseIds(data);
   for (const e of s.customExercises || []) {
     e.primaryMuscles = splitLegacyMuscles(e.primaryMuscles);
     e.secondaryMuscles = splitLegacyMuscles(e.secondaryMuscles);
@@ -36,7 +62,7 @@ export function migrateMuscleData(data) {
   // antérieur sur des élévations latérales). On retire donc la surcharge ; le
   // nom personnalisé, stocké à part, est conservé.
   const ov = s.exerciseMuscleOverrides || {};
-  const legacy = (l) => (l || []).some((x) => ['shoulders', 'back', 'core'].includes(x.m));
+  const legacy = (l) => (l || []).some((x) => ['shoulders', 'back', 'core', 'chest'].includes(x.m));
   for (const id of Object.keys(ov)) {
     if (legacy(ov[id].primaryMuscles) || legacy(ov[id].secondaryMuscles)) delete ov[id];
   }
@@ -46,7 +72,14 @@ export function migrateMuscleData(data) {
   // celles que l'utilisateur avait réglées sur les muscles inchangés.
   if (s.volumeGoals) {
     const vg = s.volumeGoals;
-    if ('shoulders' in vg || 'back' in vg || 'core' in vg || !('lats' in vg)) {
+    // v6.7 : un objectif « pectoraux » s'applique au haut ET au bas (un
+    // développé couché compte une série pour chacun).
+    if ('chest' in vg) {
+      if (!('upperChest' in vg)) vg.upperChest = vg.chest;
+      if (!('lowerChest' in vg)) vg.lowerChest = vg.chest;
+      delete vg.chest;
+    }
+    if ('shoulders' in vg || 'back' in vg || 'core' in vg || !('lats' in vg) || !('upperChest' in vg)) {
       for (const k of ['shoulders', 'back', 'core']) delete vg[k];
       for (const [k, v] of Object.entries(DEFAULT_VOLUME_GOALS)) if (!(k in vg)) vg[k] = v;
     }

@@ -207,7 +207,7 @@ clearOverlays();
 overlay.querySelector('#s-finish').click();
 const modal = document.querySelector('.modal');
 assert(modal.textContent.includes('atténuation'), 'Résumé : coefficients d\'atténuation');
-assert(modal.textContent.includes('0.65'), 'Résumé : atténuation Pectoraux ≈ 0.65 (chest 65% principal, anatomie v6.1)');
+assert(modal.textContent.includes('Pectoraux (bas)') && modal.textContent.includes('0.40'), 'Résumé : atténuation Pectoraux (bas) ≈ 0.40 (v6.7 : haut / bas séparés)');
 assert(modal.textContent.includes('Séries'), 'Résumé : nb de séries (volume retiré des résultats)');
 assert(!modal.textContent.includes('640'), 'Résumé : volume total NON affiché');
 assert(modal.querySelector('.volume-table'), 'Résumé : table par muscle présente');
@@ -899,7 +899,7 @@ console.log('== v5.7 : materiel, editeur d\'exercice ==');
 {
   const exdata = await import('./data/exercises.js');
   // ---- Base : materiel renseigne partout, exos perso integres
-  assert(exdata.EXERCISES.length === 169, 'Base : 169 exercices (152 + 17 repris de la bibliotheque perso)');
+  assert(exdata.EXERCISES.length === 204, 'Base : 204 exercices (152 + 18 repris de la bibliotheque perso + 34 variantes)');
   assert(exdata.EXERCISES.every((e) => Array.isArray(e.equip) && e.equip.length), 'Base : materiel renseigne pour chaque exercice');
   const eqIds = new Set(exdata.EQUIPMENT.map((q) => q.id));
   assert(exdata.EXERCISES.every((e) => e.equip.every((q) => eqIds.has(q))), 'Base : aucun materiel inconnu');
@@ -956,7 +956,7 @@ console.log('== v5.7 : materiel, editeur d\'exercice ==');
   // Muscles : plus de cases a cocher
   edit.querySelector('[data-open="prim"]').click();
   const musSheet = [...document.querySelectorAll('.sheet')].find((s) => s.querySelector('.mus-edit-row'));
-  assert(musSheet.querySelectorAll('.mus-edit-row').length === 18, 'Muscles : les 18 muscles sont proposes');
+  assert(musSheet.querySelectorAll('.mus-edit-row').length === 19, 'Muscles : les 19 muscles sont proposes');
   assert(!musSheet.querySelector('input[type="checkbox"]'), 'Muscles : plus de case a cocher');
   assert(musSheet.querySelectorAll('.mus-edit-row.on').length > 0, 'Muscles : un pourcentage non nul allume la ligne');
   const quadInput = musSheet.querySelector('.mus-edit-p[data-m="quads"]');
@@ -1097,7 +1097,7 @@ console.log('== v6.1 : anatomie detaillee et carte du corps ==');
 {
   const exd = await import('./data/exercises.js');
   const ids = new Set(exd.MUSCLES.map((m) => m.id));
-  assert(exd.MUSCLES.length === 18, 'Anatomie : 18 muscles');
+  assert(exd.MUSCLES.length === 19, 'Anatomie : 19 muscles (pecs haut / bas)');
   for (const m of ['frontDelts', 'sideDelts', 'rearDelts', 'traps', 'rhomboids', 'lats', 'abs', 'obliques', 'adductors']) {
     assert(ids.has(m), `Anatomie : ${m} present`);
   }
@@ -1128,12 +1128,13 @@ console.log('== v6.1 : anatomie detaillee et carte du corps ==');
   const cx = old.settings.customExercises[0];
   assert([...cx.primaryMuscles, ...cx.secondaryMuscles].every((x) => ids.has(x.m)), 'Conversion : exercices perso convertis');
   assert(!old.settings.exerciseMuscleOverrides.benchPress, 'Conversion : ancienne repartition modifiee d\'un exo de la base remplacee par la nouvelle repartition fine');
-  assert(old.settings.volumeGoals.chest === 16 && !('back' in old.settings.volumeGoals) && old.settings.volumeGoals.lats > 0,
+  assert(old.settings.volumeGoals.upperChest === 16 && old.settings.volumeGoals.lowerChest === 16 && !('chest' in old.settings.volumeGoals)
+    && !('back' in old.settings.volumeGoals) && old.settings.volumeGoals.lats > 0,
     'Conversion : objectif personnalise garde, anciens groupes remplaces');
 
   // Carte du corps
   const bm = await import('./utils/bodyMap.js');
-  const svg = bm.bodyMapSVG({ chest: 1, lats: 0.5 }, { size: 100 });
+  const svg = bm.bodyMapSVG({ upperChest: 1, lats: 0.5 }, { size: 100 });
   assert(document.getElementById('bm-sprite'), 'Carte : sprite partage injecte');
   bm.bodyMapSVG({}, { size: 50 });
   assert(document.querySelectorAll('#bm-sprite').length === 1, 'Carte : pas de doublon de sprite');
@@ -1153,7 +1154,7 @@ console.log('== v6.1 : anatomie detaillee et carte du corps ==');
   assert(cell.querySelector('.cal-dnum').textContent === String(Number(todayISO(-1).slice(8))), 'Calendrier : numero du jour par-dessus');
   assert(!cell.querySelector('.cal-mus'), 'Calendrier : plus de libelle de muscle');
   const quadFill = cell.querySelector('use[href="#bm-f-quads"]').getAttribute('fill');
-  const chestFill = cell.querySelector('use[href="#bm-f-chest"]').getAttribute('fill');
+  const chestFill = cell.querySelector('use[href="#bm-f-lowerChest"]').getAttribute('fill');
   assert(quadFill === bm.intensityColor(1), 'Calendrier : squat -> quadriceps au plus fort');
   assert(chestFill === 'var(--body-muscle)', 'Calendrier : muscle non travaille non colore');
   assert(!pages.workout.querySelector('.cal-day:not(.has-session) svg'), 'Calendrier : jour sans seance sans silhouette');
@@ -1193,7 +1194,46 @@ console.log('== v6.1 : anatomie detaillee et carte du corps ==');
   assert(vh.querySelector('.bm-week svg.body-map'), 'Volume hebdo : carte du corps de la semaine');
   const groups = [...vh.querySelectorAll('.vol-group')].map((g) => g.textContent.trim());
   assert(groups.join(',') === 'Pectoraux,Épaules,Dos,Bras,Tronc,Jambes', `Volume hebdo : muscles groupes par zone (${groups.join(',')})`);
-  assert(vh.querySelectorAll('.vol-row').length === 18, 'Volume hebdo : une ligne par muscle');
+  assert(vh.querySelectorAll('.vol-row').length === 19, 'Volume hebdo : une ligne par muscle');
+}
+
+console.log('== v6.7 : pecs haut / bas, variantes, exercices perso integres ==');
+{
+  const exd = await import('./data/exercises.js');
+  const byId = (id) => exd.EXERCISES.find((e) => e.id === id);
+  const share = (e, m) => [...e.primaryMuscles, ...e.secondaryMuscles].filter((x) => x.m === m).reduce((a, x) => a + x.p, 0);
+  assert(share(byId('inclineBench'), 'upperChest') > share(byId('inclineBench'), 'lowerChest'), 'Incline : surtout le haut des pecs');
+  assert(share(byId('declineBench'), 'lowerChest') > share(byId('declineBench'), 'upperChest'), 'Decline : surtout le bas des pecs');
+  assert(share(byId('dips'), 'lowerChest') > share(byId('dips'), 'upperChest'), 'Dips : bas des pecs');
+  assert(share(byId('lowToHighCableFly'), 'upperChest') > 50 && share(byId('highToLowCableFly'), 'lowerChest') > 50, 'Ecartes poulie : angle -> faisceau');
+  assert(share(byId('wideGripCableRow'), 'rhomboids') > share(byId('closeGripCableRow'), 'rhomboids'), 'Rowing prise large : plus de haut du dos');
+  assert(share(byId('underhandPulldown'), 'biceps') > share(byId('wideGripPulldown'), 'biceps'), 'Tirage supination : plus de biceps');
+  const stds = JSON.parse(readFileSync(new URL('./standards.json', import.meta.url), 'utf8'));
+  const { resolveStandardLevels } = await import('./utils/ranks.js');
+  const withRef = exd.EXERCISES.filter((e) => e.refExercise);
+  assert(withRef.length >= 40, `Variantes : classement par reference (${withRef.length})`);
+  assert(withRef.every((e) => resolveStandardLevels(e.refExercise, stds) && e.refCoef > 0), 'Variantes : chaque reference a des standards');
+  assert(byId('custom_93e720d5') && byId('custom_93e720d5').refExercise === 'machinePress', 'Machine Chest Press Incline : integree, classee via la presse machine');
+  assert(byId('custom_30fb934c') && byId('custom_30fb934c').refExercise === 'skullCrusher', 'Skull Crusher Halteres : integre, classe via la barre au front');
+  assert(!byId('custom_1ad5f699'), 'Ancien doublon de la presse inclinee retire');
+  const conv = exd.splitLegacyMuscles([{ m: 'chest', p: 80 }, { m: 'triceps', p: 20 }]);
+  assert(conv.find((x) => x.m === 'lowerChest').p === 48 && conv.find((x) => x.m === 'upperChest').p === 32, 'Conversion : ancien « chest » -> bas 60 % / haut 40 %');
+  const stg = await import('./utils/storage.js');
+  const d = { settings: {
+    customExercises: [{ id: 'custom_30fb934c', name: 'x', primaryMuscles: [{ m: 'triceps', p: 100 }], secondaryMuscles: [] },
+      { id: 'custom_keep', name: 'y', primaryMuscles: [{ m: 'chest', p: 100 }], secondaryMuscles: [] }],
+    exerciseNames: { custom_1ad5f699: 'Mon incline' }, volumeGoals: { chest: 14, lats: 12 },
+  }, workouts: [{ id: 'w', date: '2026-01-01', exercises: [{ exerciseId: 'custom_1ad5f699', sets: [] }] }],
+  routines: [{ id: 'r', name: 'P', exercises: ['custom_1ad5f699', 'benchPress'] }] };
+  stg.migrateMuscleData(d);
+  assert(d.settings.customExercises.length === 1 && d.settings.customExercises[0].id === 'custom_keep', 'Migration : exercice perso devenu integre retire (doublon)');
+  assert(d.settings.customExercises[0].primaryMuscles.every((x) => x.m !== 'chest'), 'Migration : exercice perso « chest » converti');
+  assert(d.workouts[0].exercises[0].exerciseId === 'custom_93e720d5' && d.routines[0].exercises[0] === 'custom_93e720d5', 'Migration : ancien identifiant renomme (seances, routines)');
+  assert(d.settings.exerciseNames.custom_93e720d5 === 'Mon incline' && !d.settings.exerciseNames.custom_1ad5f699, 'Migration : nom perso suit le renommage');
+  assert(d.settings.volumeGoals.upperChest === 14 && d.settings.volumeGoals.lowerChest === 14, 'Migration : objectif pecs reporte sur haut et bas');
+  const bm = await import('./utils/bodyMap.js');
+  bm.bodyMapSVG({}, { size: 80 });
+  assert(document.getElementById('bm-f-upperChest') && document.getElementById('bm-f-lowerChest') && !document.getElementById('bm-f-chest'), 'Carte : pecs dessines en deux zones');
 }
 
 console.log('== v6.2 : LP totaux, panneaux, detail de seance ==');
