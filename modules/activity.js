@@ -1,9 +1,7 @@
 // OmniFit — PAGE 3 : Activité (pas)
 import { store, todayISO, parseStepsPayload } from '../utils/storage.js';
-import { calculateTrend } from '../utils/math.js';
-import { el, icons, openModal, openSheet, toast, ringSVG, fmtDateShort, haptic, makeChart, attachSwipeToDelete } from '../utils/ui.js';
+import { el, icons, openModal, openSheet, toast, ringSVG, fmtDateShort, haptic } from '../utils/ui.js';
 
-let stepsChart = null;
 let viewDays = 7;
 const stepGoal = () => store.userData.settings.stepsGoal || 10000;
 
@@ -51,14 +49,24 @@ function openStepGoalModal(rerender) {
 
 function openLogStepsModal(rerender, prefill = null) {
   const form = el(`<div class="field-stack">
-    <label class="field"><span>Nombre de pas</span><input id="st-count" type="number" inputmode="numeric" min="0" placeholder="8500" value="${prefill ? prefill.count : ''}" autofocus></label>
+    <label class="field"><span>Nombre de pas</span><input id="st-count" type="number" inputmode="numeric" min="0" placeholder="8500" value="${prefill && prefill.count != null ? prefill.count : ''}" autofocus></label>
     <label class="field"><span>Date</span><input id="st-date" type="date" value="${prefill ? prefill.date : todayISO()}"></label>
   </div>`);
   openModal({
-    title: prefill ? 'Modifier les pas' : 'Log pas',
+    title: prefill ? `Pas · ${fmtDateShort(prefill.date)}` : 'Ajouter des pas',
     content: form,
     actions: [
-      { label: 'Annuler' },
+      prefill && prefill.count != null
+        ? {
+          label: 'Supprimer', variant: 'btn-danger-soft',
+          onClick: () => {
+            store.removeStepsLog(prefill.date);
+            haptic();
+            toast('Relevé supprimé', 'success');
+            rerender();
+          },
+        }
+        : { label: 'Annuler' },
       {
         label: 'Enregistrer', variant: 'btn-primary',
         onClick: (body) => {
@@ -75,52 +83,46 @@ function openLogStepsModal(rerender, prefill = null) {
   });
 }
 
-function renderChart(canvas) {
-  const days = [...Array(viewDays)].map((_, i) => todayISO(i - viewDays + 1));
-  const data = days.map((d) => store.userData.steps.byDate[d] || 0);
-  const labels = viewDays <= 30
-    ? days.map((d) => d.slice(8) + '/' + d.slice(5, 7))
-    : days.map((d, i) => (i % 14 === 0 ? d.slice(8) + '/' + d.slice(5, 7) : ''));
-
-  stepsChart = makeChart(canvas, {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [{
-        label: 'Pas',
-        data,
-        backgroundColor: data.map((v, i) => (v >= stepGoalFor(days[i]) ? 'rgba(16,185,129,0.65)' : 'rgba(0,217,255,0.55)')),
-        borderRadius: 4,
-      }],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { ticks: { color: '#9CA3AF', font: { size: 8 }, maxRotation: 0 }, grid: { display: false } },
-        y: { min: 0, suggestedMax: 15000, ticks: { color: '#9CA3AF', font: { size: 9 } }, grid: { color: 'rgba(0,217,255,0.06)' } },
-      },
-    },
-  }, stepsChart);
+// Série en cours : jours consécutifs à l'objectif. Aujourd'hui compte s'il
+// est déjà atteint ; sinon la série court jusqu'à hier (la journée n'est pas
+// finie, on ne la casse pas).
+function goalStreak() {
+  const byDate = store.userData.steps.byDate;
+  let n = 0;
+  let i = (byDate[todayISO()] || 0) >= stepGoalFor(todayISO()) ? 0 : -1;
+  for (; i > -400; i--) {
+    const d = todayISO(i);
+    if ((byDate[d] || 0) >= stepGoalFor(d)) n++; else break;
+  }
+  return n;
 }
 
-function monthStats() {
-  const byDate = store.userData.steps.byDate;
-  const monthDays = [...Array(30)].map((_, i) => todayISO(i - 29));
-  const prevMonthDays = [...Array(30)].map((_, i) => todayISO(i - 59));
-  const vals = monthDays.map((d) => byDate[d] || 0);
-  const prevVals = prevMonthDays.map((d) => byDate[d] || 0);
-  const last7 = [...Array(7)].map((_, i) => byDate[todayISO(i - 6)] || 0);
+const DAY_LETTERS = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
+const kSteps = (v) => (v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1).replace('.', ',')}k` : String(v));
 
-  const weekAvg = Math.round(last7.reduce((a, b) => a + b, 0) / 7);
-  let record = { date: '—', v: 0 };
-  monthDays.forEach((d) => { const v = byDate[d] || 0; if (v > record.v) record = { date: d, v }; });
-  const activeDays = monthDays.filter((d) => (byDate[d] || 0) >= stepGoalFor(d)).length;
-  const sumCur = vals.reduce((a, b) => a + b, 0);
-  const sumPrev = prevVals.reduce((a, b) => a + b, 0);
-  const trend = calculateTrend(sumCur, sumPrev);
-  return { weekAvg, record, activeDays, trend };
+// Histogramme en HTML (pas de Chart.js) : une barre par jour, ligne
+// pointillée à l'objectif, barre verte quand l'objectif est atteint.
+// Toucher une barre ouvre la saisie de ce jour.
+function barsHTML(days) {
+  const byDate = store.userData.steps.byDate;
+  const vals = days.map((d) => byDate[d] || 0);
+  const goal = stepGoal();
+  const max = Math.max(goal * 1.2, ...vals) || 1;
+  const week = days.length <= 7;
+  return `<div class="sb-plot${week ? ' sb-week' : ''}" style="--goal:${(goal / max).toFixed(3)}">
+    <div class="sb-goal"></div>
+    ${days.map((d, i) => {
+    const v = vals[i];
+    const hit = v >= stepGoalFor(d);
+    const dt = new Date(d + 'T12:00:00');
+    const lbl = week ? DAY_LETTERS[dt.getDay()] : ((days.length - 1 - i) % 7 === 0 ? String(dt.getDate()) : '');
+    return `<button type="button" class="sb-col${d === todayISO() ? ' today' : ''}" data-date="${d}" aria-label="${fmtDateShort(d)} : ${v.toLocaleString('fr-FR')} pas">
+        ${week ? `<span class="sb-val">${v ? kSteps(v) : ''}</span>` : ''}
+        <span class="sb-track"><span class="sb-bar${hit ? ' hit' : ''}" style="height:${v ? Math.max(3, (v / max) * 100).toFixed(1) : 0}%"></span></span>
+        <span class="sb-day">${lbl}</span>
+      </button>`;
+  }).join('')}
+  </div>`;
 }
 
 // Applique une liste d'entrées de pas et notifie.
@@ -236,96 +238,68 @@ function openStepsGuide(rerender) {
 export function render(container) {
   const rerender = () => render(container);
   const today = todayISO();
-  const steps = store.userData.steps.byDate[today] || 0;
-  const { weekAvg, record, activeDays, trend } = monthStats();
-
-  const last14 = [...Array(14)].map((_, i) => todayISO(-i));
+  const byDate = store.userData.steps.byDate;
+  const steps = byDate[today] || 0;
+  const goal = stepGoal();
+  const days = [...Array(viewDays)].map((_, i) => todayISO(i - viewDays + 1));
+  const logged = days.filter((d) => byDate[d] != null);
+  const avg = logged.length ? Math.round(logged.reduce((acc, d) => acc + byDate[d], 0) / logged.length) : 0;
+  const hits = days.filter((d) => (byDate[d] || 0) >= stepGoalFor(d)).length;
+  const best = Math.max(0, ...days.map((d) => byDate[d] || 0));
+  const streak = goalStreak();
+  const left = Math.max(0, goal - steps);
 
   container.innerHTML = '';
   container.appendChild(el(`
-    <div>
+    <div class="steps-page">
       <div class="page-title page-title-actions">
         <h1>Activité</h1>
         <div class="title-actions">
-          <button class="btn btn-ghost btn-sm" id="btn-import-steps" title="Importer les pas depuis Santé">${icons.download}</button>
-          <button class="btn btn-ghost btn-sm" id="btn-step-goal">${icons.edit} Objectif</button>
-          <button class="btn btn-primary btn-sm" id="btn-log-steps">${icons.plus} Log</button>
+          <button class="btn btn-ghost btn-sm" id="btn-import-steps" title="Importer les pas depuis Santé" aria-label="Importer les pas depuis Santé">${icons.download}</button>
+          <button class="btn btn-primary btn-sm" id="btn-log-steps" aria-label="Ajouter des pas">${icons.plus}</button>
         </div>
       </div>
 
       <div class="card card-glow steps-hero">
-        ${ringSVG({ size: 168, stroke: 13, progress: steps / stepGoal(), gradient: true, label: steps.toLocaleString('fr-FR'), sub: `/ ${stepGoal().toLocaleString('fr-FR')} pas` })}
-        <div class="steps-remaining">${steps >= stepGoal() ? 'Objectif atteint 🎯' : `${(stepGoal() - steps).toLocaleString('fr-FR')} pas restants`}</div>
+        <button type="button" class="steps-ring" id="btn-step-goal" aria-label="Modifier l'objectif de pas">
+          ${ringSVG({ size: 148, stroke: 12, progress: steps / goal, gradient: true, label: steps.toLocaleString('fr-FR'), sub: `/ ${goal.toLocaleString('fr-FR')}` })}
+        </button>
+        <div class="steps-kpis">
+          <div class="steps-kpi"><span class="eyebrow">${left ? 'Restants' : 'Objectif'}</span><b class="num${left ? '' : ' ok'}">${left ? left.toLocaleString('fr-FR') : 'Atteint'}</b></div>
+          <div class="steps-kpi"><span class="eyebrow">Série</span><b class="num">${streak}<small> j</small></b></div>
+          <div class="steps-kpi"><span class="eyebrow">Moyenne ${viewDays} j</span><b class="num">${avg.toLocaleString('fr-FR')}</b></div>
+        </div>
       </div>
 
-      <div class="card">
-        <div class="card-row" style="margin-bottom:8px">
-          <h3>Historique</h3>
-          <div class="segment" style="max-width:220px" id="view-toggle">
+      <div class="card steps-bars">
+        <div class="card-row">
+          <h3>${viewDays === 7 ? '7 derniers jours' : '30 derniers jours'}</h3>
+          <div class="segment" id="view-toggle">
             <button data-d="7" class="${viewDays === 7 ? 'active' : ''}">7 j</button>
             <button data-d="30" class="${viewDays === 30 ? 'active' : ''}">30 j</button>
-            <button data-d="180" class="${viewDays === 180 ? 'active' : ''}">6 mois</button>
           </div>
         </div>
-        <div class="chart-wrap" style="height:190px"><canvas id="steps-chart"></canvas></div>
-      </div>
-
-      <div class="grid-2">
-        <div class="card" style="margin:0"><div class="muted">Moyenne hebdo</div><div class="num">${weekAvg.toLocaleString('fr-FR')}</div></div>
-        <div class="card" style="margin:0"><div class="muted">Record 30 j</div><div class="num">${record.v.toLocaleString('fr-FR')}</div></div>
-        <div class="card" style="margin:0"><div class="muted">Jours actifs</div><div class="num">${activeDays}</div></div>
-        <div class="card" style="margin:0"><div class="muted">Tendance</div><div class="num" style="color:${trend >= 0 ? 'var(--success)' : 'var(--danger)'}">${trend >= 0 ? '+' : ''}${trend}%</div></div>
-      </div>
-
-      <div class="card" style="margin-top:var(--space)">
-        <h3>14 derniers jours</h3>
-        <div id="steps-list"></div>
+        ${barsHTML(days)}
+        <div class="sb-foot">
+          <span><b class="num">${hits}</b> / ${viewDays} jours à l'objectif</span>
+          <span>Record <b class="num">${best.toLocaleString('fr-FR')}</b></span>
+        </div>
       </div>
     </div>`));
-
-  const list = container.querySelector('#steps-list');
-  let hasAny = false;
-  last14.forEach((d, i) => {
-    const v = store.userData.steps.byDate[d];
-    if (v == null) return;
-    hasAny = true;
-    const prev = store.userData.steps.byDate[todayISO(-i - 1)];
-    const delta = prev != null ? v - prev : null;
-    // Glisser vers la gauche révèle la poubelle, comme pour un repas.
-    const item = el(`<div class="swipe-row" data-date="${d}">
-      <button class="swipe-del" data-del aria-label="Supprimer le relevé">${icons.trash}</button>
-      <div class="steps-list-item swipe-content">
-        <span>${fmtDateShort(d)}</span>
-        <span>
-          <span class="num">${v.toLocaleString('fr-FR')}</span>
-          ${delta != null ? `<span class="${delta >= 0 ? 'delta-up' : 'delta-down'}"> ${delta >= 0 ? '+' : ''}${delta.toLocaleString('fr-FR')}</span>` : ''}
-        </span>
-      </div>
-    </div>`);
-    item.querySelector('.swipe-content').addEventListener('click', () => {
-      if (item.classList.contains('swiped')) return; // poubelle ouverte : on ne modifie pas
-      openLogStepsModal(rerender, { date: d, count: v });
-    });
-    item.querySelector('[data-del]').addEventListener('click', () => {
-      store.removeStepsLog(d);
-      haptic();
-      toast('Relevé supprimé', 'success');
-      rerender();
-    });
-    list.appendChild(item);
-  });
-  if (!hasAny) list.innerHTML = '<div class="empty-state">Aucun log de pas.</div>';
-  attachSwipeToDelete(list, { rowSelector: '.swipe-row', contentSelector: '.swipe-content' });
 
   container.querySelector('#btn-log-steps').addEventListener('click', () => openLogStepsModal(rerender));
   container.querySelector('#btn-step-goal').addEventListener('click', () => openStepGoalModal(rerender));
   container.querySelector('#btn-import-steps').addEventListener('click', () => importStepsFromClipboard(rerender));
   container.querySelector('#view-toggle').addEventListener('click', (e) => {
-    const b = e.target.closest('button');
-    if (!b) return;
-    viewDays = +b.dataset.d;
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    viewDays = +btn.dataset.d;
     rerender();
   });
-
-  renderChart(container.querySelector('#steps-chart'));
+  container.querySelector('.sb-plot').addEventListener('click', (e) => {
+    const col = e.target.closest('.sb-col');
+    if (!col) return;
+    const d = col.dataset.date;
+    openLogStepsModal(rerender, { date: d, count: byDate[d] != null ? byDate[d] : null });
+  });
 }

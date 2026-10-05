@@ -91,7 +91,9 @@ assert(pages.workout.querySelector('#calendar-host .cal-grid'), 'Workout : calen
 assert(pages.workout.querySelectorAll('#calendar-host .cal-grid .cal-day').length === 14, 'Workout : calendrier = 14 jours (2 lignes)');
 
 activity.render(pages.activity);
-assert(pages.activity.querySelector('.steps-hero') && pages.activity.querySelector('#steps-chart'), 'Activité : hero + histogramme');
+assert(pages.activity.querySelector('.steps-hero') && pages.activity.querySelector('.sb-plot'), 'Activité : hero + histogramme');
+assert(pages.activity.querySelectorAll('.sb-plot .sb-col').length === 7, 'Activité : 7 jours par défaut');
+assert(!pages.activity.querySelector('#steps-list') && !pages.activity.querySelector('.grid-2'), 'Activité : plus de liste 14 jours ni de grille de stats (v6.8)');
 assert(pages.activity.querySelector('#btn-import-steps'), 'Activité : bouton Importer les pas (Santé)');
 assert(!pages.activity.querySelector('.mono'), 'Activité : plus de .mono');
 
@@ -158,6 +160,39 @@ const mealSheet = [...document.querySelectorAll('.sheet')].find((s) => s.querySe
 assert(mealSheet && mealSheet.querySelectorAll('#m-cat button').length === 4, 'Ajout repas : 4 types (PDéj/Déj/Dîner/Snack)');
 assert(mealSheet.querySelector('#m-fiber'), 'Ajout repas : champ fibres optionnel');
 clearOverlays();
+
+console.log('== v6.8 : aliments de marque, scan sans autorisation ==');
+{
+  document.getElementById('fab-nutrition').click();
+  document.getElementById('fab-search').click();
+  const fsS = [...document.querySelectorAll('.sheet')].pop();
+  fsS.querySelector('#fs-tabs button[data-tab="all"]').click();
+  const srch = fsS.querySelector('#fs-search');
+  const names = (q) => { srch.value = q; fire(srch, 'input'); return [...fsS.querySelectorAll('#fs-list .hist-item')].map((i) => i.textContent); };
+  assert(names('monster').filter((x) => /Monster/.test(x)).length >= 5, 'Aliments : gamme Monster');
+  assert(names('redbull').some((x) => x.includes('Red Bull')), 'Aliments : « redbull » (sans espace) trouve Red Bull');
+  assert(names('mcdo').some((x) => x.includes('Big Mac')), 'Aliments : mot-cle « mcdo »');
+  assert(names('kitkat').some((x) => x.includes('Kit Kat')), 'Aliments : « kitkat » trouve Kit Kat');
+  clearOverlays();
+  const fm = await import('./data/foods.js');
+  assert(fm.FOODS.find((f) => f.n === 'Monster Ultra (zéro sucre)').g < 1, 'Aliments : Monster Ultra quasi sans sucre');
+  assert(fm.FOOD_CATEGORIES.includes('Fast-food') && fm.FOOD_CATEGORIES.includes('Snacks & marques'), 'Aliments : nouvelles categories');
+  const nm = new Set(); assert(fm.FOODS.every((f) => !nm.has(f.n) && nm.add(f.n)), 'Aliments : pas de doublon de nom');
+
+  // Scan : mode « Appareil photo » memorise, sans viseur video
+  store.saveUserData({ settings: { scanMode: 'photo' } });
+  document.getElementById('fab-nutrition').click();
+  document.getElementById('fab-scan').click();
+  const bc = [...document.querySelectorAll('.sheet')].pop();
+  assert(bc.querySelector('#bc-file[capture]'), 'Scan : champ appareil photo natif (aucune autorisation)');
+  assert(bc.querySelector('#bc-mode button.active').dataset.mode === 'photo', 'Scan : mode photo memorise');
+  assert(bc.querySelector('#bc-cam-zone').classList.contains('photo-mode'), 'Scan : viseur remplace par l\'explication');
+  bc.querySelector('#bc-mode button[data-mode="live"]').click();
+  assert(store.userData.settings.scanMode === 'live', 'Scan : choix du mode enregistre');
+  clearOverlays();
+  const bcSrc = fs.readFileSync(new URL('./utils/barcode.js', import.meta.url), 'utf8');
+  assert(/t\.enabled = false/.test(bcSrc) && /KEEP_MS/.test(bcSrc), 'Scan : flux camera garde en veille entre deux scans');
+}
 
 console.log('== Recettes (composition par aliments) ==');
 store.saveRecipe({ id: 'rec1', name: 'Bowl protéiné', prot: 40, carbs: 50, fat: 10, fiber: 8, ingredients: [{ name: 'Riz', weight: 100, prot: 3, carbs: 28, fat: 0, fiber: 0 }] });
@@ -692,12 +727,26 @@ console.log('== v5.2 : suppression des pesées et relevés de pas ==');
   assert(store.userData.steps.byDate[todayISO()] === undefined, 'Pas : le relevé est retiré');
   assert(store.userData.steps.goalByDate[todayISO()] === undefined, 'Pas : l\'objectif figé du jour est retiré');
 
-  // Rendu : les lignes sont bien glissables avec une poubelle
+  // Rendu v6.8 : toucher une barre ouvre la saisie du jour, avec « Supprimer »
   store.userData.steps.byDate[todayISO(-1)] = 7500;
   activity.render(pages.activity);
-  const stepRow = pages.activity.querySelector('#steps-list .swipe-row');
-  assert(stepRow && stepRow.querySelector('.swipe-del'), 'Pas : ligne glissable avec poubelle');
-  assert(stepRow.querySelector('.swipe-content'), 'Pas : contenu séparé pour le glissement');
+  pages.activity.querySelector(`.sb-col[data-date="${todayISO(-1)}"]`).click();
+  const stModal = [...document.querySelectorAll('.modal')].pop();
+  assert(stModal.querySelector('#st-count').value === '7500', 'Pas : barre -> saisie pre-remplie');
+  [...stModal.querySelectorAll('.modal-actions .btn')].find((x) => x.textContent.includes('Supprimer')).click();
+  assert(store.userData.steps.byDate[todayISO(-1)] === undefined, 'Pas : suppression depuis la saisie');
+  clearOverlays();
+  // Série : 3 jours consecutifs a l'objectif (hier, avant-hier, J-3), aujourd'hui pas encore
+  for (const i of [-1, -2, -3]) { store.userData.steps.byDate[todayISO(i)] = 12000; store.userData.steps.goalByDate[todayISO(i)] = 10000; }
+  store.userData.steps.byDate[todayISO(-4)] = 2000;
+  store.userData.steps.byDate[todayISO()] = 500;
+  activity.render(pages.activity);
+  const kpis = [...pages.activity.querySelectorAll('.steps-kpi')].map((k) => k.textContent.replace(/\s+/g, ' ').trim());
+  assert(kpis.some((k) => /S[ée]rie ?3 j/i.test(k)), `Pas : serie de 3 jours (${kpis.join(' | ')})`);
+  assert(pages.activity.querySelectorAll('.sb-bar.hit').length === 3, 'Pas : barres vertes = objectif atteint');
+  pages.activity.querySelector('#view-toggle button[data-d="30"]').click();
+  assert(pages.activity.querySelectorAll('.sb-plot .sb-col').length === 30, 'Pas : vue 30 jours');
+  pages.activity.querySelector('#view-toggle button[data-d="7"]').click();
 
   // Séance vide en tête du menu de démarrage
   clearOverlays();

@@ -30,32 +30,69 @@ function loadZbar() {
 // ------------------------------------------------------------------
 // Caméra live : ouvre un flux vidéo dans un <video> fourni par l'appelant.
 // Retourne un contrôleur { stop } et remplit videoEl.
+//
+// Autorisation caméra : une app web ne peut pas s'accorder un « toujours
+// autoriser » ; c'est le navigateur qui décide, et iOS redemande souvent à
+// chaque nouvel appel à getUserMedia. On garde donc le MÊME flux d'un scan à
+// l'autre : fermer le scanner met la caméra en veille (piste désactivée) au
+// lieu de la couper, et on ne la libère vraiment qu'après KEEP_MS sans scan,
+// ou quand l'app passe en arrière-plan. Une seule demande par utilisation.
 // ------------------------------------------------------------------
+const KEEP_MS = 5 * 60 * 1000;
+let liveStream = null;
+let releaseTimer = null;
+
+const isLive = (s) => !!s && s.getVideoTracks().some((t) => t.readyState === 'live');
+
+function releaseCamera() {
+  clearTimeout(releaseTimer);
+  releaseTimer = null;
+  if (liveStream) {
+    try { liveStream.getTracks().forEach((t) => t.stop()); } catch (_) { /* noop */ }
+    liveStream = null;
+  }
+}
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => { if (document.hidden) releaseCamera(); });
+  window.addEventListener('pagehide', releaseCamera);
+}
+
 export async function startCameraStream(videoEl) {
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    throw new Error("L'accès caméra n'est pas disponible sur ce navigateur.");
-  }
-  let stream;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
-      audio: false,
-    });
-  } catch (e) {
-    if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) {
-      throw new Error("Accès caméra refusé. Autorise la caméra dans les réglages Safari pour scanner.");
+  clearTimeout(releaseTimer);
+  releaseTimer = null;
+  if (!isLive(liveStream)) {
+    liveStream = null;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error("L'accès caméra n'est pas disponible sur ce navigateur.");
     }
-    throw new Error("Impossible d'ouvrir la caméra.");
+    try {
+      liveStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false,
+      });
+    } catch (e) {
+      if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) {
+        throw new Error("Accès caméra refusé. Utilise le mode « Appareil photo » (aucune autorisation) ou autorise la caméra dans Réglages.");
+      }
+      throw new Error("Impossible d'ouvrir la caméra.");
+    }
   }
+  const stream = liveStream;
+  stream.getVideoTracks().forEach((t) => { t.enabled = true; });
   videoEl.srcObject = stream;
   videoEl.setAttribute('playsinline', 'true');
   videoEl.muted = true;
   try { await videoEl.play(); } catch (_) { /* iOS peut différer play(), on ignore */ }
 
   return {
+    // Mise en veille : la piste reste ouverte (pas de nouvelle autorisation au
+    // prochain scan) mais ne transmet plus d'image.
     stop() {
-      try { stream.getTracks().forEach((t) => t.stop()); } catch (_) { /* noop */ }
       try { videoEl.srcObject = null; } catch (_) { /* noop */ }
+      if (stream !== liveStream) return;
+      stream.getVideoTracks().forEach((t) => { t.enabled = false; });
+      clearTimeout(releaseTimer);
+      releaseTimer = setTimeout(releaseCamera, KEEP_MS);
     },
   };
 }

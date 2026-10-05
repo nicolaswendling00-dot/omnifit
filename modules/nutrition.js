@@ -5,6 +5,15 @@ import { el, esc, icons, openSheet, openModal, toast, ringSVG, confirmModal, fmt
 import { startCameraStream, captureFrame, decodeBarcodeFromFile } from '../utils/barcode.js';
 import { fetchProductByBarcode } from '../utils/openfoodfacts.js';
 import { FOODS, FOOD_CATEGORIES } from '../data/foods.js';
+
+// Un aliment de la base correspond à la recherche si son nom OU ses mots-clés
+// la contiennent ; on compare aussi sans espaces ni tirets (« redbull »,
+// « cocacola », « kitkat » trouvent Red Bull, Coca-Cola, Kit Kat).
+const squash = (s) => s.replace(/[\s'’\-]/g, '');
+function foodMatches(f, nq) {
+  const hay = normalizeStr(f.k ? `${f.n} ${f.k}` : f.n);
+  return hay.includes(nq) || squash(hay).includes(squash(nq));
+}
 import { PRESET_RECIPES, presetToRecipe } from '../data/recipes.js';
 
 let selectedDate = todayISO();
@@ -767,10 +776,16 @@ function openRecipeEditor(onSaved, existing = null) {
 // On reste dans l'application : flux vidéo getUserMedia, bouton pour figer une
 // image (« photo »), puis analyse multi-orientation du code-barre.
 // ============================================================
+// Deux modes, mémorisés dans les réglages (scanMode) :
+//   « live »  : viseur vidéo dans l'app (demande l'accès à la caméra) ;
+//   « photo » : ouvre l'appareil photo du téléphone via un <input capture>.
+//               C'est le système qui prend la photo : AUCUNE autorisation
+//               n'est jamais demandée.
 function openBarcodeSheet(rerender, opts = {}) {
   let stoppedByUser = false;
   let camera = null;      // contrôleur { stop }
   let lastPhotoUrl = null;
+  let mode = store.userData.settings.scanMode === 'photo' ? 'photo' : 'live';
 
   const content = el(`<div>
     <div id="bc-camera-step">
@@ -778,6 +793,12 @@ function openBarcodeSheet(rerender, opts = {}) {
         <video id="bc-video" playsinline autoplay muted></video>
         <img id="bc-frozen" alt="Image figée" style="display:none">
         <div class="bc-cam-reticle"></div>
+        <div class="bc-photo-hint" id="bc-photo-hint">${icons.barcode}<span>L'appareil photo du téléphone s'ouvre : photographie le code-barre, l'analyse se fait ici.</span></div>
+      </div>
+      <input type="file" accept="image/*" capture="environment" id="bc-file" hidden>
+      <div class="segment bc-mode" id="bc-mode">
+        <button type="button" data-mode="live">Viseur</button>
+        <button type="button" data-mode="photo">Appareil photo</button>
       </div>
       <div class="bc-cam-actions">
         <button class="btn btn-primary btn-block" id="bc-shoot">${icons.barcode} Prendre la photo</button>
@@ -807,25 +828,76 @@ function openBarcodeSheet(rerender, opts = {}) {
   const shootBtn = content.querySelector('#bc-shoot');
   const retryBtn = content.querySelector('#bc-retry');
 
-  // Démarrage de la caméra
-  (async () => {
+  const fileEl = content.querySelector('#bc-file');
+  const zoneEl = content.querySelector('#bc-cam-zone');
+  const LIVE_HINT = 'Cadre le code-barre dans le viseur puis prends la photo. Le sens n\'a pas d\'importance.';
+  const PHOTO_HINT = 'Aucune autorisation demandée : c\'est l\'appareil photo du téléphone qui prend la photo.';
+
+  // Démarrage de la caméra (mode viseur uniquement)
+  async function startLive() {
     try {
       camera = await startCameraStream(videoEl);
+      if (stoppedByUser || mode !== 'live') { camera.stop(); camera = null; }
     } catch (e) {
-      if (!stoppedByUser) {
-        statusEl.innerHTML = `${e.message}<br>Tu peux saisir les chiffres du code-barre ci-dessous.`;
+      if (!stoppedByUser && mode === 'live') {
+        statusEl.innerHTML = `${e.message}<br>Tu peux aussi saisir les chiffres du code-barre ci-dessous.`;
         shootBtn.disabled = true;
       }
     }
-  })();
+  }
+  function applyMode() {
+    content.querySelectorAll('#bc-mode button').forEach((x) => x.classList.toggle('active', x.dataset.mode === mode));
+    zoneEl.classList.toggle('photo-mode', mode === 'photo');
+    shootBtn.disabled = false;
+    if (mode === 'photo') {
+      if (camera) { camera.stop(); camera = null; }
+      shootBtn.innerHTML = `${icons.barcode} Ouvrir l'appareil photo`;
+      statusEl.textContent = PHOTO_HINT;
+    } else {
+      shootBtn.innerHTML = `${icons.barcode} Prendre la photo`;
+      statusEl.textContent = LIVE_HINT;
+      startLive();
+    }
+    showLive();
+  }
+  content.querySelector('#bc-mode').addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn || btn.dataset.mode === mode) return;
+    mode = btn.dataset.mode;
+    store.saveUserData({ settings: { scanMode: mode } });
+    haptic();
+    applyMode();
+  });
 
-  const showLive = () => {
-    videoEl.style.display = '';
+  // Mode « Appareil photo » : la photo revient dans le champ fichier.
+  fileEl.addEventListener('change', async () => {
+    const file = fileEl.files && fileEl.files[0];
+    fileEl.value = '';
+    if (!file) return;
+    if (lastPhotoUrl) URL.revokeObjectURL(lastPhotoUrl);
+    lastPhotoUrl = URL.createObjectURL(file);
+    frozenEl.src = lastPhotoUrl;
+    videoEl.style.display = 'none';
+    frozenEl.style.display = '';
+    zoneEl.classList.add('has-photo');
+    statusEl.textContent = 'Analyse de la photo…';
+    try {
+      const code = await decodeBarcodeFromFile(file);
+      if (stoppedByUser) return;
+      await handleCode(code);
+    } catch (e) {
+      if (!stoppedByUser) statusEl.textContent = `${e.message} Réessaie en rapprochant le code-barre.`;
+    }
+  });
+
+  function showLive() {
+    videoEl.style.display = mode === 'live' ? '' : 'none';
     frozenEl.style.display = 'none';
+    zoneEl.classList.remove('has-photo');
     shootBtn.style.display = '';
     retryBtn.style.display = 'none';
     if (lastPhotoUrl) { URL.revokeObjectURL(lastPhotoUrl); lastPhotoUrl = null; }
-  };
+  }
 
   async function handleCode(code) {
     if (stoppedByUser) return;
@@ -854,6 +926,8 @@ function openBarcodeSheet(rerender, opts = {}) {
 
   // Prendre la photo = figer l'image courante (pause) puis l'analyser
   shootBtn.addEventListener('click', async () => {
+    // Mode photo : le tap ouvre directement l'appareil photo du système.
+    if (mode === 'photo') { fileEl.click(); return; }
     shootBtn.disabled = true;
     let blob;
     try {
@@ -887,6 +961,8 @@ function openBarcodeSheet(rerender, opts = {}) {
     showLive();
     statusEl.textContent = 'Cadre le code-barre dans le viseur puis prends la photo.';
   });
+
+  applyMode();
 
   content.querySelector('#bc-manual-go').addEventListener('click', () => {
     const code = content.querySelector('#bc-manual-code').value.trim();
@@ -1088,7 +1164,7 @@ function openFoodSearchSheet(rerender, opts = {}) {
 
   const drawAll = (nq) => {
     let items = FOODS;
-    if (nq) items = items.filter((f) => normalizeStr(f.n).includes(nq));
+    if (nq) items = items.filter((f) => foodMatches(f, nq));
     items = items.slice().sort((a, b) => a.n.localeCompare(b.n, 'fr'));
     if (!items.length) { list.innerHTML = '<div class="empty-state">Aucun aliment trouvé</div>'; return; }
     list.innerHTML = '';
@@ -1214,7 +1290,7 @@ function openFoodSearchSheet(rerender, opts = {}) {
 
     // Base d'aliments
     const foods = FOODS
-      .filter((f) => normalizeStr(f.n).includes(nq))
+      .filter((f) => foodMatches(f, nq))
       .sort((a, b) => a.n.localeCompare(b.n, 'fr'))
       .slice(0, 60)
       .map((f) => rowFood(f.n, { prot: f.p, carbs: f.g, fat: f.f, fiber: f.fb || 0 }, 100, ''));

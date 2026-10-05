@@ -3,10 +3,13 @@
 // arrondies). Sert au sélecteur « loupe » : aliments sans code-barre (fruits,
 // légumes, féculents…) et aliments de base moyennés (whey, huiles…).
 // Structure : { n: nom, c: catégorie, p: protéines, g: glucides, f: lipides, fb: fibres } (pour 100 g)
+// Option k : mots-clés de recherche en plus du nom (orthographes courantes).
+// Boissons : valeurs pour 100 ml (≈ 100 g) ; une canette = 250 à 500 ml.
 
 export const FOOD_CATEGORIES = [
   'Fruits', 'Légumes', 'Féculents', 'Légumineuses', 'Viandes', 'Poissons',
   'Œufs & produits laitiers', 'Oléagineux', 'Matières grasses', 'Compléments', 'Boissons', 'Sucré',
+  'Snacks & marques', 'Fast-food',
 ];
 
 export const FOODS = [
@@ -164,7 +167,6 @@ export const FOODS = [
   { n: 'Lait d\'amande', c: 'Boissons', p: 0.5, g: 3, f: 1.1, fb: 0.4 },
   { n: 'Lait de soja', c: 'Boissons', p: 3.3, g: 2.5, f: 1.8, fb: 0.6 },
   { n: 'Lait d\'avoine', c: 'Boissons', p: 1, g: 6.6, f: 1.5, fb: 0.8 },
-  { n: 'Coca-Cola', c: 'Boissons', p: 0, g: 11, f: 0, fb: 0 },
   { n: 'Bière', c: 'Boissons', p: 0.5, g: 3.6, f: 0, fb: 0 },
   { n: 'Vin rouge', c: 'Boissons', p: 0.1, g: 2.6, f: 0, fb: 0 },
 
@@ -305,4 +307,123 @@ export const FOODS = [
   { n: 'Glace vanille', c: 'Sucré', p: 3.5, g: 24, f: 11, fb: 0.5 },
   { n: 'Crêpe nature', c: 'Sucré', p: 6, g: 33, f: 8, fb: 1.2 },
   { n: 'Chips', c: 'Sucré', p: 6, g: 50, f: 34, fb: 4 },
+  // ============================================================
+  // PRODUITS DE MARQUE ET INDUSTRIELS (v6.8)
+  // Valeurs relevées sur les étiquettes françaises (arrondies). Les recettes
+  // évoluent : en cas de doute, le scan du code-barre fait foi.
+  // ============================================================
+  // ---- Boissons énergisantes (pour 100 ml) ----
+  { n: 'Monster Energy (original)', c: 'Boissons', p: 0, g: 11, f: 0, fb: 0, k: 'monster green canette energy drink' },
+  { n: 'Monster Ultra (zéro sucre)', c: 'Boissons', p: 0, g: 0.9, f: 0, fb: 0, k: 'monster ultra white blanc zero paradise fiesta rosa violet' },
+  { n: 'Monster Zero Sugar', c: 'Boissons', p: 0, g: 0.9, f: 0, fb: 0, k: 'monster zero' },
+  { n: 'Monster Mango Loco', c: 'Boissons', p: 0, g: 12, f: 0, fb: 0, k: 'monster juice mangue' },
+  { n: 'Monster Pipeline Punch', c: 'Boissons', p: 0, g: 12, f: 0, fb: 0, k: 'monster juice' },
+  { n: 'Monster Ultra Gold / Watermelon', c: 'Boissons', p: 0, g: 0.9, f: 0, fb: 0, k: 'monster ultra zero' },
+  { n: 'Red Bull', c: 'Boissons', p: 0, g: 11, f: 0, fb: 0, k: 'redbull energy drink' },
+  { n: 'Red Bull Sugarfree', c: 'Boissons', p: 0, g: 0, f: 0, fb: 0, k: 'redbull sans sucre zero' },
+  { n: 'Red Bull Zero', c: 'Boissons', p: 0, g: 0, f: 0, fb: 0, k: 'redbull' },
+  { n: 'Burn (original)', c: 'Boissons', p: 0, g: 11, f: 0, fb: 0, k: 'energy drink' },
+  { n: 'Rockstar Energy', c: 'Boissons', p: 0, g: 12, f: 0, fb: 0, k: 'energy drink' },
+  { n: 'Boisson énergisante (générique)', c: 'Boissons', p: 0, g: 11, f: 0, fb: 0, k: 'energy drink' },
+  { n: 'Boisson énergisante zéro (générique)', c: 'Boissons', p: 0, g: 0.5, f: 0, fb: 0, k: 'energy drink sans sucre' },
+  // ---- Sodas (pour 100 ml) ----
+  { n: 'Coca-Cola', c: 'Boissons', p: 0, g: 10.6, f: 0, fb: 0, k: 'coca cocacola coke' },
+  { n: 'Coca-Cola Zero', c: 'Boissons', p: 0, g: 0, f: 0, fb: 0, k: 'coca cocacola coke zero sans sucre' },
+  { n: 'Coca-Cola Light', c: 'Boissons', p: 0, g: 0, f: 0, fb: 0, k: 'coca cocacola coke light' },
+  { n: 'Pepsi', c: 'Boissons', p: 0, g: 11, f: 0, fb: 0 },
+  { n: 'Pepsi Max', c: 'Boissons', p: 0, g: 0, f: 0, fb: 0, k: 'pepsi zero' },
+  { n: 'Fanta Orange', c: 'Boissons', p: 0, g: 7.5, f: 0, fb: 0 },
+  { n: 'Sprite', c: 'Boissons', p: 0, g: 6.6, f: 0, fb: 0 },
+  { n: 'Orangina', c: 'Boissons', p: 0, g: 9, f: 0, fb: 0.1 },
+  { n: 'Oasis Tropical', c: 'Boissons', p: 0, g: 9, f: 0, fb: 0 },
+  { n: 'Lipton Ice Tea pêche', c: 'Boissons', p: 0, g: 4.3, f: 0, fb: 0, k: 'icetea the glace' },
+  { n: 'Schweppes Indian Tonic', c: 'Boissons', p: 0, g: 7.8, f: 0, fb: 0, k: 'tonic' },
+  { n: 'Dr Pepper', c: 'Boissons', p: 0, g: 10, f: 0, fb: 0 },
+  { n: 'Perrier / eau gazeuse', c: 'Boissons', p: 0, g: 0, f: 0, fb: 0 },
+  { n: 'Sirop dilué (1 vol. pour 7)', c: 'Boissons', p: 0, g: 9, f: 0, fb: 0, k: 'teisseire grenadine menthe' },
+  // ---- Boissons sportives et protéinées (pour 100 ml) ----
+  { n: 'Powerade', c: 'Boissons', p: 0, g: 4, f: 0, fb: 0, k: 'sport isotonique' },
+  { n: 'Gatorade', c: 'Boissons', p: 0, g: 6, f: 0, fb: 0, k: 'sport isotonique' },
+  { n: 'Isostar (préparé)', c: 'Boissons', p: 0, g: 6.5, f: 0, fb: 0, k: 'sport isotonique' },
+  { n: 'Prime Hydration', c: 'Boissons', p: 0, g: 1.2, f: 0, fb: 0, k: 'logan paul ksi' },
+  { n: 'YoPRO boisson protéinée', c: 'Boissons', p: 8, g: 5, f: 0.5, fb: 0, k: 'yopro danone proteine' },
+  { n: 'Lait chocolaté (type Candy\'Up)', c: 'Boissons', p: 3.2, g: 10, f: 1.6, fb: 0.5, k: 'candy up cacolac' },
+  // ---- Compléments ----
+  { n: 'Clear whey (poudre)', c: 'Compléments', p: 80, g: 4, f: 0.3, fb: 0, k: 'proteine isolate' },
+  { n: 'Pudding protéiné (type Ehrmann)', c: 'Compléments', p: 10, g: 6, f: 1.5, fb: 0.3, k: 'high protein dessert' },
+  { n: 'Barre protéinée (type Barebells)', c: 'Compléments', p: 36, g: 34, f: 15, fb: 3, k: 'barebells proteine bar' },
+  { n: 'Gel énergétique', c: 'Compléments', p: 0, g: 70, f: 0, fb: 0, k: 'endurance' },
+  // ---- Barres chocolatées et confiseries ----
+  { n: 'Snickers', c: 'Snacks & marques', p: 8.6, g: 60, f: 24, fb: 2 },
+  { n: 'Mars', c: 'Snacks & marques', p: 4.4, g: 69, f: 17, fb: 1 },
+  { n: 'Twix', c: 'Snacks & marques', p: 4.5, g: 64, f: 24, fb: 1.6 },
+  { n: 'Kit Kat', c: 'Snacks & marques', p: 6.5, g: 61, f: 26, fb: 2, k: 'kitkat' },
+  { n: 'Bounty', c: 'Snacks & marques', p: 3.7, g: 58, f: 26, fb: 4 },
+  { n: 'Lion', c: 'Snacks & marques', p: 5, g: 66, f: 22, fb: 1.5 },
+  { n: 'Kinder Bueno', c: 'Snacks & marques', p: 8.6, g: 50, f: 37, fb: 2 },
+  { n: 'Kinder Maxi / Chocolat', c: 'Snacks & marques', p: 8.7, g: 54, f: 35, fb: 0.5 },
+  { n: 'Kinder Country', c: 'Snacks & marques', p: 8.5, g: 53, f: 33, fb: 2 },
+  { n: 'M&M\'s chocolat', c: 'Snacks & marques', p: 4.8, g: 70, f: 18, fb: 2, k: 'mms m&ms' },
+  { n: 'M&M\'s peanut', c: 'Snacks & marques', p: 9.4, g: 59, f: 26, fb: 3, k: 'mms m&ms cacahuete' },
+  { n: 'Haribo Tagada', c: 'Snacks & marques', p: 3.6, g: 79, f: 0.5, fb: 0, k: 'bonbons fraise' },
+  { n: 'Haribo Dragibus', c: 'Snacks & marques', p: 0, g: 92, f: 0.3, fb: 0, k: 'bonbons' },
+  { n: 'Haribo Ours d\'or / Crocodiles', c: 'Snacks & marques', p: 6.9, g: 77, f: 0.5, fb: 0, k: 'bonbons gelifies' },
+  { n: 'Bonbons gélifiés (générique)', c: 'Snacks & marques', p: 5, g: 78, f: 0.3, fb: 0, k: 'haribo' },
+  { n: 'Chewing-gum sans sucre', c: 'Snacks & marques', p: 0, g: 65, f: 0.3, fb: 0, k: 'hollywood freedent' },
+  // ---- Biscuits et céréales ----
+  { n: 'Oreo', c: 'Snacks & marques', p: 5.3, g: 69, f: 20, fb: 2.6 },
+  { n: 'Prince chocolat (LU)', c: 'Snacks & marques', p: 6.6, g: 70, f: 17, fb: 3 },
+  { n: 'BN chocolat', c: 'Snacks & marques', p: 6, g: 69, f: 18, fb: 3 },
+  { n: 'Pim\'s orange', c: 'Snacks & marques', p: 3.6, g: 70, f: 12.5, fb: 2, k: 'pims' },
+  { n: 'Petit Écolier chocolat au lait', c: 'Snacks & marques', p: 7, g: 64, f: 25, fb: 2 },
+  { n: 'Granola chocolat (LU)', c: 'Snacks & marques', p: 7, g: 61, f: 25, fb: 3 },
+  { n: 'Speculoos (Lotus)', c: 'Snacks & marques', p: 4.9, g: 73, f: 19, fb: 1.3 },
+  { n: 'Pâte à tartiner Speculoos', c: 'Snacks & marques', p: 2.5, g: 57, f: 38, fb: 1 },
+  { n: 'Chocapic', c: 'Snacks & marques', p: 8.5, g: 74, f: 4.4, fb: 7.5, k: 'cereales' },
+  { n: 'Céréales Nesquik', c: 'Snacks & marques', p: 8.4, g: 73, f: 4.6, fb: 8, k: 'cereales' },
+  { n: 'Trésor chocolat noisette', c: 'Snacks & marques', p: 7.5, g: 64, f: 16, fb: 4, k: 'tresor kellogg cereales' },
+  { n: 'Special K', c: 'Snacks & marques', p: 9, g: 76, f: 1.5, fb: 4, k: 'kellogg cereales' },
+  { n: 'Frosties', c: 'Snacks & marques', p: 4.5, g: 87, f: 0.6, fb: 2, k: 'kellogg cereales' },
+  { n: 'Coco Pops', c: 'Snacks & marques', p: 5, g: 84, f: 2.5, fb: 3, k: 'kellogg cereales' },
+  // ---- Chips et apéritif ----
+  { n: 'Pringles original', c: 'Snacks & marques', p: 4.1, g: 52, f: 33, fb: 2.6, k: 'chips' },
+  { n: 'Doritos nature', c: 'Snacks & marques', p: 7, g: 60, f: 26, fb: 4, k: 'chips tortilla' },
+  { n: 'Lay\'s / chips classiques', c: 'Snacks & marques', p: 6, g: 50, f: 34, fb: 4, k: 'lays chips' },
+  { n: 'Curly (cacahuète)', c: 'Snacks & marques', p: 10, g: 55, f: 28, fb: 3, k: 'aperitif' },
+  { n: 'Bretzels', c: 'Snacks & marques', p: 10, g: 76, f: 4, fb: 3, k: 'aperitif' },
+  { n: 'Cacahuètes grillées salées', c: 'Snacks & marques', p: 26, g: 13, f: 50, fb: 8, k: 'aperitif' },
+  // ---- Produits laitiers de marque ----
+  { n: 'Danette chocolat', c: 'Snacks & marques', p: 3.2, g: 20, f: 3.1, fb: 0.5, k: 'creme dessert' },
+  { n: 'Activia nature', c: 'Snacks & marques', p: 4, g: 5.5, f: 3.4, fb: 0, k: 'yaourt danone' },
+  { n: 'Yop', c: 'Snacks & marques', p: 2.8, g: 13, f: 1.5, fb: 0, k: 'yaourt a boire' },
+  { n: 'Actimel', c: 'Snacks & marques', p: 2.7, g: 11.5, f: 1.5, fb: 0, k: 'danone' },
+  { n: 'Kiri', c: 'Snacks & marques', p: 7.5, g: 3, f: 24, fb: 0, k: 'fromage' },
+  { n: 'Pom\'Potes', c: 'Snacks & marques', p: 0.3, g: 13, f: 0.2, fb: 1.6, k: 'pompotes compote gourde' },
+  { n: 'Magnum classic', c: 'Snacks & marques', p: 3.7, g: 28, f: 19, fb: 0.5, k: 'glace' },
+  { n: 'Ben & Jerry\'s Cookie Dough', c: 'Snacks & marques', p: 4, g: 31, f: 15, fb: 0.5, k: 'glace ben jerry' },
+  // ---- Plats industriels ----
+  { n: 'Pizza surgelée 4 fromages', c: 'Snacks & marques', p: 11, g: 27, f: 11, fb: 2, k: 'buitoni sodebo' },
+  { n: 'Lasagnes bolognaise (surgelées)', c: 'Snacks & marques', p: 7, g: 13, f: 7, fb: 1 },
+  { n: 'Raviolis en conserve', c: 'Snacks & marques', p: 3.9, g: 13, f: 2.6, fb: 1.4, k: 'buitoni' },
+  { n: 'Saucisses Knacki', c: 'Snacks & marques', p: 12, g: 1, f: 24, fb: 0, k: 'herta knackis saucisse strasbourg' },
+  { n: 'Nouilles instantanées (sèches)', c: 'Snacks & marques', p: 9, g: 60, f: 20, fb: 2.5, k: 'ramen yum yum nissin' },
+  { n: 'Croque-monsieur industriel', c: 'Snacks & marques', p: 13, g: 25, f: 12, fb: 1.5 },
+  { n: 'Sandwich jambon-beurre', c: 'Snacks & marques', p: 11, g: 40, f: 9, fb: 2 },
+  { n: 'Sauce barbecue', c: 'Snacks & marques', p: 1, g: 40, f: 0.3, fb: 0.5, k: 'bbq' },
+  { n: 'Sauce algérienne / samouraï', c: 'Snacks & marques', p: 1, g: 9, f: 50, fb: 0.5, k: 'samourai sauce kebab' },
+  // ---- Fast-food (pour 100 g ; un burger pèse 120 à 270 g) ----
+  { n: 'Big Mac (McDonald\'s)', c: 'Fast-food', p: 12, g: 20, f: 11, fb: 1.5, k: 'mcdo mcdonalds bigmac burger' },
+  { n: 'Cheeseburger (McDonald\'s)', c: 'Fast-food', p: 13, g: 26, f: 10, fb: 1.5, k: 'mcdo mcdonalds burger' },
+  { n: 'McChicken (McDonald\'s)', c: 'Fast-food', p: 10.5, g: 25, f: 11, fb: 1.7, k: 'mcdo mcdonalds burger poulet' },
+  { n: 'Chicken McNuggets', c: 'Fast-food', p: 15, g: 16, f: 14, fb: 1, k: 'mcdo mcdonalds nuggets' },
+  { n: 'Frites (McDonald\'s)', c: 'Fast-food', p: 3.4, g: 39, f: 15, fb: 3.6, k: 'mcdo mcdonalds' },
+  { n: 'Whopper (Burger King)', c: 'Fast-food', p: 10, g: 19, f: 13, fb: 1.5, k: 'bk burger' },
+  { n: 'Tenders (KFC)', c: 'Fast-food', p: 19, g: 12, f: 13, fb: 0.5, k: 'kfc poulet pane' },
+  { n: 'Kebab (sandwich)', c: 'Fast-food', p: 11, g: 22, f: 11, fb: 1.5, k: 'doner grec' },
+  { n: 'Tacos français (poulet)', c: 'Fast-food', p: 10, g: 22, f: 13, fb: 1, k: 'otacos' },
+  { n: 'Burger maison / brasserie', c: 'Fast-food', p: 13, g: 20, f: 13, fb: 1.5, k: 'hamburger' },
+  { n: 'Maki saumon', c: 'Fast-food', p: 6, g: 28, f: 2.5, fb: 0.5, k: 'sushi japonais' },
+  { n: 'California roll saumon avocat', c: 'Fast-food', p: 6, g: 25, f: 6, fb: 1, k: 'sushi japonais' },
+  { n: 'Panini jambon fromage', c: 'Fast-food', p: 12, g: 30, f: 10, fb: 1.5 },
+  { n: 'Hot-dog', c: 'Fast-food', p: 10, g: 24, f: 14, fb: 1 },
 ];
