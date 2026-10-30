@@ -1,6 +1,6 @@
 // OmniFit : gestes animés, portés en JS natif depuis trois composants
 // React Bits (reactbits.dev, variante JS-CSS) : RubberSegment, SwipeRow et
-// Shredder. On n'en garde que la mécanique (ressorts, élastique, lancer) :
+// Shredder (déplacement seulement). On n'en garde que la mécanique (ressorts, élastique, lancer) :
 // couleurs, polices et formes restent celles de l'app (jetons de style.css).
 //
 // Tout passe par un petit moteur de ressorts partagé, qui n'écrit que des
@@ -315,12 +315,12 @@ export function attachSwipeToDelete(list, { rowSelector, contentSelector, width 
     if (r._swS) return r._swS;
     const c = contentOf(r); const del = delOf(r);
     if (c) c.style.transition = 'none';
+    // Ligne basse (pesées) : icône seule, le libellé serait coupé.
+    if (del) del.classList.toggle('sw-compact', r.offsetHeight < 56);
     const s = { open: false };
     const paint = () => {
       const e = s.x.x;
       if (c) c.style.transform = e ? `translateX(${-e}px)` : '';
-      // Au delà du tiroir, l'espace entre la ligne et le bouton prend le gris des surfaces.
-      r.style.background = e > 1 ? 'var(--surface-3)' : '';
       if (del) {
         del.style.transform = `translateX(${Math.max(0, D - e)}px)`;
         del.style.width = `${D + s.spread.x * Math.max(0, e - D)}px`;
@@ -441,223 +441,111 @@ export function attachSwipeToDelete(list, { rowSelector, contentSelector, width 
 }
 
 // ============================================================
-// RÉORGANISER ET BROYER (Shredder)
+// RÉORGANISER (mécanique de Shredder, sans la broyeuse)
 // ============================================================
 // Liste que l'on réordonne en faisant glisser les lignes. La ligne saisie se
 // soulève (léger agrandissement), suit le doigt par ressort et penche selon
-// sa vitesse ; les autres s'écartent, chacune avec son ressort. Lâchée sur la
-// fente en bas de la liste, elle y est entraînée et ressort en lanières qui
-// tombent en se tordant : l'élément est retiré.
+// sa vitesse ; les autres s'écartent, chacune avec son ressort.
 //
-//   host   : conteneur vide qui reçoit la liste et la fente
+//   host   : conteneur vide qui reçoit la liste
 //   labels : textes des lignes (HTML déjà échappé)
-// Renvoie { order() } : indices d'origine des lignes restantes, dans l'ordre.
-export function shredderList(host, labels, { dragIcon = '', slitLabel = 'Glisser ici pour retirer' } = {}) {
-  host.classList.add('shred');
-  host.innerHTML = `<div class="shred-list"></div>
-    <div class="shred-mouth"><div class="shred-slit"></div><span class="shred-hint">${slitLabel}</span></div>
-    <div class="shred-fall" aria-hidden="true"></div>`;
-  const list = host.querySelector('.shred-list');
-  const mouth = host.querySelector('.shred-mouth');
-  const slit = host.querySelector('.shred-slit');
-  const fall = host.querySelector('.shred-fall');
+// Renvoie { order() } : indices d'origine des lignes, dans le nouvel ordre.
+export function reorderList(host, labels, { dragIcon = '' } = {}) {
+  const list = document.createElement('div');
+  list.className = 'reorder-list';
+  host.appendChild(list);
   labels.forEach((lbl, i) => {
     const row = document.createElement('div');
     row.className = 'reorder-row';
     row.dataset.i = i;
     row.tabIndex = 0;
     row.innerHTML = `<span class="drag-handle">${dragIcon}</span><span class="reorder-label">${lbl}</span>`;
-    row.setAttribute('aria-label', `${row.querySelector('.reorder-label').textContent}. Glisser pour déplacer, Suppr pour retirer`);
+    row.setAttribute('aria-label', `${row.querySelector('.reorder-label').textContent}. Glisser pour déplacer, ou Alt et flèches`);
     list.appendChild(row);
   });
 
-  // Décalage animé d'une ligne (FLIP par ressort) quand l'ordre change.
+  let drag = null;
+  // Décalage animé des autres lignes (FLIP par ressort) quand l'ordre change.
   const flip = (mutate) => {
     const rows = [...list.children];
-    const before = new Map(rows.map((r) => [r, r.getBoundingClientRect().top]));
+    const before = new Map(rows.map((row) => [row, row.getBoundingClientRect().top]));
     mutate();
-    rows.forEach((r) => {
-      if (!r.isConnected || r === (drag && drag.row)) return;
-      const d = before.get(r) - r.getBoundingClientRect().top;
+    rows.forEach((row) => {
+      if (drag && row === drag.row) return;
+      const d = before.get(row) - row.getBoundingClientRect().top;
       if (Math.abs(d) < 0.5) return;
-      const ch = r._y || (r._y = channel((y) => { r.style.transform = y ? `translateY(${y}px)` : ''; }));
+      const ch = row._y || (row._y = channel((y) => { row.style.transform = y ? `translateY(${y}px)` : ''; }));
       ch.jump(ch.x + d);
       ch.to(0, { duration: 0.35, bounce: 0.15 });
     });
   };
-
-  let drag = null;
-  const ghostPaint = () => {
-    const d = drag || feeding;
-    if (!d) return;
+  const paint = (d) => () => {
     d.ghost.style.transform = `translate(${d.gx.x}px, ${d.gy.x}px) rotate(${d.tilt}deg) scale(${d.lift})`;
-  };
-  let feeding = null;
-
-  const begin = (row, e) => {
-    const r = row.getBoundingClientRect();
-    const ghost = row.cloneNode(true);
-    ghost.classList.add('shred-ghost', 'dragging');
-    ghost.removeAttribute('tabindex');
-    Object.assign(ghost.style, { width: `${r.width}px`, height: `${r.height}px`, left: '0px', top: '0px' });
-    document.body.appendChild(ghost);
-    row.classList.add('shred-placeholder');
-    const d = {
-      row, ghost, w: r.width, h: r.height, id: e ? e.pointerId : null,
-      offX: e ? e.clientX - r.left : r.width / 2, offY: e ? e.clientY - r.top : r.height / 2,
-      tilt: 0, lift: 1, px: r.left, py: r.top,
-    };
-    d.gx = channel(ghostPaint, r.left); d.gy = channel(ghostPaint, r.top);
-    drag = d;
-    ghostPaint();
-    if (!reduced()) {
-      // Soulèvement
-      const lift = channel((v) => { d.lift = v; ghostPaint(); }, 1);
-      lift.to(1.03, { duration: 0.25 });
-    }
-    return d;
-  };
-
-  const overSlit = (d) => d.gy.target + d.h > slit.getBoundingClientRect().top + 6;
-
-  const move = (e) => {
-    const d = drag;
-    if (!d || e.pointerId !== d.id) return;
-    e.preventDefault();
-    const x = e.clientX - d.offX; const y = e.clientY - d.offY;
-    const vx = (x - d.gx.target) * 60;
-    d.gx.to(x, { duration: 0.2 }); d.gy.to(y, { duration: 0.2 });
-    d.tilt = clamp(vx * 0.004, -6, 6);
-    mouth.classList.toggle('hot', overSlit(d));
-    // Place du trou : au-dessus de la première ligne dont le milieu est sous le doigt.
-    const cy = y + d.h / 2;
-    const others = [...list.children].filter((r) => r !== d.row);
-    let target = null;
-    for (const r of others) {
-      const b = r.getBoundingClientRect();
-      if (cy < b.top + b.height / 2 - (r._y ? r._y.x : 0)) { target = r; break; }
-    }
-    if (d.row.nextElementSibling !== target && !(target === null && d.row === list.lastElementChild)) {
-      flip(() => list.insertBefore(d.row, target));
-    }
-  };
-
-  const finishDrop = (d) => {
-    const r = d.row.getBoundingClientRect();
-    d.tilt = 0;
-    mouth.classList.remove('hot');
-    const lift = channel((v) => { d.lift = v; ghostPaint(); }, d.lift);
-    lift.to(1, SPRING_UI);
-    Promise.all([d.gx.to(r.left, { duration: 0.35 }), d.gy.to(r.top, { duration: 0.35 })]).then(() => {
-      d.ghost.remove();
-      d.row.classList.remove('shred-placeholder');
-    });
-  };
-
-  // La ligne passe dans la fente : coupée en lanières sous la fente.
-  const shred = (d) => {
-    const row = d.row;
-    mouth.classList.remove('hot');
-    if (reduced()) {
-      d.ghost.remove();
-      flip(() => row.remove());
-      return;
-    }
-    feeding = d;
-    d.tilt = 0;
-    const sTop = slit.getBoundingClientRect().top + slit.offsetHeight / 2;
-    const left = clamp(d.gx.x, slit.getBoundingClientRect().left - 4, slit.getBoundingClientRect().right - d.w + 4);
-    d.gx.to(left, { duration: 0.15 });
-    const lift = channel((v) => { d.lift = v; ghostPaint(); }, d.lift);
-    lift.to(1, { duration: 0.15 });
-    // Lanières : copies de la ligne, chacune réduite à une colonne.
-    const n = Math.max(6, Math.round(d.w / 10));
-    const sw = d.w / n;
-    const strips = [];
-    for (let i = 0; i < n; i++) {
-      const s = d.ghost.cloneNode(true);
-      s.classList.remove('shred-ghost', 'dragging');
-      s.classList.add('shred-strip');
-      Object.assign(s.style, { width: `${d.w}px`, height: `${d.h}px`, left: '0px', top: '0px', transform: '' });
-      s._curl = (Math.random() < 0.5 ? -1 : 1) * (6 + Math.random() * 14);
-      s._i = i;
-      document.body.appendChild(s);
-      strips.push(s);
-    }
-    slit.classList.add('chewing');
-    let y = Math.max(d.gy.x, sTop - d.h);
-    let v = 180 * 2.4; let age = 0; let lastT = now();
-    const step = () => {
-      const t = now();
-      const dt = Math.min(0.05, (t - lastT) / 1000); lastT = t;
-      age += dt;
-      v = 180 * (1 + 1.4 * Math.exp(-age / 0.14)); // tirage énergique au début
-      y += v * dt;
-      d.gy.jump(y);
-      const cut = clamp(sTop - y, 0, d.h); // part encore au-dessus de la fente
-      d.ghost.style.clipPath = `inset(0 0 ${d.h - cut}px 0)`;
-      const passed = d.h - cut;
-      strips.forEach((s) => {
-        const l = s._i * sw;
-        s.style.clipPath = `inset(${cut}px ${d.w - l - sw + 0.5}px 0 ${l}px)`;
-        s.style.transformOrigin = `${l + sw / 2}px ${cut}px`;
-        s.style.transform = `translate(${d.gx.x}px, ${y}px) rotate(${(s._curl * passed) / d.h}deg)`;
-      });
-      if (cut > 0) { window.requestAnimationFrame(step); return; }
-      // Entièrement passée : les lanières tombent en se dispersant puis s'effacent.
-      slit.classList.remove('chewing');
-      d.ghost.remove();
-      feeding = null;
-      strips.forEach((s) => {
-        const tr = s.style.transform;
-        const a = s.animate([
-          { transform: tr, opacity: 1 },
-          { transform: `${tr} translate(${(Math.random() - 0.5) * 60}px, ${90 + Math.random() * 70}px) rotate(${s._curl * 1.5}deg)`, opacity: 0 },
-        ], { duration: 650 + Math.random() * 300, easing: 'cubic-bezier(.4,0,.6,1)', fill: 'forwards' });
-        a.onfinish = () => s.remove();
-      });
-      flip(() => row.remove());
-    };
-    window.requestAnimationFrame(step);
-  };
-
-  const up = (e) => {
-    const d = drag;
-    if (!d || e.pointerId !== d.id) return;
-    drag = null;
-    if (overSlit(d)) shred(d); else finishDrop(d);
   };
 
   list.addEventListener('pointerdown', (e) => {
     const row = e.target.closest('.reorder-row');
-    if (!row || e.button !== 0 || drag || feeding) return;
+    if (!row || e.button !== 0 || drag) return;
     e.preventDefault();
     try { row.setPointerCapture(e.pointerId); } catch (_) { /* noop */ }
-    begin(row, e);
+    const b = row.getBoundingClientRect();
+    const ghost = row.cloneNode(true);
+    ghost.classList.add('reorder-ghost', 'dragging');
+    ghost.removeAttribute('tabindex');
+    Object.assign(ghost.style, { width: `${b.width}px`, height: `${b.height}px`, left: '0px', top: '0px' });
+    document.body.appendChild(ghost);
+    row.classList.add('reorder-placeholder');
+    const d = { row, ghost, h: b.height, id: e.pointerId, offX: e.clientX - b.left, offY: e.clientY - b.top, tilt: 0, lift: 1 };
+    const p = paint(d);
+    d.gx = channel(p, b.left); d.gy = channel(p, b.top);
+    d.liftCh = channel((v) => { d.lift = v; p(); }, 1);
+    drag = d;
+    p();
+    d.liftCh.to(1.03, { duration: 0.25 });
   });
-  list.addEventListener('pointermove', move);
-  list.addEventListener('pointerup', up);
-  list.addEventListener('pointercancel', up);
-  // Clavier : Suppr ou Retour arrière broie la ligne, Alt + flèches la déplacent.
-  list.addEventListener('keydown', (e) => {
-    const row = e.target.closest('.reorder-row');
-    if (!row || drag || feeding) return;
-    if (e.key === 'Delete' || e.key === 'Backspace') {
-      e.preventDefault();
-      const d = begin(row, null);
-      drag = null;
-      if (reduced()) { shred(d); return; }
-      const sr = slit.getBoundingClientRect();
-      d.gx.to((sr.left + sr.right) / 2 - d.w / 2, { duration: 0.3 });
-      d.gy.to(sr.top - d.h + 4, { duration: 0.3 }).then(() => shred(d));
-    } else if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
-      e.preventDefault();
-      const sib = e.key === 'ArrowUp' ? row.previousElementSibling : row.nextElementSibling;
-      if (!sib) return;
-      flip(() => list.insertBefore(row, e.key === 'ArrowUp' ? sib : sib.nextElementSibling));
-      row.focus();
+  list.addEventListener('pointermove', (e) => {
+    const d = drag;
+    if (!d || e.pointerId !== d.id) return;
+    e.preventDefault();
+    const x = e.clientX - d.offX; const y = e.clientY - d.offY;
+    d.tilt = clamp((x - d.gx.target) * 0.25, -6, 6);
+    d.gx.to(x, { duration: 0.2 }); d.gy.to(y, { duration: 0.2 });
+    // Place du trou : au-dessus de la première ligne dont le milieu est sous le doigt.
+    const cy = y + d.h / 2;
+    let target = null;
+    for (const row of list.children) {
+      if (row === d.row) continue;
+      const b = row.getBoundingClientRect();
+      if (cy < b.top + b.height / 2 - (row._y ? row._y.x : 0)) { target = row; break; }
+    }
+    if (d.row.nextElementSibling !== target && !(target === null && d.row === list.lastElementChild)) {
+      flip(() => list.insertBefore(d.row, target));
     }
   });
+  const up = (e) => {
+    const d = drag;
+    if (!d || e.pointerId !== d.id) return;
+    drag = null;
+    const b = d.row.getBoundingClientRect();
+    d.tilt = 0;
+    d.liftCh.to(1, SPRING_UI);
+    Promise.all([d.gx.to(b.left, { duration: 0.35 }), d.gy.to(b.top, { duration: 0.35 })]).then(() => {
+      d.ghost.remove();
+      d.row.classList.remove('reorder-placeholder');
+    });
+  };
+  list.addEventListener('pointerup', up);
+  list.addEventListener('pointercancel', up);
+  // Clavier : Alt + flèches déplacent la ligne.
+  list.addEventListener('keydown', (e) => {
+    const row = e.target.closest('.reorder-row');
+    if (!row || drag || !e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+    e.preventDefault();
+    const sib = e.key === 'ArrowUp' ? row.previousElementSibling : row.nextElementSibling;
+    if (!sib) return;
+    flip(() => list.insertBefore(row, e.key === 'ArrowUp' ? sib : sib.nextElementSibling));
+    row.focus();
+  });
 
-  return { order: () => [...list.querySelectorAll('.reorder-row')].map((r) => +r.dataset.i) };
+  return { order: () => [...list.querySelectorAll('.reorder-row')].map((row) => +row.dataset.i) };
 }

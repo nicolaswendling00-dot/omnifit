@@ -186,22 +186,20 @@ console.log('== v6.9 : segments elastiques, glisser pour supprimer, broyeur ==')
   assert(deleted === 1, 'Glisser pour supprimer : le clic du bouton supprime une seule fois (pas de double ecouteur)');
   host.remove();
 
-  // Broyeur : ordre, deplacement au clavier, suppression par la fente
+  // Réorganiser : ordre et deplacement au clavier (plus de broyeur)
   const sh = document.createElement('div');
   document.body.appendChild(sh);
-  const api = gs.shredderList(sh, ['A', 'B', 'C']);
-  assert(api.order().join() === '0,1,2' && sh.querySelector('.shred-slit'), 'Broyeur : liste et fente');
-  const rowsSh = () => [...sh.querySelectorAll('.reorder-row')];
-  rowsSh()[0].dispatchEvent(new window.KeyboardEvent('keydown', { key: 'ArrowDown', altKey: true, bubbles: true }));
-  assert(api.order().join() === '1,0,2', 'Broyeur : Alt + fleche bas deplace la ligne');
-  rowsSh()[2].dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
-  assert(api.order().join() === '1,0', `Broyeur : Suppr broie la ligne (${api.order().join()})`);
-  assert(!document.querySelector('.shred-ghost'), 'Broyeur : pas de copie flottante oubliee');
+  const api = gs.reorderList(sh, ['A', 'B', 'C']);
+  assert(api.order().join() === '0,1,2' && !sh.querySelector('.shred-slit'), 'Reorganiser : liste, sans fente de broyeur');
+  sh.querySelectorAll('.reorder-row')[0].dispatchEvent(new window.KeyboardEvent('keydown', { key: 'ArrowDown', altKey: true, bubbles: true }));
+  assert(api.order().join() === '1,0,2', 'Reorganiser : Alt + fleche bas deplace la ligne');
+  sh.querySelectorAll('.reorder-row')[2].dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+  assert(api.order().join() === '1,0,2', 'Reorganiser : Suppr ne retire plus rien');
   sh.remove();
 
   // Routine : les exercices se retirent par glissement (plus de poubelle en ligne)
   const wsrc = fs.readFileSync(new URL('./modules/workout.js', import.meta.url), 'utf8');
-  assert(/routine-exo-row/.test(wsrc) && /shredderList\(/.test(wsrc), 'Routine et reorganisation : nouveaux gestes branches');
+  assert(/routine-exo-row/.test(wsrc) && /reorderList\(/.test(wsrc) && !/shred/.test(wsrc), 'Routine et reorganisation : nouveaux gestes branches');
   const nsrc = fs.readFileSync(new URL('./modules/nutrition.js', import.meta.url), 'utf8');
   assert(!/data-rm/.test(nsrc) && /re-ing-row/.test(nsrc) && /recipe-row/.test(nsrc), 'Recettes et ingredients : glisser pour supprimer');
 }

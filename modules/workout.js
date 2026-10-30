@@ -3,7 +3,7 @@
 // détail exo (muscles, historique, repos perso), coefficients d'amélioration.
 import { store, todayISO } from '../utils/storage.js';
 import { EXERCISES, MUSCLES, muscleLabel, AKA, EQUIPMENT, equipLabel } from '../data/exercises.js';
-import { shredderList } from '../utils/gestures.js';
+import { reorderList } from '../utils/gestures.js';
 import { formatTime, workoutMuscleVolume, weeklySetsByMuscle, muscleAttenuation } from '../utils/math.js';
 import { el, esc, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, fmtDateFull, celebrateLP, makeChart, normalizeStr, closeAllOverlays, attachSwipeToDelete } from '../utils/ui.js';
 import { lineChartOptions, lineDataset } from '../utils/charts.js';
@@ -722,10 +722,10 @@ function openReorderSheet(labels, onDone) {
     <button class="btn btn-primary btn-block" id="reorder-save" style="margin-top:6px">Valider l'ordre</button>
   </div>`);
   const sheet = openSheet({ title: 'Réorganiser', content: form });
-  // Glisser une ligne pour la déplacer ; la lâcher dans la fente la retire.
-  const shredder = shredderList(form.querySelector('#reorder-list'), labels, { dragIcon: icons.drag });
+  // Glisser une ligne pour la déplacer (ligne soulevée, voisines qui s'écartent)
+  const reorder = reorderList(form.querySelector('#reorder-list'), labels, { dragIcon: icons.drag });
   form.querySelector('#reorder-save').addEventListener('click', () => {
-    const order = shredder.order();
+    const order = reorder.order();
     sheet.close();
     onDone(order);
   });

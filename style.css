@@ -509,6 +509,7 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
   cursor: pointer; overflow: hidden;
 }
 .swipe-del svg, .meal-del svg, .exo-del svg, .sr-del svg { width: 20px; height: 20px; }
+.sw-compact::after { display: none; }
 .swipe-del::after, .meal-del::after, .exo-del::after, .sr-del::after {
   content: 'Supprimer'; font-size: 0.56rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
 }
@@ -518,6 +519,9 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
   transition: height 200ms var(--ease), margin-bottom 200ms var(--ease), opacity 200ms var(--ease-std);
 }
 .recipe-row:last-child .recipe-item { border-bottom: none; }
+/* Lignes de pesée (historique du poids) */
+.steps-list-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 56px; padding: 0 4px; border-bottom: 1px solid var(--line); font-size: 0.86rem; }
+.swipe-row:last-child .steps-list-item { border-bottom: none; }
 .swipe-row .re-ing { background: var(--surface-2); margin-bottom: 0; }
 .re-ing-row { margin-bottom: 6px; }
 .routine-exo { padding: 12px 4px; font-size: 0.9rem; border-bottom: 1px solid var(--line); }
@@ -555,21 +559,11 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
 }
 .reorder-row.dragging { border-color: var(--accent); position: relative; z-index: 5; }
 .drag-handle { color: var(--text-2); touch-action: none; cursor: grab; padding: 6px; flex-shrink: 0; }
-/* Réorganiser et broyer (utils/gestures.js) */
-.shred .reorder-row { touch-action: none; cursor: grab; }
-.shred .reorder-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.shred-placeholder { visibility: hidden; }
-.reorder-row.shred-ghost { position: fixed; z-index: 400; margin: 0; pointer-events: none; cursor: grabbing; will-change: transform; }
-.reorder-row.shred-strip { position: fixed; z-index: 399; margin: 0; pointer-events: none; }
-.shred-mouth { margin: 10px 0 6px; text-align: center; }
-.shred-slit { height: 6px; margin: 0 8px; border-radius: 999px; background: var(--surface-3); transition: background var(--dur-fast) var(--ease-std); }
-.shred-mouth.hot .shred-slit, .shred-slit.chewing { background: var(--danger); }
-.shred-slit.chewing { animation: shredChew 90ms linear infinite; }
-@keyframes shredChew { 0% { transform: translate3d(-0.5px, 0, 0); } 50% { transform: translate3d(0.5px, 0.3px, 0); } 100% { transform: translate3d(-0.5px, 0, 0); } }
-.shred-hint { display: block; margin-top: 8px; font-size: 0.66rem; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.08em; transition: color var(--dur-fast) var(--ease-std); }
-.shred-mouth.hot .shred-hint { color: var(--danger); }
-.shred-fall { height: 60px; }
-@media (prefers-reduced-motion: reduce) { .shred-slit.chewing { animation: none; } }
+/* Réorganiser (utils/gestures.js) */
+.reorder-list .reorder-row { touch-action: none; cursor: grab; }
+.reorder-list .reorder-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.reorder-placeholder { visibility: hidden; }
+.reorder-row.reorder-ghost { position: fixed; z-index: 400; margin: 0; pointer-events: none; cursor: grabbing; will-change: transform; }
 .drag-handle svg { width: 20px; height: 20px; }
 .reorder-label { flex: 1; font-weight: 700; font-size: 0.9rem; }
 
