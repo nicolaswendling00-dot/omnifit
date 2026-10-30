@@ -1949,9 +1949,21 @@ function openFullCalendar() {
     months.push([y, m]);
     m++; if (m > 11) { m = 0; y++; }
   }
-  months.forEach(([yy, mm]) => scroll.appendChild(monthGrid(yy, mm, byDate, todayIso)));
-  // À l'ouverture : positionné en bas, sur le mois en cours
-  requestAnimationFrame(() => { scroll.scrollTop = scroll.scrollHeight; });
+  // Les trois derniers mois tout de suite (l'écran s'ouvre sans attendre),
+  // les plus anciens ensuite, un par un, ajoutés au-dessus en gardant la
+  // position de lecture : chaque mois porte des dizaines de silhouettes.
+  const recent = months.splice(-3);
+  recent.forEach(([yy, mm]) => scroll.appendChild(monthGrid(yy, mm, byDate, todayIso)));
+  scroll.scrollTop = scroll.scrollHeight;
+  const more = () => {
+    if (!overlay.isConnected || !months.length) return;
+    const [yy, mm] = months.pop();
+    const h = scroll.scrollHeight;
+    scroll.prepend(monthGrid(yy, mm, byDate, todayIso));
+    scroll.scrollTop += scroll.scrollHeight - h;
+    setTimeout(more, 0);
+  };
+  setTimeout(more, 60);
 
   scroll.addEventListener('click', (e) => {
     const b = e.target.closest('.cal-day'); if (!b || b.disabled) return;

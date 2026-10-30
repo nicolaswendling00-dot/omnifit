@@ -64,9 +64,10 @@ export function channel(apply, x0 = 0) {
       else ch.v = 0;
       ch.ts = t; ch.x = x; ch.target = x; apply(x);
     },
-    to(target, { duration = 0.3, bounce = 0, velocity } = {}) {
+    to(target, { duration = 0.3, bounce = 0, velocity, stiffness, damping } = {}) {
       const w = (2 * Math.PI) / duration;
-      ch.mode = 'spring'; ch.k = w * w; ch.c = 2 * (1 - bounce) * w; ch.target = target;
+      ch.mode = 'spring'; ch.target = target;
+      if (stiffness) { ch.k = stiffness; ch.c = damping; } else { ch.k = w * w; ch.c = 2 * (1 - bounce) * w; }
       if (velocity !== undefined) ch.v = velocity;
       return ch.start();
     },
@@ -98,12 +99,15 @@ const SPRING_UI = { duration: 0.3, bounce: 0 };
 //
 // Appliqué automatiquement à tout `.segment` de l'app (observateur plus bas) :
 // le code des pages ne change pas, il continue de poser la classe `active`.
+// Barre de navigation (nav = true) : la pastille suit la pastille d'icône de
+// l'onglet actif, sans copie de texte ni saisie au doigt (le glissement entre
+// onglets appartient déjà au carrousel).
 const lastIndex = new Map(); // id du segment -> { i, t } pour enchaîner après un re-rendu
 
-function rubberSegment(seg) {
+function rubberSegment(seg, nav = false) {
   if (seg._rs) return;
   seg._rs = true;
-  seg.classList.add('rs');
+  seg.classList.add(nav ? 'rs-nav' : 'rs');
   const thumb = document.createElement('div');
   thumb.className = 'rs-thumb';
   thumb.setAttribute('aria-hidden', 'true');
@@ -118,7 +122,7 @@ function rubberSegment(seg) {
   let W = 0; let H = 0;
   const paint = () => {
     thumb.style.width = `${W}px`;
-    thumb.style.clipPath = `inset(${T.x}px ${Math.max(0, W - R.x)}px ${Math.max(0, H - B.x)}px ${Math.max(0, L.x)}px round 11px)`;
+    thumb.style.clipPath = `inset(${T.x}px ${Math.max(0, W - R.x)}px ${Math.max(0, H - B.x)}px ${Math.max(0, L.x)}px round ${nav ? 999 : 11}px)`;
   };
   const L = channel(paint); const R = channel(paint); const T = channel(paint); const B = channel(paint);
 
@@ -134,6 +138,14 @@ function rubberSegment(seg) {
     btns = [...seg.children].filter((c) => c.tagName === 'BUTTON');
     W = seg.scrollWidth; H = seg.clientHeight;
     if (!seg.offsetWidth) return false;
+    if (nav) {
+      const o = seg.getBoundingClientRect();
+      slots = btns.map((b) => {
+        const r = (b.querySelector('svg') || b).getBoundingClientRect();
+        return { l: r.left - o.left, r: r.right - o.left, t: r.top - o.top, b: r.bottom - o.top };
+      });
+      return true;
+    }
     slots = btns.map((b) => ({ l: b.offsetLeft, r: b.offsetLeft + b.offsetWidth, t: b.offsetTop, b: b.offsetTop + b.offsetHeight }));
     thumb.textContent = '';
     btns.forEach((b, i) => {
@@ -211,7 +223,7 @@ function rubberSegment(seg) {
   // Saisir la pastille et la lancer
   const localX = (e) => e.clientX - seg.getBoundingClientRect().left + seg.scrollLeft;
   seg.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0 || committed < 0 || !slots.length) return;
+    if (nav || e.button !== 0 || committed < 0 || !slots.length) return;
     const x = localX(e);
     const s = slots[committed];
     const y = e.clientY - seg.getBoundingClientRect().top;
@@ -282,6 +294,8 @@ function enhanceAll(root) {
 }
 if (typeof document !== 'undefined' && document.body) {
   enhanceAll(document.body);
+  const nav = document.getElementById('bottom-nav');
+  if (nav) rubberSegment(nav, true);
   new window.MutationObserver((muts) => {
     for (const m of muts) m.addedNodes.forEach(enhanceAll);
   }).observe(document.body, { childList: true, subtree: true });
@@ -548,4 +562,119 @@ export function reorderList(host, labels, { dragIcon = '' } = {}) {
   });
 
   return { order: () => [...list.querySelectorAll('.reorder-row')].map((row) => +row.dataset.i) };
+}
+
+// ============================================================
+// CARTE À RETOURNER (FlipCard)
+// ============================================================
+// Carte en 3D : un tap la retourne (ressort raideur 170, amortissement 20),
+// on peut aussi la faire tourner au doigt et la lancer, la vitesse décide de
+// la face qui reste. À la souris, elle s'incline vers le pointeur avec un
+// reflet qui suit. Son ombre s'affine quand la carte est de profil.
+//
+//   front, back : HTML des deux faces
+// Renvoie l'élément .flip-card (à insérer), avec .flip() pour la retourner.
+export function flipCard({ front, back, label = 'Carte', width = 280, height = 400 } = {}) {
+  const card = document.createElement('div');
+  card.className = 'flip-card';
+  card.tabIndex = 0;
+  card.setAttribute('role', 'button');
+  card.setAttribute('aria-pressed', 'false');
+  card.setAttribute('aria-label', `${label}. Toucher pour retourner`);
+  card.style.setProperty('--fc-w', `${width}px`);
+  card.style.setProperty('--fc-h', `${height}px`);
+  card.innerHTML = `<span class="flip-card__shadow" aria-hidden="true"></span>
+    <div class="flip-card__rotor">
+      <div class="flip-card__face flip-card__face--front">${front}<span class="flip-card__glare" aria-hidden="true"></span></div>
+      <div class="flip-card__face flip-card__face--back" aria-hidden="true">${back}<span class="flip-card__glare" aria-hidden="true"></span></div>
+    </div>`;
+  const rotor = card.querySelector('.flip-card__rotor');
+  const shadow = card.querySelector('.flip-card__shadow');
+  const faces = card.querySelectorAll('.flip-card__face');
+  const snap = (deg) => Math.round(deg / 180) * 180;
+  const isBack = (deg) => Math.abs(Math.round(deg / 180)) % 2 === 1;
+  let shown = false;
+  let target = 0;
+  const paint = () => {
+    rotor.style.transform = `perspective(1100px) scale(${lift.x}) rotateX(${tx.x}deg) rotateY(${turn.x + ty.x}deg)`;
+    const f = Math.abs(Math.cos((turn.x * Math.PI) / 180));
+    shadow.style.transform = `scaleX(${0.08 + 0.92 * f})`;
+    shadow.style.opacity = String(0.1 + 0.9 * f * f);
+    rotor.style.setProperty('--fc-sheen', String(sheen.x));
+  };
+  const turn = channel(paint); const tx = channel(paint); const ty = channel(paint);
+  const lift = channel(paint, 1); const sheen = channel(paint);
+  const TILT = { stiffness: 400, damping: 40 };
+  const LIFT = { stiffness: 320, damping: 26 };
+
+  const settle = (to, velocity = 0) => {
+    target = to;
+    turn.to(to, { stiffness: 170, damping: 20, velocity });
+    const next = isBack(to);
+    if (next === shown) return;
+    shown = next;
+    card.setAttribute('aria-pressed', String(shown));
+    faces[0].setAttribute('aria-hidden', String(shown));
+    faces[1].setAttribute('aria-hidden', String(!shown));
+  };
+  card.flip = () => { const base = snap(turn.x); settle(isBack(base) ? base - 180 : base + 180); };
+  const rest = () => { tx.to(0, TILT); ty.to(0, TILT); sheen.to(0, LIFT); lift.to(1, LIFT); };
+
+  let g = null;
+  card.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || g) return;
+    try { card.setPointerCapture(e.pointerId); } catch (_) { /* noop */ }
+    turn.stop();
+    g = { id: e.pointerId, x: e.clientX, base: turn.x, moved: false, slop: e.pointerType === 'touch' ? 8 : 4, hist: [] };
+    lift.to(1.03, LIFT);
+  });
+  card.addEventListener('pointermove', (e) => {
+    if (g && g.id === e.pointerId) {
+      const d = e.clientX - g.x;
+      if (!g.moved) {
+        if (Math.abs(d) < g.slop || reduced()) return;
+        g.moved = true;
+        card.dataset.dragging = '';
+        tx.to(0, TILT); ty.to(0, TILT); sheen.to(0, LIFT);
+      }
+      const deg = g.base + (d / card.offsetWidth) * 180;
+      turn.set(deg);
+      const t = now();
+      g.hist.push([t, deg]);
+      while (g.hist.length > 2 && t - g.hist[0][0] > 90) g.hist.shift();
+      return;
+    }
+    // Inclinaison vers le pointeur (souris seulement, comme l'original)
+    if (e.pointerType === 'touch' || reduced()) return;
+    const r = card.getBoundingClientRect();
+    const px = clamp((e.clientX - r.left) / r.width, 0, 1);
+    const py = clamp((e.clientY - r.top) / r.height, 0, 1);
+    tx.to((0.5 - py) * 24, TILT); ty.to((px - 0.5) * 24, TILT);
+    rotor.style.setProperty('--fc-gx', `${px * 100}%`);
+    rotor.style.setProperty('--fc-gy', `${py * 100}%`);
+    sheen.to(1, LIFT);
+  });
+  const release = (e, cancelled) => {
+    if (!g || g.id !== e.pointerId) return;
+    const cur = g;
+    g = null;
+    delete card.dataset.dragging;
+    if (e.pointerType === 'touch' || !card.matches(':hover')) rest(); else lift.to(1.03, LIFT);
+    if (!cur.moved) { if (!cancelled) card.flip(); return; }
+    const here = turn.x;
+    let v = 0;
+    const a = cur.hist[0]; const b = cur.hist[cur.hist.length - 1];
+    if (!cancelled && a && b && b[0] > a[0] && now() - b[0] < 60) v = ((b[1] - a[1]) / (b[0] - a[0])) * 1000;
+    settle(cancelled ? snap(cur.base) : clamp(snap(here + v * 0.16), snap(here) - 180, snap(here) + 180), v);
+  };
+  card.addEventListener('pointerup', (e) => release(e, false));
+  card.addEventListener('pointercancel', (e) => release(e, true));
+  card.addEventListener('pointerleave', () => { if (!g) rest(); });
+  card.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    if (!e.repeat) card.flip();
+  });
+  paint();
+  return card;
 }

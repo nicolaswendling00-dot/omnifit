@@ -2,6 +2,7 @@
 import { store, todayISO } from '../utils/storage.js';
 import { calculateSMA } from '../utils/math.js';
 import { el, icons, openModal, toast, ringSVG, haptic, makeChart, fmtDateFull, attachSwipeToDelete } from '../utils/ui.js';
+import { flipCard, channel } from '../utils/gestures.js';
 import { lineChartOptions, lineDataset } from '../utils/charts.js';
 import { goToPage, PAGE_NUTRITION, PAGE_ACTIVITY } from '../utils/nav.js';
 import { macroGoals, renderCoachCard } from './nutrition.js';
@@ -253,24 +254,46 @@ function renderWeightChart(canvas) {
   weightChart = makeChart(canvas, { type: 'line', data: { labels, datasets }, options }, weightChart);
 }
 
+// Rang global : une carte au format carte à jouer, posée au centre de
+// l'écran. Recto : le badge, le nom du rang et les LP. Verso : le détail.
+// Toucher la carte la retourne ; toucher à côté (ou Échap) la referme.
 function openGlobalRankModal(gr) {
   const label = gr.rank.division ? `${gr.rank.name} ${gr.rank.division}` : gr.rank.name;
   const pct = gr.rank.lpNeeded ? Math.round((gr.rank.lp / gr.rank.lpNeeded) * 100) : 100;
-  // Le badge en grand : c'est lui qu'on vient chercher, il doit dominer l'écran.
-  const content = el(`<div class="grd">
-    <div class="grd-hero">
-      ${rankBadge(gr.rank.id, 190)}
-      <div class="grd-name" style="color:${gr.rank.color}">${label}</div>
-      <div class="grd-lp">${lpLabel(gr.rank)}</div>
-      ${gr.rank.lpNeeded ? `<div class="grd-bar"><i style="width:${pct}%;background:${gr.rank.color}"></i></div>` : '<div class="grd-ultime">Rang ultime atteint</div>'}
-    </div>
-    <div class="grd-stats">
-      <div class="grd-row"><span>LP totaux</span><b>${gr.lp}</b></div>
-      <div class="grd-row"><span>Série en cours</span><b>${gr.streak} j</b></div>
-      ${gr.lastSeasonPeak > 0 ? `<div class="grd-row"><span>Pic saison ${gr.season - 1}</span><b>${rankFromLP(gr.lastSeasonPeak).name}</b></div>` : ''}
-    </div>
-  </div>`);
-  openModal({ title: 'Rang global', content, actions: [{ label: 'Fermer' }] });
+  const card = flipCard({
+    label: `Rang global ${label}`,
+    front: `<div class="rk-face" style="--rk:${gr.rank.color}">
+      <div class="rk-badge">${rankBadge(gr.rank.id, 200)}</div>
+      <div class="rk-name">${label}</div>
+      <div class="rk-lp num">${lpLabel(gr.rank)}</div>
+    </div>`,
+    back: `<div class="rk-face rk-back" style="--rk:${gr.rank.color}">
+      <div class="rk-back-title">Rang global</div>
+      <div class="rk-back-name">${label}</div>
+      ${gr.rank.lpNeeded ? `<div class="grd-bar"><i style="width:${pct}%;background:${gr.rank.color}"></i></div>
+        <div class="rk-next">${gr.rank.lpNeeded - gr.rank.lp} LP avant le rang suivant</div>` : '<div class="grd-ultime">Rang ultime atteint</div>'}
+      <div class="grd-stats">
+        <div class="grd-row"><span>LP totaux</span><b>${gr.lp}</b></div>
+        <div class="grd-row"><span>Série en cours</span><b>${gr.streak} j</b></div>
+        ${gr.lastSeasonPeak > 0 ? `<div class="grd-row"><span>Pic saison ${gr.season - 1}</span><b>${rankFromLP(gr.lastSeasonPeak).name}</b></div>` : ''}
+      </div>
+    </div>`,
+  });
+  const scrim = el('<div class="scrim rk-scrim"><div class="rk-stage"></div><div class="rk-hint">Toucher la carte pour la retourner</div></div>');
+  const stage = scrim.querySelector('.rk-stage');
+  stage.appendChild(card);
+  document.body.appendChild(scrim);
+  // Entrée : la carte arrive en grandissant, avec un ressort
+  const enter = channel((v) => { stage.style.transform = `scale(${v})`; stage.style.opacity = String(Math.min(1, (v - 0.6) / 0.4)); }, 0.6);
+  requestAnimationFrame(() => { scrim.classList.add('visible'); enter.to(1, { duration: 0.45, bounce: 0.25 }); });
+  const close = () => {
+    scrim.classList.remove('visible');
+    enter.to(0.6, { duration: 0.25 });
+    setTimeout(() => scrim.remove(), 240);
+  };
+  scrim._close = close;
+  scrim.addEventListener('click', (e) => { if (!card.contains(e.target)) close(); });
+  card.focus({ preventScroll: true });
 }
 
 // Couleurs macros, alignées sur l'onglet Nutrition

@@ -163,6 +163,26 @@ assert(mealSheet && mealSheet.querySelectorAll('#m-cat button').length === 4, 'A
 assert(mealSheet.querySelector('#m-fiber'), 'Ajout repas : champ fibres optionnel');
 clearOverlays();
 
+console.log('== v6.11 : navigation elastique, carte de rang, calendrier rapide ==');
+{
+  const nav = document.getElementById('bottom-nav');
+  assert(nav.classList.contains('rs-nav') && nav.querySelector(':scope > .rs-thumb'), 'Navigation : pastille elastique');
+  assert(!nav.querySelector('.rs-copy'), 'Navigation : pas de copie de texte (icones seules)');
+  settings.render(pages.settings);
+  assert(!pages.settings.querySelector('#set-weekly-sessions') && !/Séances \/ semaine/.test(pages.settings.textContent), 'Reglages : seances / semaine retire');
+  home.render(pages.home);
+  pages.home.querySelector('#gr-card').click();
+  const fc = document.querySelector('.rk-scrim .flip-card');
+  assert(fc && fc.querySelector('.flip-card__face--front svg') && fc.querySelector('.rk-name') && /LP/.test(fc.querySelector('.rk-lp').textContent),
+    'Rang : carte avec badge, nom et LP');
+  assert(fc.getAttribute('aria-pressed') === 'false', 'Rang : recto au depart');
+  fc.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  assert(fc.getAttribute('aria-pressed') === 'true' && fc.querySelector('.flip-card__face--back').getAttribute('aria-hidden') === 'false', 'Rang : la carte se retourne');
+  document.querySelector('.rk-scrim')._close();
+  await new Promise((r) => setTimeout(r, 300));
+  assert(!document.querySelector('.rk-scrim'), 'Rang : la carte se referme');
+}
+
 console.log('== v6.9 : segments elastiques, glisser pour supprimer, broyeur ==');
 {
   const gs = await import('./utils/gestures.js');
@@ -306,6 +326,7 @@ clearOverlays();
 pages.workout.querySelector('#cal-more').click();
 const calOverlay = document.querySelector('.cal-overlay');
 assert(calOverlay && calOverlay.querySelector('.cal-month'), 'Calendrier : « Voir plus » ouvre l\'historique plein écran (par mois)');
+assert(calOverlay.querySelectorAll('.cal-month').length <= 3, 'Calendrier : ouverture immediate (3 mois au plus, le reste ensuite)');
 calOverlay.querySelector('#cal-close').click();
 
 console.log('== Volume tracking ==');

@@ -229,6 +229,10 @@ canvas { max-width: 100%; }
 }
 .nav-btn.active { color: var(--text); }
 .nav-btn.active svg { color: var(--accent); background: rgba(var(--accent-rgb), 0.14); }
+/* Pastille élastique (utils/gestures.js) : elle remplace le fond de l'icône */
+#bottom-nav.rs-nav .nav-btn { position: relative; z-index: 1; }
+#bottom-nav.rs-nav .nav-btn.active svg { background: transparent; }
+#bottom-nav.rs-nav > .rs-thumb { background: rgba(var(--accent-rgb), 0.14); }
 .nav-btn:active svg { transform: scale3d(0.88, 0.88, 1); }
 
 /* ---------- Cartes ---------- */
@@ -1407,3 +1411,41 @@ button.wd-exo { display: block; width: 100%; text-align: left; border: none; col
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-delay: 0ms !important; transition-duration: 0.001ms !important; }
 }
+
+/* Carte de rang à retourner (FlipCard, utils/gestures.js) */
+.rk-scrim { flex-direction: column; gap: 18px; }
+.rk-stage { will-change: transform, opacity; }
+.flip-card {
+  position: relative; display: block; width: min(var(--fc-w), 78vw); aspect-ratio: 7 / 10; max-height: 70vh;
+  border-radius: 22px; outline: none; cursor: pointer; touch-action: pan-y;
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+}
+.flip-card[data-dragging] { cursor: grabbing; }
+.flip-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.flip-card__shadow { position: absolute; inset: 12% 9% -5%; border-radius: 22px; background: rgba(0, 0, 0, 0.55); filter: blur(22px); pointer-events: none; }
+.flip-card__rotor { position: absolute; inset: 0; transform-style: preserve-3d; }
+.flip-card__face {
+  position: absolute; inset: 0; overflow: hidden; border-radius: 22px;
+  background: var(--surface); border: 1px solid var(--line-2); color: var(--text);
+  backface-visibility: hidden; -webkit-backface-visibility: hidden;
+}
+.flip-card__face--back { transform: rotateY(180deg); }
+.flip-card__glare {
+  position: absolute; inset: 0; pointer-events: none; opacity: var(--fc-sheen, 0);
+  background: radial-gradient(circle farthest-side at var(--fc-gx, 50%) var(--fc-gy, 50%), rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.06) 45%, transparent 80%);
+}
+.rk-face {
+  height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 22px; text-align: center;
+  background: radial-gradient(120% 70% at 50% 0%, color-mix(in srgb, var(--rk) 22%, transparent), transparent 65%);
+}
+.rk-face::before { content: ''; position: absolute; top: 0; left: 22px; right: 22px; height: 3px; border-radius: 0 0 3px 3px; background: var(--rk); }
+.rk-badge svg { width: min(200px, 52vw); height: auto; }
+.rk-name { color: var(--rk); font-size: 1.7rem; font-weight: 800; font-stretch: var(--wide); text-transform: uppercase; line-height: 1.05; }
+.rk-lp { font-size: 1.15rem; color: var(--text); }
+.rk-back { justify-content: flex-start; align-items: stretch; text-align: left; padding: 26px 22px; }
+.rk-back-title { font-size: 0.66rem; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.09em; }
+.rk-back-name { color: var(--rk); font-size: 1.5rem; font-weight: 800; font-stretch: var(--wide); text-transform: uppercase; margin-bottom: 4px; }
+.rk-back .grd-bar { width: 100%; }
+.rk-next { font-size: 0.76rem; color: var(--text-2); margin-bottom: 8px; }
+.rk-back .grd-stats { margin-top: auto; }
+.rk-hint { font-size: 0.7rem; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.08em; }
