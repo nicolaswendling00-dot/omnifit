@@ -1,7 +1,7 @@
 // OmniFit — PAGE 1 : Nutrition (macros couleur, fibres, modes grammes/auto/%, repas typés, recettes)
 import { store, todayISO } from '../utils/storage.js';
 import { calcKcal, fiberGoalFromKcal, metabolicInsight } from '../utils/math.js';
-import { el, esc, icons, openSheet, openModal, toast, ringSVG, confirmModal, fmtDateShort, haptic, celebrateLP, normalizeStr } from '../utils/ui.js';
+import { el, esc, icons, openSheet, openModal, toast, ringSVG, confirmModal, fmtDateShort, haptic, celebrateLP, normalizeStr, attachSwipeToDelete } from '../utils/ui.js';
 import { startCameraStream, captureFrame, decodeBarcodeFromFile } from '../utils/barcode.js';
 import { fetchProductByBarcode } from '../utils/openfoodfacts.js';
 import { FOODS, FOOD_CATEGORIES } from '../data/foods.js';
@@ -640,14 +640,16 @@ function openRecipesSheet(rerender) {
     const list = form.querySelector('#r-list');
     for (const r of recipes) {
       const nIng = (r.ingredients && r.ingredients.length) ? ` · ${r.ingredients.length} aliment(s)` : '';
-      const item = el(`<div class="recipe-item">
+      const item = el(`<div class="swipe-row recipe-row">
+        <button class="swipe-del" data-del aria-label="Supprimer la recette">${icons.trash}</button>
+        <div class="swipe-content recipe-item">
         <div class="recipe-info">
           <div class="recipe-name">${esc(r.name)}</div>
           <div class="meal-macros">${calcKcal(r.prot, r.carbs, r.fat)} kcal · ${macroLine(r.prot, r.carbs, r.fat, r.fiber)}${nIng}</div>
         </div>
         <div style="display:flex;gap:4px">
           <button class="icon-btn" data-edit aria-label="Modifier">${icons.edit}</button>
-          <button class="icon-btn danger" data-del aria-label="Supprimer">${icons.trash}</button>
+        </div>
         </div>
       </div>`);
       item.querySelector('[data-edit]').addEventListener('click', () => {
@@ -663,6 +665,7 @@ function openRecipesSheet(rerender) {
       });
       list.appendChild(item);
     }
+    attachSwipeToDelete(list, { rowSelector: '.recipe-row', contentSelector: '.swipe-content', collapse: false });
     form.querySelector('#r-new').addEventListener('click', () => {
       sheet.close();
       openRecipeEditor(() => build());
@@ -705,16 +708,19 @@ function openRecipeEditor(onSaved, existing = null) {
     } else {
       host.innerHTML = '';
       state.ingredients.forEach((ing, idx) => {
-        const row = el(`<div class="re-ing">
+        const row = el(`<div class="swipe-row re-ing-row">
+          <button class="swipe-del" data-del aria-label="Retirer l'aliment">${icons.trash}</button>
+          <div class="swipe-content re-ing">
           <div class="re-ing-info">
             <div class="re-ing-name">${esc(ing.name)}${ing.weight ? ` <span class="muted">(${ing.weight} g)</span>` : ''}</div>
             <div class="meal-macros">${calcKcal(ing.prot, ing.carbs, ing.fat)} kcal · ${macroLine(ing.prot, ing.carbs, ing.fat, ing.fiber, { round: true })}</div>
           </div>
-          <button class="icon-btn danger" data-rm aria-label="Retirer">${icons.trash}</button>
+          </div>
         </div>`);
-        row.querySelector('[data-rm]').addEventListener('click', () => { state.ingredients.splice(idx, 1); renderIngs(); });
+        row.querySelector('[data-del]').addEventListener('click', () => { state.ingredients.splice(idx, 1); renderIngs(); });
         host.appendChild(row);
       });
+      attachSwipeToDelete(host, { rowSelector: '.re-ing-row', contentSelector: '.re-ing' });
     }
     const t = totals();
     form.querySelector('#re-totals').innerHTML = `
@@ -1730,50 +1736,8 @@ export function render(container) {
     list.appendChild(groupEl);
   }
 
-  // Swipe vers la gauche sur un repas -> révèle la poubelle rouge
-  if (list) (() => {
-    let row = null; let startX = 0; let startY = 0; let dx = 0; let mode = null; // null | 'h' | 'v'
-    let openRow = null;
-    const closeOpen = (except) => {
-      if (openRow && openRow !== except) {
-        openRow.querySelector('.meal-item').style.transform = '';
-        openRow.classList.remove('swiped');
-        openRow = null;
-      }
-    };
-    list.addEventListener('touchstart', (e) => {
-      const r = e.target.closest('.meal-row');
-      closeOpen(r);
-      if (!r) { row = null; return; }
-      row = r; startX = e.touches[0].clientX; startY = e.touches[0].clientY; dx = 0; mode = null;
-    }, { passive: true });
-    list.addEventListener('touchmove', (e) => {
-      if (!row) return;
-      dx = e.touches[0].clientX - startX;
-      const dy = e.touches[0].clientY - startY;
-      if (mode === null) {
-        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-        mode = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
-      }
-      if (mode !== 'h') return;
-      e.preventDefault(); // bloque le scroll vertical pendant le swipe
-      const base = row.classList.contains('swiped') ? -76 : 0;
-      const t = Math.max(-76, Math.min(0, base + dx));
-      row.querySelector('.meal-item').style.transform = `translateX(${t}px)`;
-    }, { passive: false });
-    list.addEventListener('touchend', () => {
-      if (!row || mode !== 'h') { row = null; mode = null; return; }
-      const content = row.querySelector('.meal-item');
-      const wasOpen = row.classList.contains('swiped');
-      const open = wasOpen ? dx < 40 : dx < -40;
-      if (open) { content.style.transform = 'translateX(-76px)'; row.classList.add('swiped'); openRow = row; }
-      else {
-        content.style.transform = ''; row.classList.remove('swiped');
-        if (openRow === row) openRow = null;
-      }
-      row = null; mode = null;
-    });
-  })();
+  // Glisser un repas vers la gauche : poubelle, ou suppression en glissant jusqu'au bout
+  attachSwipeToDelete(list, { rowSelector: '.meal-row', contentSelector: '.meal-item' });
 
   container.querySelector('#date-ribbon').addEventListener('click', (e) => {
     if (e.target.closest('#date-more')) { openNutritionCalendar(rerender); return; }

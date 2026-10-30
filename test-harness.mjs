@@ -6,6 +6,8 @@ import { readFileSync } from 'fs';
 const html = readFileSync('./index.html', 'utf8');
 const dom = new JSDOM(html, { url: 'https://localhost/', pretendToBeVisual: true });
 const { window } = dom;
+// Animations coupées (prefers-reduced-motion) : les gestes s'appliquent tout de suite.
+window.matchMedia = (q) => ({ matches: /reduced-motion: reduce/.test(q), media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} });
 
 global.window = window;
 global.document = window.document;
@@ -160,6 +162,49 @@ const mealSheet = [...document.querySelectorAll('.sheet')].find((s) => s.querySe
 assert(mealSheet && mealSheet.querySelectorAll('#m-cat button').length === 4, 'Ajout repas : 4 types (PDéj/Déj/Dîner/Snack)');
 assert(mealSheet.querySelector('#m-fiber'), 'Ajout repas : champ fibres optionnel');
 clearOverlays();
+
+console.log('== v6.9 : segments elastiques, glisser pour supprimer, broyeur ==');
+{
+  const gs = await import('./utils/gestures.js');
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+  // Segments : tout .segment ajoute au DOM recoit la pastille elastique
+  activity.render(pages.activity);
+  await tick();
+  const seg = pages.activity.querySelector('#view-toggle');
+  assert(seg.classList.contains('rs') && seg.querySelector('.rs-thumb'), 'Segment : pastille elastique posee automatiquement');
+  assert(seg.querySelectorAll(':scope > button').length === 2, 'Segment : les boutons de la page sont intacts');
+
+  // Glisser pour supprimer : clic sur le bouton rouge = repli puis suppression
+  const host = document.createElement('div');
+  host.innerHTML = '<div class="swipe-row" id="sw1"><button class="swipe-del" data-del aria-label="Supprimer">x</button><div class="swipe-content">Ligne</div></div>';
+  document.body.appendChild(host);
+  let deleted = 0;
+  host.querySelector('[data-del]').addEventListener('click', () => { deleted++; });
+  gs.attachSwipeToDelete(host, { rowSelector: '.swipe-row', contentSelector: '.swipe-content' });
+  gs.attachSwipeToDelete(host, { rowSelector: '.swipe-row', contentSelector: '.swipe-content' });
+  host.querySelector('[data-del]').click();
+  assert(deleted === 1, 'Glisser pour supprimer : le clic du bouton supprime une seule fois (pas de double ecouteur)');
+  host.remove();
+
+  // Broyeur : ordre, deplacement au clavier, suppression par la fente
+  const sh = document.createElement('div');
+  document.body.appendChild(sh);
+  const api = gs.shredderList(sh, ['A', 'B', 'C']);
+  assert(api.order().join() === '0,1,2' && sh.querySelector('.shred-slit'), 'Broyeur : liste et fente');
+  const rowsSh = () => [...sh.querySelectorAll('.reorder-row')];
+  rowsSh()[0].dispatchEvent(new window.KeyboardEvent('keydown', { key: 'ArrowDown', altKey: true, bubbles: true }));
+  assert(api.order().join() === '1,0,2', 'Broyeur : Alt + fleche bas deplace la ligne');
+  rowsSh()[2].dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+  assert(api.order().join() === '1,0', `Broyeur : Suppr broie la ligne (${api.order().join()})`);
+  assert(!document.querySelector('.shred-ghost'), 'Broyeur : pas de copie flottante oubliee');
+  sh.remove();
+
+  // Routine : les exercices se retirent par glissement (plus de poubelle en ligne)
+  const wsrc = fs.readFileSync(new URL('./modules/workout.js', import.meta.url), 'utf8');
+  assert(/routine-exo-row/.test(wsrc) && /shredderList\(/.test(wsrc), 'Routine et reorganisation : nouveaux gestes branches');
+  const nsrc = fs.readFileSync(new URL('./modules/nutrition.js', import.meta.url), 'utf8');
+  assert(!/data-rm/.test(nsrc) && /re-ing-row/.test(nsrc) && /recipe-row/.test(nsrc), 'Recettes et ingredients : glisser pour supprimer');
+}
 
 console.log('== v6.8 : aliments de marque, scan sans autorisation ==');
 {

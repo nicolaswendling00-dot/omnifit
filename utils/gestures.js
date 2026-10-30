@@ -1,0 +1,663 @@
+// OmniFit : gestes animés, portés en JS natif depuis trois composants
+// React Bits (reactbits.dev, variante JS-CSS) : RubberSegment, SwipeRow et
+// Shredder. On n'en garde que la mécanique (ressorts, élastique, lancer) :
+// couleurs, polices et formes restent celles de l'app (jetons de style.css).
+//
+// Tout passe par un petit moteur de ressorts partagé, qui n'écrit que des
+// transform, des clip-path et des largeurs, une seule boucle rAF pour toute
+// l'app. Avec « réduire les animations » (ou sans matchMedia, cas des tests),
+// les gestes s'appliquent sans animation.
+
+const reduced = () => !window.matchMedia || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const now = () => performance.now();
+// Élastique : au-delà d'une butée, le déplacement est freiné (formule iOS).
+const rubber = (over, dim, c = 0.55) => (over * dim * c) / (dim + c * Math.abs(over));
+const easeOut = (t) => 1 - Math.pow(1 - t, 4);
+
+// ------------------------------------------------------------------ ressorts
+// Un « canal » est une valeur animée (équivalent d'une motion value) :
+//   jump(x)  : place sans animation ; set(x) : suit le doigt (vitesse mesurée)
+//   to(x, { duration, bounce, velocity }) : ressort, renvoie une promesse
+//   tween(x, ms) : interpolation à sortie douce
+const live = new Set();
+let raf = 0;
+let last = 0;
+function frame(t) {
+  const dt = Math.min(0.05, (t - last) / 1000) || 0.016;
+  last = t;
+  for (const ch of [...live]) {
+    const prev = ch.x;
+    if (ch.mode === 'tween') {
+      const p = Math.min(1, (t - ch.t0) / ch.dur);
+      ch.x = ch.from + (ch.target - ch.from) * easeOut(p);
+      ch.v = (ch.x - prev) / dt;
+      if (p >= 1) ch.finish();
+    } else {
+      const n = Math.ceil(dt * 240);
+      const h = dt / n;
+      for (let i = 0; i < n; i++) {
+        ch.v += (-ch.k * (ch.x - ch.target) - ch.c * ch.v) * h;
+        ch.x += ch.v * h;
+      }
+      if (Math.abs(ch.x - ch.target) < 0.05 && Math.abs(ch.v) < 1) { ch.x = ch.target; ch.v = 0; ch.finish(); }
+    }
+    ch.apply(ch.x);
+  }
+  raf = live.size ? window.requestAnimationFrame(frame) : 0;
+}
+function kick() { if (!raf) { last = now(); raf = window.requestAnimationFrame(frame); } }
+
+export function channel(apply, x0 = 0) {
+  const ch = {
+    x: x0, v: 0, target: x0, k: 0, c: 0, mode: 'spring', res: null, ts: 0,
+    apply,
+    get: () => ch.x,
+    stop() { live.delete(ch); ch.res = null; },
+    finish() { live.delete(ch); const r = ch.res; ch.res = null; if (r) r(); },
+    jump(x) { ch.stop(); ch.x = x; ch.target = x; ch.v = 0; apply(x); },
+    set(x) {
+      ch.stop();
+      const t = now();
+      const dt = (t - ch.ts) / 1000;
+      if (ch.ts && dt > 0 && dt < 0.1) ch.v = ch.v * 0.4 + ((x - ch.x) / dt) * 0.6;
+      else ch.v = 0;
+      ch.ts = t; ch.x = x; ch.target = x; apply(x);
+    },
+    to(target, { duration = 0.3, bounce = 0, velocity } = {}) {
+      const w = (2 * Math.PI) / duration;
+      ch.mode = 'spring'; ch.k = w * w; ch.c = 2 * (1 - bounce) * w; ch.target = target;
+      if (velocity !== undefined) ch.v = velocity;
+      return ch.start();
+    },
+    tween(target, ms) {
+      ch.mode = 'tween'; ch.from = ch.x; ch.target = target; ch.t0 = now(); ch.dur = ms;
+      return ch.start();
+    },
+    start() {
+      if (reduced()) { ch.x = ch.target; ch.v = 0; ch.stop(); apply(ch.x); return Promise.resolve(); }
+      live.add(ch); kick();
+      return new Promise((r) => { ch.res = r; });
+    },
+  };
+  return ch;
+}
+
+const SPRING_UI = { duration: 0.3, bounce: 0 };
+
+// ============================================================
+// SÉLECTEUR SEGMENTÉ ÉLASTIQUE (RubberSegment)
+// ============================================================
+// La pastille active est une couche par dessus les boutons, découpée par un
+// clip-path dont chaque bord est un ressort. Au changement, le bord de tête
+// part devant, la pastille s'étire sur les deux options puis le bord de queue
+// rattrape avec un léger tassement. On peut aussi saisir la pastille et la
+// lancer : élastique aux extrémités, la vitesse décide de l'option visée.
+// Dans la pastille, une copie des libellés en couleur « sur accent » : le
+// texte change de couleur exactement sous la pastille, même en mouvement.
+//
+// Appliqué automatiquement à tout `.segment` de l'app (observateur plus bas) :
+// le code des pages ne change pas, il continue de poser la classe `active`.
+const lastIndex = new Map(); // id du segment -> { i, t } pour enchaîner après un re-rendu
+
+function rubberSegment(seg) {
+  if (seg._rs) return;
+  seg._rs = true;
+  seg.classList.add('rs');
+  const thumb = document.createElement('div');
+  thumb.className = 'rs-thumb';
+  thumb.setAttribute('aria-hidden', 'true');
+  seg.appendChild(thumb);
+
+  let btns = [];
+  let slots = [];
+  let committed = -1;
+  let gen = 0;
+  let handoff = 0;
+  let drag = null;
+  let W = 0; let H = 0;
+  const paint = () => {
+    thumb.style.width = `${W}px`;
+    thumb.style.clipPath = `inset(${T.x}px ${Math.max(0, W - R.x)}px ${Math.max(0, H - B.x)}px ${Math.max(0, L.x)}px round 11px)`;
+  };
+  const L = channel(paint); const R = channel(paint); const T = channel(paint); const B = channel(paint);
+
+  const activeIndex = () => btns.findIndex((b) => b.classList.contains('active'));
+  const jumpTo = (i) => {
+    clearTimeout(handoff); gen++;
+    const s = slots[i];
+    thumb.style.opacity = s ? '1' : '0';
+    if (!s) return;
+    L.jump(s.l); R.jump(s.r); T.jump(s.t); B.jump(s.b);
+  };
+  const measure = () => {
+    btns = [...seg.children].filter((c) => c.tagName === 'BUTTON');
+    W = seg.scrollWidth; H = seg.clientHeight;
+    if (!seg.offsetWidth) return false;
+    slots = btns.map((b) => ({ l: b.offsetLeft, r: b.offsetLeft + b.offsetWidth, t: b.offsetTop, b: b.offsetTop + b.offsetHeight }));
+    thumb.textContent = '';
+    btns.forEach((b, i) => {
+      const s = slots[i];
+      const cs = window.getComputedStyle(b);
+      const copy = document.createElement('span');
+      copy.className = 'rs-copy';
+      copy.innerHTML = b.innerHTML;
+      Object.assign(copy.style, {
+        left: `${s.l}px`, top: `${s.t}px`, width: `${s.r - s.l}px`, height: `${s.b - s.t}px`,
+        fontSize: cs.fontSize, fontWeight: cs.fontWeight, letterSpacing: cs.letterSpacing, textTransform: cs.textTransform,
+      });
+      thumb.appendChild(copy);
+    });
+    return true;
+  };
+
+  // Un axe = deux bords (lo, hi). Le bord dans le sens du trajet mène.
+  function landAxis(lo, hi, toLo, toHi, v, flick, squash, g) {
+    const dir = Math.sign((toLo + toHi) / 2 - (lo.x + hi.x) / 2) || 1;
+    const [lead, leadTo, trail, trailTo] = dir > 0 ? [hi, toHi, lo, toLo] : [lo, toLo, hi, toHi];
+    const vel = (ch) => clamp(v === null ? ch.v : v, -2000, 2000);
+    lead.to(leadTo, flick ? { duration: 0.4, bounce: 0.2, velocity: vel(lead) } : { ...SPRING_UI, velocity: vel(lead) });
+    if (!squash) { trail.to(trailTo, { ...SPRING_UI, velocity: vel(trail) }); return; }
+    trail.to(trailTo + dir * 3, { ...SPRING_UI, velocity: vel(trail) }).then(() => {
+      if (gen === g) trail.to(trailTo, { duration: 0.16, bounce: 0 });
+    });
+  }
+  const land = (to, v, flick, squash) => {
+    const s = slots[to];
+    if (!s) return;
+    const g = ++gen;
+    landAxis(L, R, s.l, s.r, v, flick, squash, g);
+    landAxis(T, B, s.t, s.b, null, false, false, g);
+  };
+  const travel = (from, to) => {
+    const a = slots[from]; const b = slots[to];
+    if (!a || !b || reduced()) { jumpTo(to); return; }
+    clearTimeout(handoff); gen++;
+    thumb.style.opacity = '1';
+    // Étirement : la pastille couvre les deux options, puis se pose.
+    L.tween(Math.min(a.l, b.l), 190); R.tween(Math.max(a.r, b.r), 190);
+    T.tween(Math.min(a.t, b.t), 190); B.tween(Math.max(a.b, b.b), 190);
+    handoff = setTimeout(() => land(to, null, false, true), 150);
+  };
+
+  const sync = () => {
+    const i = activeIndex();
+    if (i === committed || drag) return;
+    const from = committed;
+    committed = i;
+    if (seg.id) lastIndex.set(seg.id, { i, t: now() });
+    if (from < 0 || i < 0) jumpTo(i); else travel(from, i);
+  };
+  const init = () => {
+    if (!measure()) return;
+    committed = activeIndex();
+    const prev = seg.id && lastIndex.get(seg.id);
+    // Re-rendu juste après un clic : on repart de l'ancienne option.
+    if (prev && prev.i !== committed && prev.i >= 0 && prev.i < slots.length && now() - prev.t < 800) {
+      jumpTo(prev.i);
+      travel(prev.i, committed);
+    } else jumpTo(committed);
+    if (seg.id) lastIndex.set(seg.id, { i: committed, t: 0 });
+  };
+
+  new window.MutationObserver((muts) => {
+    if (muts.every((m) => thumb.contains(m.target))) return;
+    if (muts.some((m) => m.type === 'childList' && m.target === seg)) { init(); return; }
+    if (!slots.length) init(); else sync();
+  }).observe(seg, { attributes: true, attributeFilter: ['class'], childList: true, subtree: true });
+  if (window.ResizeObserver) new ResizeObserver(() => { if (measure()) { if (committed < 0) committed = activeIndex(); jumpTo(committed); } }).observe(seg);
+  init();
+
+  // Saisir la pastille et la lancer
+  const localX = (e) => e.clientX - seg.getBoundingClientRect().left + seg.scrollLeft;
+  seg.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || committed < 0 || !slots.length) return;
+    const x = localX(e);
+    const s = slots[committed];
+    const y = e.clientY - seg.getBoundingClientRect().top;
+    if (x < L.x || x > R.x || y < s.t || y > s.b) return;
+    drag = { id: e.pointerId, x0: x, live: false, offset: 0, w: 0, hist: [[e.timeStamp, x]] };
+  });
+  seg.addEventListener('pointermove', (e) => {
+    const d = drag;
+    if (!d || e.pointerId !== d.id) return;
+    const x = localX(e);
+    d.hist.push([e.timeStamp, x]);
+    if (d.hist.length > 8) d.hist.shift();
+    if (!d.live) {
+      if (Math.abs(x - d.x0) < 4) return;
+      d.live = true;
+      d.offset = x - L.x; d.w = R.x - L.x;
+      clearTimeout(handoff); gen++;
+      seg.dataset.held = '';
+      try { seg.setPointerCapture(e.pointerId); } catch (_) { /* noop */ }
+    }
+    const row = slots[committed];
+    const rowSlots = slots.filter((s) => s.t === row.t);
+    const minL = Math.min(...rowSlots.map((s) => s.l));
+    const maxR = Math.max(...rowSlots.map((s) => s.r));
+    const l = x - d.offset;
+    const maxL = maxR - d.w;
+    if (l < minL) { L.set(minL); R.set(minL + d.w - rubber(minL - l, d.w)); } else if (l > maxL) { R.set(maxR); L.set(maxL + rubber(l - maxL, d.w)); } else { L.set(l); R.set(l + d.w); }
+  });
+  const release = (e, cancel) => {
+    const d = drag;
+    if (!d || e.pointerId !== d.id) return;
+    drag = null;
+    delete seg.dataset.held;
+    if (!d.live) return;
+    if (cancel) { land(committed, null, false, false); return; }
+    const recent = d.hist.filter(([t]) => e.timeStamp - t <= 100);
+    let v = 0;
+    if (recent.length > 1) {
+      const [t0, x0] = recent[0]; const [t1, x1] = recent[recent.length - 1];
+      if (t1 - t0 >= 8) v = ((x1 - x0) / (t1 - t0)) * 1000;
+    }
+    const flick = Math.abs(v) > 110;
+    // Projection du lancer (glisse 75) puis option la plus proche sur la même ligne
+    const dd = 1 - 0.1 * Math.pow(0.05, 0.75);
+    const mid = (L.x + R.x) / 2 + ((v / 1000) * dd) / (1 - dd);
+    const row = slots[committed].t;
+    let to = committed;
+    slots.forEach((s, i) => { if (s.t === row && Math.abs((s.l + s.r) / 2 - mid) < Math.abs((slots[to].l + slots[to].r) / 2 - mid)) to = i; });
+    if (flick && to === committed) {
+      const next = committed + Math.sign(v);
+      if (slots[next] && slots[next].t === row) to = next;
+    }
+    committed = to;
+    if (seg.id) lastIndex.set(seg.id, { i: to, t: now() });
+    land(to, v, flick, flick);
+    // Le bouton reçoit un vrai clic : la page applique son propre choix.
+    if (!btns[to].classList.contains('active')) btns[to].click();
+  };
+  seg.addEventListener('pointerup', (e) => release(e, false));
+  seg.addEventListener('pointercancel', (e) => release(e, true));
+}
+
+// Tout `.segment` ajouté au DOM devient élastique.
+function enhanceAll(root) {
+  if (root.nodeType !== 1) return;
+  if (root.classList.contains('segment')) rubberSegment(root);
+  root.querySelectorAll('.segment').forEach(rubberSegment);
+}
+if (typeof document !== 'undefined' && document.body) {
+  enhanceAll(document.body);
+  new window.MutationObserver((muts) => {
+    for (const m of muts) m.addedNodes.forEach(enhanceAll);
+  }).observe(document.body, { childList: true, subtree: true });
+}
+
+// ============================================================
+// GLISSER POUR SUPPRIMER (SwipeRow)
+// ============================================================
+// Même balisage qu'avant : une ligne, son contenu (fond opaque) et un bouton
+// `[data-del]` dessous. Le contenu suit le doigt avec élastique, le bouton
+// rouge entre par la droite. Au delà de 60 % de la largeur, le bouton s'étire
+// sous tout le contenu (vibration) : lâcher supprime. Relâché avant, la ligne
+// se cale ouverte ou fermée selon la vitesse du geste. La suppression replie
+// la ligne (hauteur, opacité) puis déclenche le clic du bouton, donc le code
+// de suppression de chaque page reste inchangé.
+//
+//   collapse : false pour une suppression qui demande confirmation (la ligne
+//              revient en place et la fenêtre de confirmation s'ouvre).
+// La classe `swiped` reste posée sur une ligne ouverte : les pages s'en
+// servent pour ignorer le tap qui la referme.
+export function attachSwipeToDelete(list, { rowSelector, contentSelector, width = 80, collapse = true } = {}) {
+  if (!list || list._sw) return;
+  list._sw = true;
+  const D = width;
+  const contentOf = (r) => r.querySelector(contentSelector);
+  const delOf = (r) => r.querySelector('[data-del]');
+  const commitPoint = (r) => Math.max(0.6 * r.offsetWidth, D + D / 2);
+
+  // Position « exposée » (px révélés) de chaque ligne, animée par ressort.
+  const state = (r) => {
+    if (r._swS) return r._swS;
+    const c = contentOf(r); const del = delOf(r);
+    if (c) c.style.transition = 'none';
+    const s = { open: false };
+    const paint = () => {
+      const e = s.x.x;
+      if (c) c.style.transform = e ? `translateX(${-e}px)` : '';
+      // Au delà du tiroir, l'espace entre la ligne et le bouton prend le gris des surfaces.
+      r.style.background = e > 1 ? 'var(--surface-3)' : '';
+      if (del) {
+        del.style.transform = `translateX(${Math.max(0, D - e)}px)`;
+        del.style.width = `${D + s.spread.x * Math.max(0, e - D)}px`;
+      }
+    };
+    s.x = channel(paint); s.spread = channel(paint);
+    r._swS = s;
+    return s;
+  };
+  const setOpen = (r, open) => { state(r).open = open; r.classList.toggle('swiped', open); };
+  const settle = (r, target, v = 0) => {
+    const s = state(r);
+    setOpen(r, target > 0);
+    s.spread.to(0, SPRING_UI);
+    s.x.to(target, Math.abs(v) >= 110 ? { duration: 0.4, bounce: 0.2, velocity: clamp(v, -1500, 1500) } : { ...SPRING_UI, velocity: v });
+  };
+  let openRow = null;
+
+  // dispatchEvent et non click() : click() est ignoré pendant le clic du même bouton.
+  const fire = (r) => { const del = delOf(r); if (!del) return; del._swGo = true; del.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true })); del._swGo = false; };
+  const commit = (r, v = 0) => {
+    const s = state(r);
+    if (navigator.vibrate) navigator.vibrate(8);
+    if (!collapse) { settle(r, 0); fire(r); return; }
+    setOpen(r, false);
+    if (reduced()) { fire(r); return; }
+    s.spread.to(1, SPRING_UI);
+    s.x.to(r.offsetWidth, { ...SPRING_UI, velocity: v }).then(() => {
+      r.style.height = `${r.offsetHeight}px`;
+      void r.offsetHeight; // fige la hauteur de départ avant la transition
+      r.classList.add('sw-collapsing');
+      setTimeout(() => fire(r), 200);
+    });
+  };
+
+  // Un tap sur le bouton rouge passe aussi par l'animation de repli.
+  list.addEventListener('click', (e) => {
+    const del = e.target.closest('[data-del]');
+    const r = del && del.closest(rowSelector);
+    if (!r || !list.contains(r) || del._swGo) return;
+    e.stopPropagation(); e.preventDefault();
+    commit(r, 0);
+  }, true);
+
+  let g = null;
+  list.addEventListener('touchstart', (e) => {
+    const r = e.target.closest(rowSelector);
+    if (openRow && openRow !== r) { settle(openRow, 0); openRow = null; }
+    if (!r || e.target.closest('[data-del]')) { g = null; return; }
+    state(r).x.stop();
+    const t = e.touches[0];
+    g = { r, x0: t.clientX, y0: t.clientY, grab: null, hist: [], moved: false };
+  }, { passive: true });
+
+  list.addEventListener('touchmove', (e) => {
+    if (!g) return;
+    const t = e.touches[0];
+    const dx = t.clientX - g.x0; const dy = t.clientY - g.y0;
+    const s = state(g.r);
+    const Wd = g.r.offsetWidth;
+    const C = commitPoint(g.r);
+    if (g.grab === null) {
+      if (Math.abs(dx) < 10 || Math.abs(dx) < Math.abs(dy)) {
+        if (Math.abs(dy) > 10) g = null; // geste vertical : on laisse défiler
+        return;
+      }
+      // Reprise d'une ligne déjà ouverte : on repart de sa position.
+      g.grab = -(g.x0 + Math.sign(dx) * 10) - inv(s.x.x, Wd, C);
+      g.moved = true;
+    }
+    e.preventDefault(); // bloque le défilement vertical pendant le glissement
+    const ex = map(-t.clientX - g.grab, Wd, C);
+    s.x.set(ex);
+    g.hist.push([now(), ex]);
+    if (g.hist.length > 4) g.hist.shift();
+    const over = ex >= C;
+    if (over !== (s.spread.target === 1)) {
+      s.spread.to(over ? 1 : 0, SPRING_UI);
+      if (over && navigator.vibrate) navigator.vibrate(8);
+    }
+  }, { passive: false });
+
+  // Correspondance doigt -> position, avec élastique avant 0, après le tiroir
+  // et un palier de résistance jusqu'au seuil de suppression.
+  function map(raw, Wd, C) {
+    const c = 0.55;
+    if (raw < 0) return rubber(raw, Wd, c);
+    if (raw <= D) return raw;
+    const knee = D + (C - D) / c;
+    return raw <= knee ? D + c * (raw - D) : C + rubber(raw - knee, Wd, c);
+  }
+  function inv(ex, Wd, C) {
+    const c = 0.55;
+    const un = (y) => (y * Wd) / (c * Math.max(1, Wd - Math.abs(y)));
+    if (ex < 0) return un(ex);
+    if (ex <= D) return ex;
+    const knee = D + (C - D) / c;
+    return ex <= C ? D + (ex - D) / c : knee + un(ex - C);
+  }
+
+  const end = () => {
+    const cur = g;
+    g = null;
+    if (!cur || !cur.moved) return;
+    const r = cur.r;
+    const s = state(r);
+    const ex = s.x.x;
+    const h = cur.hist;
+    const v = h.length > 1 ? ((h[h.length - 1][1] - h[0][1]) / Math.max(1, h[h.length - 1][0] - h[0][0])) * 1000 : 0;
+    if (ex >= commitPoint(r)) { if (openRow === r) openRow = null; commit(r, v); return; }
+    const proj = ex + ((v / 1000) * 0.998) / 0.002;
+    const target = Math.abs(v) >= 110 ? (v > 0 ? D : 0) : proj > D / 2 ? D : 0;
+    settle(r, target, v);
+    openRow = target ? r : (openRow === r ? null : openRow);
+  };
+  list.addEventListener('touchend', end, { passive: true });
+  list.addEventListener('touchcancel', end, { passive: true });
+}
+
+// ============================================================
+// RÉORGANISER ET BROYER (Shredder)
+// ============================================================
+// Liste que l'on réordonne en faisant glisser les lignes. La ligne saisie se
+// soulève (léger agrandissement), suit le doigt par ressort et penche selon
+// sa vitesse ; les autres s'écartent, chacune avec son ressort. Lâchée sur la
+// fente en bas de la liste, elle y est entraînée et ressort en lanières qui
+// tombent en se tordant : l'élément est retiré.
+//
+//   host   : conteneur vide qui reçoit la liste et la fente
+//   labels : textes des lignes (HTML déjà échappé)
+// Renvoie { order() } : indices d'origine des lignes restantes, dans l'ordre.
+export function shredderList(host, labels, { dragIcon = '', slitLabel = 'Glisser ici pour retirer' } = {}) {
+  host.classList.add('shred');
+  host.innerHTML = `<div class="shred-list"></div>
+    <div class="shred-mouth"><div class="shred-slit"></div><span class="shred-hint">${slitLabel}</span></div>
+    <div class="shred-fall" aria-hidden="true"></div>`;
+  const list = host.querySelector('.shred-list');
+  const mouth = host.querySelector('.shred-mouth');
+  const slit = host.querySelector('.shred-slit');
+  const fall = host.querySelector('.shred-fall');
+  labels.forEach((lbl, i) => {
+    const row = document.createElement('div');
+    row.className = 'reorder-row';
+    row.dataset.i = i;
+    row.tabIndex = 0;
+    row.innerHTML = `<span class="drag-handle">${dragIcon}</span><span class="reorder-label">${lbl}</span>`;
+    row.setAttribute('aria-label', `${row.querySelector('.reorder-label').textContent}. Glisser pour déplacer, Suppr pour retirer`);
+    list.appendChild(row);
+  });
+
+  // Décalage animé d'une ligne (FLIP par ressort) quand l'ordre change.
+  const flip = (mutate) => {
+    const rows = [...list.children];
+    const before = new Map(rows.map((r) => [r, r.getBoundingClientRect().top]));
+    mutate();
+    rows.forEach((r) => {
+      if (!r.isConnected || r === (drag && drag.row)) return;
+      const d = before.get(r) - r.getBoundingClientRect().top;
+      if (Math.abs(d) < 0.5) return;
+      const ch = r._y || (r._y = channel((y) => { r.style.transform = y ? `translateY(${y}px)` : ''; }));
+      ch.jump(ch.x + d);
+      ch.to(0, { duration: 0.35, bounce: 0.15 });
+    });
+  };
+
+  let drag = null;
+  const ghostPaint = () => {
+    const d = drag || feeding;
+    if (!d) return;
+    d.ghost.style.transform = `translate(${d.gx.x}px, ${d.gy.x}px) rotate(${d.tilt}deg) scale(${d.lift})`;
+  };
+  let feeding = null;
+
+  const begin = (row, e) => {
+    const r = row.getBoundingClientRect();
+    const ghost = row.cloneNode(true);
+    ghost.classList.add('shred-ghost', 'dragging');
+    ghost.removeAttribute('tabindex');
+    Object.assign(ghost.style, { width: `${r.width}px`, height: `${r.height}px`, left: '0px', top: '0px' });
+    document.body.appendChild(ghost);
+    row.classList.add('shred-placeholder');
+    const d = {
+      row, ghost, w: r.width, h: r.height, id: e ? e.pointerId : null,
+      offX: e ? e.clientX - r.left : r.width / 2, offY: e ? e.clientY - r.top : r.height / 2,
+      tilt: 0, lift: 1, px: r.left, py: r.top,
+    };
+    d.gx = channel(ghostPaint, r.left); d.gy = channel(ghostPaint, r.top);
+    drag = d;
+    ghostPaint();
+    if (!reduced()) {
+      // Soulèvement
+      const lift = channel((v) => { d.lift = v; ghostPaint(); }, 1);
+      lift.to(1.03, { duration: 0.25 });
+    }
+    return d;
+  };
+
+  const overSlit = (d) => d.gy.target + d.h > slit.getBoundingClientRect().top + 6;
+
+  const move = (e) => {
+    const d = drag;
+    if (!d || e.pointerId !== d.id) return;
+    e.preventDefault();
+    const x = e.clientX - d.offX; const y = e.clientY - d.offY;
+    const vx = (x - d.gx.target) * 60;
+    d.gx.to(x, { duration: 0.2 }); d.gy.to(y, { duration: 0.2 });
+    d.tilt = clamp(vx * 0.004, -6, 6);
+    mouth.classList.toggle('hot', overSlit(d));
+    // Place du trou : au-dessus de la première ligne dont le milieu est sous le doigt.
+    const cy = y + d.h / 2;
+    const others = [...list.children].filter((r) => r !== d.row);
+    let target = null;
+    for (const r of others) {
+      const b = r.getBoundingClientRect();
+      if (cy < b.top + b.height / 2 - (r._y ? r._y.x : 0)) { target = r; break; }
+    }
+    if (d.row.nextElementSibling !== target && !(target === null && d.row === list.lastElementChild)) {
+      flip(() => list.insertBefore(d.row, target));
+    }
+  };
+
+  const finishDrop = (d) => {
+    const r = d.row.getBoundingClientRect();
+    d.tilt = 0;
+    mouth.classList.remove('hot');
+    const lift = channel((v) => { d.lift = v; ghostPaint(); }, d.lift);
+    lift.to(1, SPRING_UI);
+    Promise.all([d.gx.to(r.left, { duration: 0.35 }), d.gy.to(r.top, { duration: 0.35 })]).then(() => {
+      d.ghost.remove();
+      d.row.classList.remove('shred-placeholder');
+    });
+  };
+
+  // La ligne passe dans la fente : coupée en lanières sous la fente.
+  const shred = (d) => {
+    const row = d.row;
+    mouth.classList.remove('hot');
+    if (reduced()) {
+      d.ghost.remove();
+      flip(() => row.remove());
+      return;
+    }
+    feeding = d;
+    d.tilt = 0;
+    const sTop = slit.getBoundingClientRect().top + slit.offsetHeight / 2;
+    const left = clamp(d.gx.x, slit.getBoundingClientRect().left - 4, slit.getBoundingClientRect().right - d.w + 4);
+    d.gx.to(left, { duration: 0.15 });
+    const lift = channel((v) => { d.lift = v; ghostPaint(); }, d.lift);
+    lift.to(1, { duration: 0.15 });
+    // Lanières : copies de la ligne, chacune réduite à une colonne.
+    const n = Math.max(6, Math.round(d.w / 10));
+    const sw = d.w / n;
+    const strips = [];
+    for (let i = 0; i < n; i++) {
+      const s = d.ghost.cloneNode(true);
+      s.classList.remove('shred-ghost', 'dragging');
+      s.classList.add('shred-strip');
+      Object.assign(s.style, { width: `${d.w}px`, height: `${d.h}px`, left: '0px', top: '0px', transform: '' });
+      s._curl = (Math.random() < 0.5 ? -1 : 1) * (6 + Math.random() * 14);
+      s._i = i;
+      document.body.appendChild(s);
+      strips.push(s);
+    }
+    slit.classList.add('chewing');
+    let y = Math.max(d.gy.x, sTop - d.h);
+    let v = 180 * 2.4; let age = 0; let lastT = now();
+    const step = () => {
+      const t = now();
+      const dt = Math.min(0.05, (t - lastT) / 1000); lastT = t;
+      age += dt;
+      v = 180 * (1 + 1.4 * Math.exp(-age / 0.14)); // tirage énergique au début
+      y += v * dt;
+      d.gy.jump(y);
+      const cut = clamp(sTop - y, 0, d.h); // part encore au-dessus de la fente
+      d.ghost.style.clipPath = `inset(0 0 ${d.h - cut}px 0)`;
+      const passed = d.h - cut;
+      strips.forEach((s) => {
+        const l = s._i * sw;
+        s.style.clipPath = `inset(${cut}px ${d.w - l - sw + 0.5}px 0 ${l}px)`;
+        s.style.transformOrigin = `${l + sw / 2}px ${cut}px`;
+        s.style.transform = `translate(${d.gx.x}px, ${y}px) rotate(${(s._curl * passed) / d.h}deg)`;
+      });
+      if (cut > 0) { window.requestAnimationFrame(step); return; }
+      // Entièrement passée : les lanières tombent en se dispersant puis s'effacent.
+      slit.classList.remove('chewing');
+      d.ghost.remove();
+      feeding = null;
+      strips.forEach((s) => {
+        const tr = s.style.transform;
+        const a = s.animate([
+          { transform: tr, opacity: 1 },
+          { transform: `${tr} translate(${(Math.random() - 0.5) * 60}px, ${90 + Math.random() * 70}px) rotate(${s._curl * 1.5}deg)`, opacity: 0 },
+        ], { duration: 650 + Math.random() * 300, easing: 'cubic-bezier(.4,0,.6,1)', fill: 'forwards' });
+        a.onfinish = () => s.remove();
+      });
+      flip(() => row.remove());
+    };
+    window.requestAnimationFrame(step);
+  };
+
+  const up = (e) => {
+    const d = drag;
+    if (!d || e.pointerId !== d.id) return;
+    drag = null;
+    if (overSlit(d)) shred(d); else finishDrop(d);
+  };
+
+  list.addEventListener('pointerdown', (e) => {
+    const row = e.target.closest('.reorder-row');
+    if (!row || e.button !== 0 || drag || feeding) return;
+    e.preventDefault();
+    try { row.setPointerCapture(e.pointerId); } catch (_) { /* noop */ }
+    begin(row, e);
+  });
+  list.addEventListener('pointermove', move);
+  list.addEventListener('pointerup', up);
+  list.addEventListener('pointercancel', up);
+  // Clavier : Suppr ou Retour arrière broie la ligne, Alt + flèches la déplacent.
+  list.addEventListener('keydown', (e) => {
+    const row = e.target.closest('.reorder-row');
+    if (!row || drag || feeding) return;
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault();
+      const d = begin(row, null);
+      drag = null;
+      if (reduced()) { shred(d); return; }
+      const sr = slit.getBoundingClientRect();
+      d.gx.to((sr.left + sr.right) / 2 - d.w / 2, { duration: 0.3 });
+      d.gy.to(sr.top - d.h + 4, { duration: 0.3 }).then(() => shred(d));
+    } else if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      e.preventDefault();
+      const sib = e.key === 'ArrowUp' ? row.previousElementSibling : row.nextElementSibling;
+      if (!sib) return;
+      flip(() => list.insertBefore(row, e.key === 'ArrowUp' ? sib : sib.nextElementSibling));
+      row.focus();
+    }
+  });
+
+  return { order: () => [...list.querySelectorAll('.reorder-row')].map((r) => +r.dataset.i) };
+}

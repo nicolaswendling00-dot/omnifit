@@ -3,8 +3,9 @@
 // détail exo (muscles, historique, repos perso), coefficients d'amélioration.
 import { store, todayISO } from '../utils/storage.js';
 import { EXERCISES, MUSCLES, muscleLabel, AKA, EQUIPMENT, equipLabel } from '../data/exercises.js';
+import { shredderList } from '../utils/gestures.js';
 import { formatTime, workoutMuscleVolume, weeklySetsByMuscle, muscleAttenuation } from '../utils/math.js';
-import { el, esc, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, fmtDateFull, celebrateLP, makeChart, normalizeStr, closeAllOverlays } from '../utils/ui.js';
+import { el, esc, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, fmtDateFull, celebrateLP, makeChart, normalizeStr, closeAllOverlays, attachSwipeToDelete } from '../utils/ui.js';
 import { lineChartOptions, lineDataset } from '../utils/charts.js';
 import { bodyMapSVG } from '../utils/bodyMap.js';
 import { computeExerciseLP, computeExerciseLPDetailed, rankFromLP, rankBadge, getStandards, lpLabel } from '../utils/ranks.js';
@@ -717,45 +718,14 @@ function openExerciseEditor(onSaved, existing = null) {
 // ============================================================
 function openReorderSheet(labels, onDone) {
   const form = el(`<div>
-    <div id="reorder-list"></div>
+    <div id="reorder-list" class="no-sheet-drag"></div>
     <button class="btn btn-primary btn-block" id="reorder-save" style="margin-top:6px">Valider l'ordre</button>
   </div>`);
   const sheet = openSheet({ title: 'Réorganiser', content: form });
-  const list = form.querySelector('#reorder-list');
-
-  labels.forEach((lbl, i) => {
-    list.appendChild(el(`<div class="reorder-row" data-i="${i}">
-      <span class="drag-handle">${icons.drag}</span>
-      <span class="reorder-label">${lbl}</span>
-    </div>`));
-  });
-
-  let dragged = null;
-  list.addEventListener('pointerdown', (e) => {
-    const handle = e.target.closest('.drag-handle');
-    if (!handle) return;
-    dragged = handle.closest('.reorder-row');
-    dragged.classList.add('dragging');
-    dragged.setPointerCapture && handle.setPointerCapture(e.pointerId);
-    e.preventDefault();
-  });
-  list.addEventListener('pointermove', (e) => {
-    if (!dragged) return;
-    e.preventDefault();
-    const target = document.elementFromPoint(e.clientX, e.clientY);
-    const row = target && target.closest ? target.closest('.reorder-row') : null;
-    if (row && row !== dragged) {
-      const r = row.getBoundingClientRect();
-      const before = e.clientY < r.top + r.height / 2;
-      list.insertBefore(dragged, before ? row : row.nextSibling);
-    }
-  });
-  const endDrag = () => { if (dragged) { dragged.classList.remove('dragging'); dragged = null; } };
-  list.addEventListener('pointerup', endDrag);
-  list.addEventListener('pointercancel', endDrag);
-
+  // Glisser une ligne pour la déplacer ; la lâcher dans la fente la retire.
+  const shredder = shredderList(form.querySelector('#reorder-list'), labels, { dragIcon: icons.drag });
   form.querySelector('#reorder-save').addEventListener('click', () => {
-    const order = [...list.querySelectorAll('.reorder-row')].map((r) => +r.dataset.i);
+    const order = shredder.order();
     sheet.close();
     onDone(order);
   });
@@ -1562,46 +1532,9 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null, resum
     }
   });
 
-  // Swipe vers la gauche sur une série validée → révèle la poubelle rouge
-  (() => {
-    const exosHost = overlay.querySelector('#s-exos');
-    let row = null; let startX = 0; let startY = 0; let dx = 0; let mode = null; // null | 'h' | 'v'
-    let openRow = null;
-    const closeOpen = (except) => {
-      if (openRow && openRow !== except) { openRow.querySelector('.sr-content').style.transform = ''; openRow.classList.remove('swiped'); openRow = null; }
-    };
-    exosHost.addEventListener('touchstart', (e) => {
-      // `.sr-live` : toute ligne portée par une série, validée ou non — une
-      // série ajoutée puis laissée vide se supprime donc comme les autres.
-      const r = e.target.closest('.set-row.sr-live');
-      closeOpen(r);
-      if (!r) { row = null; return; }
-      row = r; startX = e.touches[0].clientX; startY = e.touches[0].clientY; dx = 0; mode = null;
-    }, { passive: true });
-    exosHost.addEventListener('touchmove', (e) => {
-      if (!row) return;
-      const cx = e.touches[0].clientX; const cy = e.touches[0].clientY;
-      dx = cx - startX; const dy = cy - startY;
-      if (mode === null) {
-        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-        mode = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
-      }
-      if (mode !== 'h') return;
-      e.preventDefault(); // bloque le scroll vertical pendant le swipe
-      const base = row.classList.contains('swiped') ? -76 : 0;
-      const t = Math.max(-76, Math.min(0, base + dx));
-      row.querySelector('.sr-content').style.transform = `translateX(${t}px)`;
-    }, { passive: false });
-    exosHost.addEventListener('touchend', () => {
-      if (!row || mode !== 'h') { row = null; mode = null; return; }
-      const content = row.querySelector('.sr-content');
-      const wasOpen = row.classList.contains('swiped');
-      const open = wasOpen ? dx < 40 : dx < -40; // ouvrir si glissé assez à gauche
-      if (open) { content.style.transform = 'translateX(-76px)'; row.classList.add('swiped'); openRow = row; }
-      else { content.style.transform = ''; row.classList.remove('swiped'); if (openRow === row) openRow = null; }
-      row = null; mode = null;
-    });
-  })();
+  // Glisser une série vers la gauche : poubelle, ou suppression en glissant jusqu'au bout.
+  // `.sr-live` : toute ligne portée par une série, validée ou non.
+  attachSwipeToDelete(overlay.querySelector('#s-exos'), { rowSelector: '.set-row.sr-live', contentSelector: '.sr-content' });
 
   overlay.querySelector('#s-playpause').addEventListener('click', (e) => {
     if (session.running) {
@@ -1833,15 +1766,16 @@ function openRoutineEditor(routine, rerender) {
     listEl.innerHTML = r.exercises.length ? '' : '<div class="empty-state">Aucun exercice</div>';
     r.exercises.forEach((id, i) => {
       const def = exerciseLookup(id);
-      const row = el(`<div class="card-row" style="padding:7px 0;border-bottom:1px solid rgba(0,217,255,0.08)">
-        <span style="font-size:0.9rem">${i + 1}. ${esc(def ? def.name : id)}</span>
-        <button class="icon-btn danger" aria-label="Retirer" style="width:38px;height:38px">${icons.trash}</button>
+      const row = el(`<div class="swipe-row routine-exo-row">
+        <button class="swipe-del" data-del aria-label="Retirer l'exercice">${icons.trash}</button>
+        <div class="swipe-content routine-exo">${i + 1}. ${esc(def ? def.name : id)}</div>
       </div>`);
-      row.querySelector('button').addEventListener('click', () => { r.exercises.splice(i, 1); renderList(); });
+      row.querySelector('[data-del]').addEventListener('click', () => { r.exercises.splice(i, 1); renderList(); });
       listEl.appendChild(row);
     });
   };
   renderList();
+  attachSwipeToDelete(listEl, { rowSelector: '.routine-exo-row', contentSelector: '.swipe-content' });
   form.querySelector('#r-add').addEventListener('click', () => {
     openExercisePicker((exo) => { r.exercises.push(exo.id); renderList(); });
   });
@@ -2198,50 +2132,8 @@ function openExerciseBrowser() {
   };
   draw();
 
-  // Glissement horizontal sur les exercices custom → révèle la poubelle.
-  (() => {
-    let row = null; let startX = 0; let startY = 0; let dx = 0; let mode = null;
-    let openRow = null;
-    const closeOpen = (except) => {
-      if (openRow && openRow !== except) {
-        openRow.querySelector('.exo-search-item').style.transform = '';
-        openRow.classList.remove('swiped');
-        openRow = null;
-      }
-    };
-    list.addEventListener('touchstart', (ev) => {
-      const r = ev.target.closest('.exo-swipe-row');
-      closeOpen(r);
-      if (!r) { row = null; return; }
-      row = r; startX = ev.touches[0].clientX; startY = ev.touches[0].clientY; dx = 0; mode = null;
-    }, { passive: true });
-    list.addEventListener('touchmove', (ev) => {
-      if (!row) return;
-      dx = ev.touches[0].clientX - startX;
-      const dy = ev.touches[0].clientY - startY;
-      if (mode === null) {
-        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-        mode = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
-      }
-      if (mode !== 'h') return;
-      ev.preventDefault();
-      const base = row.classList.contains('swiped') ? -76 : 0;
-      const t = Math.max(-76, Math.min(0, base + dx));
-      row.querySelector('.exo-search-item').style.transform = `translateX(${t}px)`;
-    }, { passive: false });
-    list.addEventListener('touchend', () => {
-      if (!row || mode !== 'h') { row = null; mode = null; return; }
-      const content = row.querySelector('.exo-search-item');
-      const wasOpen = row.classList.contains('swiped');
-      const open = wasOpen ? dx < 40 : dx < -40;
-      if (open) { content.style.transform = 'translateX(-76px)'; row.classList.add('swiped'); openRow = row; }
-      else {
-        content.style.transform = ''; row.classList.remove('swiped');
-        if (openRow === row) openRow = null;
-      }
-      row = null; mode = null;
-    });
-  })();
+  // Exercices custom : glisser pour supprimer (avec confirmation)
+  attachSwipeToDelete(list, { rowSelector: '.exo-swipe-row', contentSelector: '.exo-search-item', collapse: false });
   const searchInput = overlay.querySelector('#xb-search');
   searchInput.addEventListener('input', (e) => draw(e.target.value));
   overlay.querySelector('#xb-sort').addEventListener('click', (e) => {
