@@ -35,7 +35,7 @@ function openWaterModal(rerender) {
     <input id="wtr-goal" type="range" min="1" max="5" step="0.25" value="${s.waterGoal}">
   </div>`);
 
-  const m = openModal({ title: 'Eau', content: form, actions: [{ label: 'Fermer' }], onClose: () => rerender && rerender() });
+  const m = openModal({ title: 'Eau', content: form, actions: [], onClose: () => rerender && rerender() });
 
   const refresh = () => {
     const v = store.userData.water.byDate[today] || 0;

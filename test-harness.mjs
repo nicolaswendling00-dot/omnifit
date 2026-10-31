@@ -163,6 +163,24 @@ assert(mealSheet && mealSheet.querySelectorAll('#m-cat button').length === 4, 'A
 assert(mealSheet.querySelector('#m-fiber'), 'Ajout repas : champ fibres optionnel');
 clearOverlays();
 
+console.log('== v7.2 : suppression de repas, coach, panneaux ==');
+{
+  const d = todayISO();
+  store.userData.nutrition.byDate[d] = { meals: [] };
+  store.addNutritionLog(d, { name: 'Test riz', meal: 'Déjeuner', prot: 10, carbs: 80, fat: 2, fiber: 1, kcal: 378 });
+  nutrition.render(pages.nutrition);
+  const kcalBefore = pages.nutrition.querySelector('[data-tw="n-kcal"]').textContent;
+  const row = pages.nutrition.querySelector('.meal-row');
+  row.querySelector('[data-del]').click();
+  assert(!store.userData.nutrition.byDate[d].meals.length, 'Repas : retire des donnees des le clic');
+  assert(pages.nutrition.querySelector('[data-tw="n-kcal"]').textContent !== kcalBefore, 'Repas : calories mises a jour tout de suite');
+  assert(!pages.nutrition.querySelector('.meal-group') && /Aucun repas/.test(pages.nutrition.querySelector('#meal-list').textContent), 'Repas : groupe retire et « Aucun repas » revient');
+  const css = fs.readFileSync(new URL('./style.css', import.meta.url), 'utf8');
+  assert(!/\.coach-card::after \{/.test(css) && /\.coach-card\.coach-good \{ background: linear-gradient/.test(css), 'Coach : plus de trait, degrade discret selon le resultat');
+  const hsrc = fs.readFileSync(new URL('./modules/home.js', import.meta.url), 'utf8');
+  assert(/title: 'Eau', content: form, actions: \[\]/.test(hsrc), 'Eau : plus de bouton Fermer');
+}
+
 console.log('== v7.1 : nutrition animee, historique, graphique vide ==');
 {
   nutrition.render(pages.nutrition);
@@ -174,7 +192,9 @@ console.log('== v7.1 : nutrition animee, historique, graphique vide ==');
   assert(ov.querySelector('#ncal-scroll.cal-scroll-rev') && ov.querySelectorAll('.cal-month').length <= 3, 'Historique nutrition : ouvert en bas, 3 mois tout de suite');
   await new Promise((r) => setTimeout(r, 200));
   assert(ov.querySelectorAll('.cal-month').length >= 12, 'Historique nutrition : au moins un an consultable');
-  ov.querySelector('#ncal-close').click();
+  assert(ov.closest('.sheet.tall') && !ov.querySelector('#ncal-close'), 'Historique nutrition : panneau du bas, sans croix');
+  ov.closest('.scrim')._close();
+  await new Promise((r) => setTimeout(r, 250));
   assert(!document.querySelector('.cal-overlay'), 'Historique nutrition : se ferme');
   const css = fs.readFileSync(new URL('./style.css', import.meta.url), 'utf8');
   assert(!/font-weight:\s*(300|400)\b/.test(css), 'Typo : aucune graisse fine');
@@ -374,7 +394,7 @@ assert(overlay.querySelector('.set-row.done'), 'Série enregistrée');
 assert(overlay.querySelector('#rest-topbar').classList.contains('active'), 'Timer repos actif en haut');
 overlay.querySelector('#rt-skip').click();
 overlay.querySelector('[data-menu]').click();
-assert(document.querySelector('.sheet').querySelectorAll('.menu-item').length === 4, 'Menu ⋯ : 4 actions');
+assert([...document.querySelectorAll('.sheet')].pop().querySelectorAll('.menu-item').length === 4, 'Menu ⋯ : 4 actions');
 clearOverlays();
 
 overlay.querySelector('#s-finish').click();
@@ -402,7 +422,8 @@ pages.workout.querySelector('#cal-more').click();
 const calOverlay = document.querySelector('.cal-overlay');
 assert(calOverlay && calOverlay.querySelector('.cal-month'), 'Calendrier : « Voir plus » ouvre l\'historique plein écran (par mois)');
 assert(calOverlay.querySelectorAll('.cal-month').length <= 3, 'Calendrier : ouverture immediate (3 mois au plus, le reste ensuite)');
-calOverlay.querySelector('#cal-close').click();
+assert(calOverlay.closest('.sheet.tall') && !calOverlay.querySelector('#cal-close'), 'Calendrier complet : panneau du bas, sans croix');
+clearOverlays();
 
 console.log('== Volume tracking ==');
 const volTable = pages.workout.querySelector('#volume-host .volume-table');
@@ -488,7 +509,7 @@ xbBtn.click();
 const xbOverlay = document.querySelector('.picker-overlay');
 assert(xbOverlay.querySelector('#xb-custom'), 'Navigateur exos : bouton exercice custom');
 xbOverlay.querySelector('.exo-search-item').click();
-const exoSheet = document.querySelector('.sheet');
+const exoSheet = [...document.querySelectorAll('.sheet')].pop();
 assert(exoSheet.querySelector('.sheet-action'), 'Fiche exo : crayon en entete');
 assert(!exoSheet.querySelector('#ed-rename'), 'Fiche exo : bouton "Modifier le nom" retire');
 clearOverlays();

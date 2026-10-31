@@ -373,16 +373,11 @@ export function openExercisePicker(onPick, title = 'Ajouter un exercice') {
   const overlay = el(`<div class="picker-overlay">
     <div class="picker-topbar">
       <input id="exo-search" type="text" placeholder="Rechercher" autocomplete="off">
-      <button class="icon-btn" id="picker-close" aria-label="Fermer">${icons.close}</button>
     </div>
     <div class="picker-list" id="exo-list"></div>
     <button class="btn btn-secondary btn-block" id="btn-custom" style="margin:8px 0 calc(10px + var(--safe-b))">${icons.plus} Exercice custom</button>
   </div>`);
-  document.body.appendChild(overlay);
-  const wasOpen = document.body.classList.contains('overlay-open');
-  document.body.classList.add('overlay-open');
-
-  const close = () => slideAway(overlay, () => { if (!wasOpen) document.body.classList.remove('overlay-open'); });
+  const { close } = openSheet({ title, content: overlay, variant: 'tall' });
   const list = overlay.querySelector('#exo-list');
   const renderList = (q = '') => {
     const nq = normalizeStr(q);
@@ -402,7 +397,6 @@ export function openExercisePicker(onPick, title = 'Ajouter un exercice') {
   const input = overlay.querySelector('#exo-search');
   input.addEventListener('input', (e) => renderList(e.target.value));
   setTimeout(() => input.focus(), 250);
-  overlay.querySelector('#picker-close').addEventListener('click', close);
   overlay.querySelector('#btn-custom').addEventListener('click', () => {
     close();
     openExerciseEditor((exo) => onPick(exo));
@@ -1927,16 +1921,9 @@ function openFullCalendar() {
   const byDate = workoutsByDate();
   const todayIso = todayISO();
   const overlay = el(`<div class="picker-overlay cal-overlay">
-    <div class="picker-topbar">
-      <h3 style="margin:0;flex:1">Historique complet</h3>
-      <button class="icon-btn" id="cal-close" aria-label="Fermer">${icons.close}</button>
-    </div>
     <div class="cal-scroll" id="cal-scroll"></div>
   </div>`);
-  document.body.appendChild(overlay);
-  const wasOpen = document.body.classList.contains('overlay-open');
-  document.body.classList.add('overlay-open');
-  const close = () => slideAway(overlay, () => { if (!wasOpen) document.body.classList.remove('overlay-open'); });
+  openSheet({ title: 'Historique complet', content: overlay, variant: 'tall' });
 
   const scroll = overlay.querySelector('#cal-scroll');
   const start = parseISO(earliestDataDate());
@@ -1969,7 +1956,6 @@ function openFullCalendar() {
     const ws = byDate[b.dataset.date]; if (!ws) return;
     openWorkoutDetail(ws[ws.length - 1]);
   });
-  overlay.querySelector('#cal-close').addEventListener('click', close);
 }
 
 function renderVolumeDashboard(host, rerender) {
@@ -2082,7 +2068,6 @@ function openExerciseBrowser() {
   const overlay = el(`<div class="picker-overlay">
     <div class="picker-topbar">
       <input id="xb-search" type="text" placeholder="Rechercher un exercice" autocomplete="off">
-      <button class="icon-btn" id="xb-close" aria-label="Fermer">${icons.close}</button>
     </div>
     <div class="segment" id="xb-sort" style="margin:0 0 8px">
       <button data-s="alpha" class="active">A → Z</button>
@@ -2091,10 +2076,7 @@ function openExerciseBrowser() {
     <div class="picker-list" id="xb-list"></div>
     <button class="btn btn-secondary btn-block" id="xb-custom" style="margin:8px 0 calc(10px + var(--safe-b))">${icons.plus} Ajouter un exercice custom</button>
   </div>`);
-  document.body.appendChild(overlay);
-  const wasOpen = document.body.classList.contains('overlay-open');
-  document.body.classList.add('overlay-open');
-  const close = () => slideAway(overlay, () => { if (!wasOpen) document.body.classList.remove('overlay-open'); });
+  const { close } = openSheet({ title: 'Exercices', content: overlay, variant: 'tall' });
   const list = overlay.querySelector('#xb-list');
   const draw = (q = '') => {
     const nq = normalizeStr(q);
@@ -2158,7 +2140,6 @@ function openExerciseBrowser() {
       draw(searchInput.value); // rafraîchit la liste avec le nouvel exo
     });
   });
-  overlay.querySelector('#xb-close').addEventListener('click', close);
   setTimeout(() => searchInput.focus(), 250);
 }
 

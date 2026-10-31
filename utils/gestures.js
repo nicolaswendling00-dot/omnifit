@@ -318,7 +318,9 @@ if (typeof document !== 'undefined' && document.body) {
 //              revient en place et la fenêtre de confirmation s'ouvre).
 // La classe `swiped` reste posée sur une ligne ouverte : les pages s'en
 // servent pour ignorer le tap qui la referme.
-export function attachSwipeToDelete(list, { rowSelector, contentSelector, width = 80, collapse = true } = {}) {
+//   onCommit : appelé dès le début de la suppression (avant l'animation),
+//              par exemple pour retirer la donnée et mettre à jour les totaux.
+export function attachSwipeToDelete(list, { rowSelector, contentSelector, width = 80, collapse = true, onCommit = null } = {}) {
   if (!list || list._sw) return;
   list._sw = true;
   const D = width;
@@ -360,6 +362,7 @@ export function attachSwipeToDelete(list, { rowSelector, contentSelector, width 
   const commit = (r, v = 0) => {
     const s = state(r);
     if (navigator.vibrate) navigator.vibrate(8);
+    if (onCommit && collapse) onCommit(r);
     if (!collapse) { settle(r, 0); fire(r); return; }
     setOpen(r, false);
     if (reduced()) { fire(r); return; }

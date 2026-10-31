@@ -1,7 +1,7 @@
 // OmniFit — PAGE 1 : Nutrition (macros couleur, fibres, modes grammes/auto/%, repas typés, recettes)
 import { store, todayISO } from '../utils/storage.js';
 import { calcKcal, fiberGoalFromKcal, metabolicInsight } from '../utils/math.js';
-import { el, esc, icons, openSheet, openModal, toast, ringSVG, confirmModal, fmtDateShort, haptic, celebrateLP, normalizeStr, attachSwipeToDelete, tweenValues, slideAway } from '../utils/ui.js';
+import { el, esc, icons, openSheet, openModal, toast, ringSVG, confirmModal, fmtDateShort, haptic, celebrateLP, normalizeStr, attachSwipeToDelete, tweenValues } from '../utils/ui.js';
 import { startCameraStream, captureFrame, decodeBarcodeFromFile } from '../utils/barcode.js';
 import { fetchProductByBarcode } from '../utils/openfoodfacts.js';
 import { FOODS, FOOD_CATEGORIES } from '../data/foods.js';
@@ -1521,16 +1521,9 @@ function openNutritionCalendar(rerender) {
   const WD = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 
   const overlay = el(`<div class="picker-overlay cal-overlay">
-    <div class="picker-topbar">
-      <h3 style="margin:0;flex:1">Historique nutrition</h3>
-      <button class="icon-btn" id="ncal-close" aria-label="Fermer">${icons.close}</button>
-    </div>
     <div class="cal-scroll cal-scroll-rev" id="ncal-scroll"></div>
   </div>`);
-  document.body.appendChild(overlay);
-  const wasOpen = document.body.classList.contains('overlay-open');
-  document.body.classList.add('overlay-open');
-  const close = () => slideAway(overlay, () => { if (!wasOpen) document.body.classList.remove('overlay-open'); });
+  const { close } = openSheet({ title: 'Historique nutrition', content: overlay, variant: 'tall' });
 
   // Départ : la plus ancienne donnée (repas, pesée, séance), et au moins un
   // an en arrière, pour pouvoir consulter les mois sans repas saisis.
@@ -1593,7 +1586,6 @@ function openNutritionCalendar(rerender) {
     close();
     rerender();
   });
-  overlay.querySelector('#ncal-close').addEventListener('click', close);
 }
 
 // FAB global dans body (hors du conteneur transformé, sinon invisible sur iOS)
@@ -1623,7 +1615,10 @@ function ensureFab() {
   search.onclick = () => { setOpen(false); openFoodSearchSheet(currentRerender); };
 }
 
-export function render(container) {
+// opts.keepList : garde la liste de repas affichée (une ligne y termine son
+// animation de suppression) et ne remplace que le reste de la page.
+export function render(container, opts = {}) {
+  const keptList = opts.keepList ? container.querySelector('#meal-list') : null;
   const rerender = () => render(container);
   currentRerender = rerender;
   const totals = store.dayTotals(selectedDate);
@@ -1634,7 +1629,7 @@ export function render(container) {
   const day = store.userData.nutrition.byDate[selectedDate];
   const meals = day ? day.meals : [];
   const fadeEmpty = !meals.length && lastShown.date === selectedDate && lastShown.n > 0;
-  lastShown = { date: selectedDate, n: meals.length };
+  if (!keptList) lastShown = { date: selectedDate, n: meals.length };
 
   // Ruban : les 7 derniers jours seulement, puis un « + » qui ouvre l'historique
   // complet. Au-delà d'une semaine on ne fait plus défiler à l'aveugle.
@@ -1759,9 +1754,15 @@ export function render(container) {
         openAddMealSheet(rerender, { editId: m.id, ...mealToEditable(m) });
       });
       item.querySelector('[data-del]').addEventListener('click', () => {
-        store.removeMeal(selectedDate, m.id);
-        haptic();
-        rerender();
+        if (!item._removed) { store.removeMeal(selectedDate, m.id); haptic(); rerender(); return; }
+        // Déjà retiré au début du geste : la ligne a fini de se replier, on
+        // range la liste sans tout redessiner.
+        const lst = item.closest('#meal-list');
+        const g = item.closest('.meal-group');
+        item.remove();
+        if (g && !g.querySelector('.meal-row')) g.remove();
+        if (lst && !lst.querySelector('.meal-row')) lst.insertAdjacentHTML('beforeend', '<div class="empty-state empty-in">Aucun repas</div>');
+        lastShown = { date: selectedDate, n: lst ? lst.querySelectorAll('.meal-row').length : 0 };
       });
       body.appendChild(item);
     }
@@ -1773,7 +1774,34 @@ export function render(container) {
   }
 
   // Glisser un repas vers la gauche : poubelle, ou suppression en glissant jusqu'au bout
-  attachSwipeToDelete(list, { rowSelector: '.meal-row', contentSelector: '.meal-item' });
+  // Le repas est retiré dès le début du geste : calories, macros et ruban se
+  // mettent à jour pendant que la ligne termine son animation. Si c'était le
+  // dernier repas de son type, le titre du groupe s'efface en même temps.
+  attachSwipeToDelete(list, {
+    rowSelector: '.meal-row',
+    contentSelector: '.meal-item',
+    onCommit: (row) => {
+      if (row._removed) return;
+      row._removed = true;
+      store.removeMeal(selectedDate, row.dataset.id);
+      haptic();
+      const g = row.closest('.meal-group');
+      const rest = g ? [...g.querySelectorAll('.meal-row')].filter((x) => x !== row) : [];
+      render(container, { keepList: true });
+      if (!g) return;
+      const head = g.querySelector('.meal-cat-head');
+      if (rest.length) {
+        const kcal = rest.reduce((a, x) => a + (parseFloat((x.querySelector('.meal-kcal') || {}).textContent) || 0), 0);
+        const cnt = head.querySelector('.meal-count'); if (cnt) cnt.textContent = rest.length;
+        const tot = head.querySelector(':scope > .num'); if (tot) tot.textContent = `${Math.round(kcal)} kcal`;
+      } else if (head.animate && !motionOff()) {
+        const h = head.offsetHeight;
+        head.style.overflow = 'hidden';
+        head.animate([{ opacity: 1, height: `${h}px` }, { opacity: 0, height: '0px', paddingTop: '0px', paddingBottom: '0px', marginBottom: '0px' }],
+          { duration: 360, delay: 240, easing: 'cubic-bezier(.22,1,.36,1)', fill: 'forwards' });
+      }
+    },
+  });
 
   container.querySelector('#date-ribbon').addEventListener('click', (e) => {
     if (e.target.closest('#date-more')) { openNutritionCalendar(rerender); return; }
@@ -1803,6 +1831,7 @@ export function render(container) {
     });
   }
   container.querySelector('#btn-recipes').addEventListener('click', () => openRecipesSheet(rerender));
+  if (keptList) container.querySelector('#meal-list').replaceWith(keptList);
   tweenValues(container);
   ensureFab();
 }

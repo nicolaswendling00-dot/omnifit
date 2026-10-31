@@ -283,12 +283,21 @@ export function closeAllOverlays() {
 
 // ---------- Bottom Sheet ----------
 // headerAction (facultatif) : { icon, label, onClick } -> bouton en haut à droite.
+// Une liste est « en haut » quand on ne peut plus la faire défiler vers le
+// haut. En column-reverse (historiques ouverts sur le mois en cours), le
+// défilement part du bas : scrollTop vaut 0 en bas et devient négatif en montant.
+function atTop(s) {
+  if (s.scrollHeight - s.clientHeight <= 1) return true;
+  if (window.getComputedStyle(s).flexDirection === 'column-reverse') return -s.scrollTop >= s.scrollHeight - s.clientHeight - 1;
+  return s.scrollTop <= 0;
+}
+
 export function openSheet({ title, content, onClose = null, headerAction = null, variant = '' }) {
   document.body.classList.add('overlay-open');
   const t = esc(title); // texte brut chez tous les appelants (cf. openModal)
   const scrim = el(`
     <div class="scrim sheet-scrim">
-      <div class="sheet${variant === 'modal' ? ' modal' : ''}" role="dialog" aria-modal="true" aria-label="${t}">
+      <div class="sheet${variant ? ` ${variant}` : ''}" role="dialog" aria-modal="true" aria-label="${t}">
         <div class="sheet-handle"></div>
         <div class="sheet-header">
           <h3>${t}</h3>
@@ -373,7 +382,7 @@ export function openSheet({ title, content, onClose = null, headerAction = null,
     // Si la zone touchée est déjà défilée, le geste lui appartient : on ne
     // capte pas le glisser-pour-fermer, sinon remonter dans une liste interne
     // (recettes, aliments) referme le panneau au lieu de la faire défiler.
-    if (activeScroller.scrollTop > 0) { startY = null; return; }
+    if (!atTop(activeScroller)) { startY = null; return; }
     startY = e.touches[0].clientY; dy = 0; dragging = false;
     lastY = startY; lastT = e.timeStamp || Date.now(); velocity = 0;
   }, { passive: true });
@@ -397,7 +406,7 @@ export function openSheet({ title, content, onClose = null, headerAction = null,
     }
     // La liste interne a pu défiler entre-temps (doigt remonté puis redescendu) :
     // on lui rend la main plutôt que de fermer le panneau.
-    if (!dragging && activeScroller && activeScroller.scrollTop > 0) { startY = null; return; }
+    if (!dragging && activeScroller && !atTop(activeScroller)) { startY = null; return; }
     if (!dragging) {
       if (dy < 6) return;      // petit seuil pour ne pas gêner les taps
       dragging = true;
