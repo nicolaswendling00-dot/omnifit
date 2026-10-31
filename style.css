@@ -361,7 +361,7 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
 .progress-bar > div { height: 100%; background: var(--grad); border-radius: 6px; transition: width var(--dur-med) var(--ease); }
 .progress-bar.green > div { background: var(--success); }
 .ring-label { fill: var(--text); font-size: 13px; font-weight: 700; font-family: var(--font); font-stretch: var(--wide); }
-.ring-sub { fill: var(--text-2); font-size: 9px; font-family: var(--font); }
+.ring-sub { fill: var(--text-2); font-size: 11px; font-weight: 600; font-family: var(--font); font-stretch: var(--wide); }
 .ring-fg { transition: stroke-dashoffset 700ms var(--ease); }
 
 .badge {
@@ -580,10 +580,12 @@ body > .picker-overlay {
    ACCUEIL — tient dans un seul écran, jamais de défilement
    ============================================================ */
 #page-home { overflow: hidden; padding-bottom: 10px; padding-top: calc(var(--safe-t) + 12px); }
-/* Ordre d'importance : calories (seule carte qui grandit), pas, poids, coach,
+/* Ordre d'importance : calories, pas, poids, coach,
    puis l'eau et le rang en lignes compactes. */
 .home-fit {
   display: flex; flex-direction: column; gap: 8px;
+  /* La hauteur en trop se répartit entre les cartes, jamais dans une seule */
+  justify-content: space-between;
   /* 2 px de marge : sans eux, l arrondi des hauteurs rognait le bord bas de la dernière carte */
   height: calc(100dvh - var(--nav-h) - var(--safe-b) - var(--safe-t) - 24px);
   overflow: hidden;
@@ -601,7 +603,7 @@ body > .picker-overlay {
 .coach-card { position: relative; }
 .coach-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
 .coach-title { font-size: 1rem; font-weight: 600; font-stretch: 106%; color: var(--text); }
-.coach-rate { font-size: 0.75rem; font-weight: 500; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.coach-rate { font-size: 0.9rem; font-weight: 600; font-stretch: var(--wide); color: var(--text-2); font-variant-numeric: tabular-nums; }
 .coach-rate b { color: var(--text); font-weight: 700; }
 .coach-good .coach-rate { color: var(--success); }
 .coach-warn .coach-rate { color: var(--danger); }
@@ -615,19 +617,19 @@ body > .picker-overlay {
 .coach-compact .coach-actions .btn { min-height: 36px; }
 .coach-empty .coach-head { margin-bottom: 0; }
 
-/* Calories : la carte principale, elle prend la hauteur restante. Chiffre en
-   haut à gauche, grammes en bas à gauche, anneau à droite sur toute la hauteur. */
+/* Calories : la carte principale, en tête. Chiffre en haut à gauche, grammes
+   dessous, anneau à droite sur toute la hauteur. */
 .home-kcal {
-  flex: 1 1 0 !important; min-height: 148px;
-  display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto 1fr; column-gap: 16px;
+    display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto 1fr; column-gap: 16px;
 }
 .hk-main { grid-column: 1; grid-row: 1; min-width: 0; }
 .hk-numbers { display: flex; align-items: baseline; gap: 6px; min-width: 0; flex-wrap: wrap; }
-.hk-big { font-size: 3rem; line-height: 1; }
-.hk-goal { font-size: 0.75rem; color: var(--text-2); font-weight: 500; }
+.home-kcal .hk-numbers { flex-wrap: nowrap; }
+.hk-big { font-size: 3.4rem; line-height: 1; }
+.hk-goal { font-size: 0.95rem; color: var(--text-2); font-weight: 600; font-stretch: var(--wide); font-variant-numeric: tabular-nums; }
 .hk-donut { display: contents; }
-.hk-donut svg { grid-column: 2; grid-row: 1 / span 2; align-self: center; width: clamp(96px, 30vw, 132px); height: auto; }
-.hk-donut-legend { grid-column: 1; grid-row: 2; align-self: end; display: flex; flex-direction: column; gap: 4px; margin-top: 12px; font-size: 0.8rem; font-weight: 500; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.hk-donut svg { grid-column: 2; grid-row: 1 / span 2; align-self: center; width: clamp(110px, 36vw, 150px); height: auto; }
+.hk-donut-legend { grid-column: 1; grid-row: 2; align-self: end; white-space: nowrap; display: flex; flex-direction: column; gap: 8px; margin-top: 12px; font-size: 1rem; font-weight: 600; font-stretch: var(--wide); color: var(--text-2); font-variant-numeric: tabular-nums; }
 .hk-donut-legend b { display: inline-block; width: 3em; font-weight: 600; }
 
 /* Pas : pleine largeur, le chiffre puis la piste jusqu'au drapeau */
@@ -647,7 +649,7 @@ body > .picker-overlay {
 .hw-content { flex: none; }
 .hw-content .stat-head { margin-bottom: 4px; }
 .w-now { font-size: 1.6rem; line-height: 1; }
-.w-now small { font-size: 0.5em; color: var(--text-2); margin-left: 4px; font-weight: 500; }
+.w-now small { font-size: 0.6em; color: var(--text-2); margin-left: 4px; font-weight: 600; font-stretch: var(--wide); }
 .hw-curve { flex: 1; min-width: 0; height: 52px; }
 .hw-curve svg { width: 100%; height: 100%; display: block; }
 
@@ -666,7 +668,7 @@ body > .picker-overlay {
 .gr-info { flex: 1; min-width: 0; }
 .gr-line { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .gr-rank-name { font-size: 1rem; font-weight: 700; font-stretch: var(--wide); }
-.gr-lp { font-size: 0.75rem; color: var(--text-2); font-variant-numeric: tabular-nums; font-weight: 500; }
+.gr-lp { font-size: 0.9rem; color: var(--text-2); font-variant-numeric: tabular-nums; font-weight: 600; font-stretch: var(--wide); }
 .gr-streak { flex: 0 0 auto; display: flex; align-items: center; gap: 4px; color: var(--text); font-weight: 700; font-size: 0.9rem; font-stretch: var(--wide); }
 .gr-streak:empty { display: none; }
 .gr-streak svg { width: 16px; height: 16px; color: var(--accent); }
@@ -677,8 +679,7 @@ body > .picker-overlay {
 @media (max-height: 720px) {
   .home-fit .stat-card { padding: 12px; }
   .hk-big { font-size: 2.4rem; }
-  .hk-donut svg { width: 88px; }
-  .home-kcal { min-height: 120px; }
+  .hk-donut svg { width: 96px; }
 }
 
 /* Fenêtres de l'accueil */
@@ -687,7 +688,7 @@ body > .picker-overlay {
 .w-modal-actions .btn { flex: 1 1 0; min-width: 0; }
 .wtr-now { display: flex; align-items: baseline; gap: 6px; margin-bottom: 14px; }
 .wtr-val { font-size: 2.4rem; line-height: 1; color: var(--water); }
-.wtr-unit { font-size: 0.8rem; color: var(--text-2); }
+.wtr-unit { font-size: 0.95rem; color: var(--text-2); font-weight: 600; font-stretch: var(--wide); }
 .wtr-quick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .wtr-quick .btn { padding: 6px 4px; min-width: 0; }
 
@@ -730,7 +731,7 @@ body > .picker-overlay {
 }
 .kcal-total { text-align: center; }
 .kcal-consumed { font-size: 2.6rem; line-height: 1; }
-.kcal-sep { font-size: 0.95rem; color: var(--text-2); font-weight: 600; margin-left: 4px; }
+.kcal-sep { font-size: 1.05rem; color: var(--text-2); font-weight: 600; font-stretch: var(--wide); font-variant-numeric: tabular-nums; margin-left: 4px; }
 .kcal-sub { display: flex; justify-content: center; gap: 14px; font-size: 0.86rem; font-weight: 600; color: var(--text-2); margin: 4px 0 8px; }
 /* Anneaux alignés par le haut ; l'anneau des fibres, plus petit, est centré
    dans la même hauteur (66 px) pour que les quatre légendes soient sur une ligne. */
@@ -738,7 +739,7 @@ body > .picker-overlay {
 .macro-rings .ring-item { text-align: center; }
 .macro-rings .ring { margin: 0 auto; }
 .macro-rings .ring-item-sm .ring { margin: 8px auto; }
-.macro-rings .ring-caption { font-size: 0.75rem; font-weight: 500; color: var(--text-2); margin-top: 4px; }
+.macro-rings .ring-caption { font-size: 0.85rem; font-weight: 600; font-stretch: var(--wide); font-variant-numeric: tabular-nums; color: var(--text-2); margin-top: 4px; }
 .fiber-tag { color: var(--water); }
 
 /* Réglages des objectifs : une rangée de boutons libellés, de même largeur */
@@ -1325,7 +1326,7 @@ button.wd-exo { display: block; width: 100%; text-align: left; border: none; col
 .steps-ring { flex: 0 0 auto; background: none; border: 0; padding: 0; cursor: pointer; border-radius: 50%; }
 .steps-hero .ring { display: block; }
 .steps-hero .ring-label { font-size: 28px; font-weight: 600; fill: var(--text); }
-.steps-hero .ring-sub { font-size: 11px; fill: var(--text-2); }
+.steps-hero .ring-sub { font-size: 13px; fill: var(--text-2); }
 .steps-kpis { flex: 1; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .steps-kpi .eyebrow { display: block; margin-bottom: 2px; }
 .steps-kpi b { font-size: 1.35rem; line-height: 1.05; }
@@ -1402,7 +1403,8 @@ button.wd-exo { display: block; width: 100%; text-align: left; border: none; col
   user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
 }
 .flip-card[data-dragging] { cursor: grabbing; }
-.flip-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+/* Pas de contour : il resterait plat pendant que la carte tourne en 3D */
+.flip-card:focus-visible { outline: none; }
 .flip-card__shadow { position: absolute; inset: 12% 9% -5%; border-radius: 22px; background: rgba(0, 0, 0, 0.55); filter: blur(22px); pointer-events: none; }
 .flip-card__rotor { position: absolute; inset: 0; transform-style: preserve-3d; }
 .flip-card__face {
