@@ -1,7 +1,7 @@
 // OmniFit — PAGE 0 : Accueil (stats d'abord, poids ensuite, graphique en modal)
 import { store, todayISO } from '../utils/storage.js';
 import { calculateSMA } from '../utils/math.js';
-import { el, icons, openModal, toast, ringSVG, haptic, makeChart, fmtDateFull, attachSwipeToDelete, dateBar } from '../utils/ui.js';
+import { el, icons, openModal, openSheet, toast, ringSVG, haptic, makeChart, fmtDateFull, attachSwipeToDelete, dateBar } from '../utils/ui.js';
 import { openRankCard } from '../utils/rankCard.js';
 import { lineChartOptions, lineDataset } from '../utils/charts.js';
 import { goToPage, PAGE_NUTRITION, PAGE_ACTIVITY, getViewDate, isViewingToday } from '../utils/nav.js';
@@ -514,18 +514,29 @@ function coachDays() {
 // Coach métabolique : il vit sur l'accueil (et non plus dans Nutrition).
   const coachHost = container.querySelector('#coach-host');
   if (coachHost) {
-    const coachEl = renderCoachCard(rerender, { compact: true });
-    const card = coachEl || el(`<div class="card stat-card coach-card coach-empty">
-      <div class="coach-head"><span class="coach-title">Coach</span><span class="coach-rate"><b class="num">${coachDays()}</b> / 5 jours de pesée</span></div>
-    </div>`);
-    // Toucher le coach ouvre le choix de phase (sèche / maintenance / prise) :
-    // c'est ce réglage qui détermine ses conseils.
-    card.addEventListener('click', (e) => {
-      if (e.target.closest('.coach-btn')) return; // les boutons d'ajustement gardent leur action
-      openGoalModal(rerender);
+    // Sur l'accueil, le coach tient sur une ligne (rythme + point s'il a un
+    // conseil à appliquer) ; le toucher ouvre le conseil complet.
+    const full = renderCoachCard(rerender);
+    const tone = full ? ['good', 'warn'].find((t) => full.classList.contains(`coach-${t}`)) || 'neutral' : 'neutral';
+    const row = el(`<button type="button" class="card stat-card coach-card coach-row coach-${tone}" aria-label="Ouvrir le coach">
+      <span class="coach-title">Coach</span>
+      <span class="coach-rate">${full ? full.querySelector('.coach-rate').textContent : `<b class="num">${coachDays()}</b> / 5 jours de pesée`}</span>
+      ${full && full.querySelector('.coach-btn') ? '<i class="coach-dot" aria-label="Conseil à appliquer"></i>' : ''}
+      ${icons.chevron}
+    </button>`);
+    row.addEventListener('click', () => {
+      // Pas assez de pesées : seul le choix de phase a du sens
+      if (!full) { openGoalModal(rerender); return; }
+      let sheet = null;
+      const after = () => { if (sheet) sheet.close(); rerender(); };
+      const body = el('<div class="coach-sheet"></div>');
+      body.appendChild(renderCoachCard(after));
+      const phase = el(`<button class="btn btn-secondary btn-block">${icons.edit} Changer de phase</button>`);
+      phase.addEventListener('click', () => { sheet.close(); openGoalModal(rerender); });
+      body.appendChild(phase);
+      sheet = openSheet({ title: 'Coach', content: body });
     });
-    card.style.cursor = 'pointer';
-    coachHost.replaceWith(card);
+    coachHost.replaceWith(row);
   }
 
 }

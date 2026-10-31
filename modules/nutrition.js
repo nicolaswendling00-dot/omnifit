@@ -1414,7 +1414,7 @@ function fmtRate(kg) {
 // Rend la carte Coach, ou null s'il n'y a pas encore assez de données.
 // Affichée sur l'ACCUEIL (à côté des calories) : c'est là qu'on lit son résumé
 // du jour. `opts.compact` resserre la mise en forme pour la demi-largeur.
-export function renderCoachCard(rerender, opts = {}) {
+export function renderCoachCard(rerender) {
   const w = store.userData.weights;
   const currentW = w.length ? w[w.length - 1].value : store.userData.profile.weight;
   const ins = metabolicInsight({
@@ -1477,7 +1477,7 @@ export function renderCoachCard(rerender, opts = {}) {
   const setMaint = (dir === 'hold' && ins.maintenanceEst
     && Math.abs(ins.maintenanceEst - macroGoals().kcalGoal) > 100) ? ins.maintenanceEst : null;
 
-  const card = el(`<div class="card coach-card coach-${tone}${opts.compact ? ' stat-card coach-compact' : ''}">
+  const card = el(`<div class="card coach-card coach-${tone}">
     <div class="coach-head">
       <span class="coach-title">Coach</span>
       <span class="coach-rate">${rateStr}</span>

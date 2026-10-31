@@ -626,7 +626,8 @@ body > .picker-overlay {
 /* ============================================================
    ACCUEIL — tient dans un seul écran, jamais de défilement
    ============================================================ */
-#page-home { overflow: hidden; padding-bottom: 10px; padding-top: calc(var(--safe-t) + 12px); }
+/* Tient sur un écran quand c'est possible ; sinon on défile, on ne coupe jamais */
+#page-home { overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; padding-bottom: 10px; padding-top: calc(var(--safe-t) + 12px); }
 /* Ordre d'importance : calories, pas, poids, coach,
    puis l'eau et le rang en lignes compactes. */
 .home-fit {
@@ -634,8 +635,7 @@ body > .picker-overlay {
   /* La hauteur en trop se répartit entre les cartes, jamais dans une seule */
   justify-content: space-between;
   /* 2 px de marge : sans eux, l arrondi des hauteurs rognait le bord bas de la dernière carte */
-  height: calc(100dvh - var(--nav-h) - var(--safe-b) - var(--safe-t) - 24px);
-  overflow: hidden;
+  min-height: calc(100dvh - var(--nav-h) - var(--safe-b) - var(--safe-t) - 24px);
 }
 .home-fit > * { margin-bottom: 0 !important; flex: 0 0 auto; }
 .home-fit .card { overflow: hidden; }
@@ -659,10 +659,14 @@ body > .picker-overlay {
 .coach-maint b { color: var(--accent); font-variant-numeric: tabular-nums; }
 .coach-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .coach-actions .coach-btn { flex: 1 1 auto; }
-.coach-compact .coach-msg { font-size: 0.85rem; line-height: 1.35; }
-.coach-compact .coach-actions { margin-top: 10px; }
-.coach-compact .coach-actions .btn { min-height: 36px; }
-.coach-empty .coach-head { margin-bottom: 0; }
+/* Accueil : le coach sur une ligne, le conseil complet s'ouvre au toucher */
+.coach-row { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; padding-top: 14px; padding-bottom: 14px; }
+.coach-row .coach-title { flex: 1; }
+.coach-row > svg { width: 16px; height: 16px; flex: none; color: var(--text-3); }
+.coach-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+.coach-sheet { display: flex; flex-direction: column; gap: 12px; padding-bottom: 8px; }
+.coach-sheet .coach-card { margin: 0; background: var(--surface-2); }
+.coach-sheet .coach-title { visibility: hidden; } /* déjà le titre du panneau */
 
 /* Calories : la carte principale, en tête. Chiffre en haut à gauche, grammes
    dessous, anneau à droite sur toute la hauteur. */
@@ -672,17 +676,17 @@ body > .picker-overlay {
 .hk-main { grid-column: 1; grid-row: 1; min-width: 0; }
 .hk-numbers { display: flex; align-items: baseline; gap: 6px; min-width: 0; flex-wrap: wrap; }
 /* Objectif sous le chiffre : la hauteur ne bouge pas quand on passe à 4 chiffres */
-.home-kcal .hk-numbers { flex-direction: column; align-items: flex-start; gap: 4px; }
-.hk-big { font-size: 3.4rem; line-height: 1; }
+.home-kcal .hk-numbers { flex-direction: column; align-items: flex-start; gap: 2px; }
+.hk-big { font-size: 3rem; line-height: 1; }
 .hk-goal { white-space: nowrap; font-size: 0.95rem; color: var(--text-2); font-weight: 600; font-stretch: var(--wide); font-variant-numeric: tabular-nums; }
 .hk-donut { display: contents; }
 .hk-donut svg { grid-column: 2; grid-row: 1 / span 2; align-self: center; width: clamp(110px, 36vw, 150px); height: auto; }
-.hk-donut-legend { grid-column: 1; grid-row: 2; align-self: end; white-space: nowrap; display: flex; flex-direction: column; gap: 8px; margin-top: 12px; font-size: 1rem; font-weight: 600; font-stretch: var(--wide); color: var(--text-2); font-variant-numeric: tabular-nums; }
+.hk-donut-legend { grid-column: 1; grid-row: 2; align-self: end; white-space: nowrap; display: flex; flex-direction: column; gap: 5px; margin-top: 8px; font-size: 1rem; font-weight: 600; font-stretch: var(--wide); color: var(--text-2); font-variant-numeric: tabular-nums; }
 .hk-donut-legend b { display: inline-block; width: 3em; font-weight: 600; }
 
 /* Pas : pleine largeur, le chiffre puis la piste jusqu'au drapeau */
 .ha-big { font-size: 2rem; line-height: 1; }
-.ha-track { margin-top: 16px; padding: 0 20px 0 0; }
+.ha-track { margin-top: 12px; padding: 0 20px 0 0; }
 .ha-line { position: relative; height: 6px; border-radius: 4px; background: var(--surface-3); }
 /* La largeur porte la VRAIE valeur ; seule l'échelle est animée : si
    l'animation ne se joue pas, la barre affiche quand même la bonne valeur. */

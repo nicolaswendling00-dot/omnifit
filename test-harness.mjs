@@ -666,8 +666,8 @@ assert(/--spring:/.test(cssTx), 'Transitions : courbe spring definie');
 assert(/prefers-reduced-motion/.test(cssTx), 'Transitions : respect de prefers-reduced-motion');
 
 // Accueil sans scroll : overflow hidden
-assert(/#page-home \{[^}]*overflow: hidden/.test(cssTx), 'Accueil : page non scrollable (overflow hidden)');
-assert(/\.home-fit \{[^}]*height: calc/.test(cssTx), 'Accueil : hauteur verrouillee');
+assert(/#page-home \{[^}]*overflow-y: auto/.test(cssTx), 'Accueil : défile si le contenu dépasse, ne coupe jamais');
+assert(/\.home-fit \{[^}]*min-height: calc/.test(cssTx), 'Accueil : au moins un écran, réparti entre les cartes');
 
 // Historique : désormais un onglet de la loupe. Clic sur une entrée -> éditeur pré-rempli.
 store.addNutritionLog('2020-05-01', { name: 'Boulgour (250 g)', baseName: 'Boulgour', meal: 'Déjeuner', prot: 6.5, carbs: 70, fat: 0.8, fiber: 1, kcal: 313, per100: { prot: 2.6, carbs: 28, fat: 0.3, fiber: 0.4 }, weight: 250 });

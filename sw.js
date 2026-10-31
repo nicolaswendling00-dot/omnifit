@@ -1,5 +1,5 @@
 // OmniFit — Service worker (PWA offline)
-const CACHE_NAME = 'omniffit-v9-1';
+const CACHE_NAME = 'omniffit-v9-3';
 const ASSETS = [
   './',
   './index.html',
