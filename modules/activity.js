@@ -53,7 +53,7 @@ function openLogStepsModal(rerender, prefill = null) {
     <label class="field"><span>Date</span><input id="st-date" type="date" value="${prefill ? prefill.date : todayISO()}"></label>
   </div>`);
   openModal({
-    title: prefill ? `Pas · ${fmtDateShort(prefill.date)}` : 'Ajouter des pas',
+    title: prefill ? `Pas du ${fmtDateShort(prefill.date)}` : 'Ajouter des pas',
     content: form,
     actions: [
       prefill && prefill.count != null
@@ -133,7 +133,7 @@ function applyStepsEntries(entries, rerender) {
   toast(
     entries.length === 1
       ? `${entries[0].count.toLocaleString('fr-FR')} pas importés`
-      : `${entries.length} jours importés${todayEntry ? ` · ${todayEntry.count.toLocaleString('fr-FR')} aujourd'hui` : ''}`,
+      : `${entries.length} jours importés${todayEntry ? `, dont ${todayEntry.count.toLocaleString('fr-FR')} pas aujourd'hui` : ''}`,
     'success',
   );
   rerender();
@@ -181,7 +181,7 @@ function openStepsPasteSheet(rerender) {
     try {
       t = await navigator.clipboard.readText();
     } catch (_) {
-      toast('Lecture refusée — colle à la main dans le champ', 'error');
+      toast('Lecture refusée, colle le texte dans le champ', 'error');
       return;
     }
     const entries = parseStepsPayload(t);
@@ -197,7 +197,7 @@ function openStepsPasteSheet(rerender) {
 
   form.querySelector('#sp-import').addEventListener('click', () => {
     const entries = parseStepsPayload(input.value);
-    if (!entries.length) { toast('Rien à importer — colle le texte du raccourci', 'error'); return; }
+    if (!entries.length) { toast('Rien à importer', 'error'); return; }
     sheet.close();
     applyStepsEntries(entries, rerender);
   });

@@ -42,8 +42,8 @@ function findRecipe(id) {
 // `opts.round` arrondit à 1 décimale. Les fibres n'apparaissent que si > 0.
 function macroLine(prot, carbs, fat, fiber, opts = {}) {
   const r = opts.round ? (v) => Math.round((v || 0) * 10) / 10 : (v) => (v || 0);
-  let s = `<span class="mac-p">P ${r(prot)}</span> · <span class="mac-g">G ${r(carbs)}</span> · <span class="mac-l">L ${r(fat)}</span>`;
-  if (fiber != null && fiber > 0) s += ` · <span class="mac-f">F ${r(fiber)}</span>`;
+  let s = `<span class="mac-p">P ${r(prot)}</span>&ensp;<span class="mac-g">G ${r(carbs)}</span>&ensp;<span class="mac-l">L ${r(fat)}</span>`;
+  if (fiber != null && fiber > 0) s += `&ensp;<span class="mac-f">F ${r(fiber)}</span>`;
   return s;
 }
 // Dernier type de repas auquel on a ajouté quelque chose (persisté entre sessions
@@ -217,7 +217,7 @@ function openMacroGoalsSheet(rerender) {
     </div>
     <div class="macro-kcal-sticky">
       <span class="muted">Calories cibles</span>
-      <span class="num" id="mg-kcal" style="color:var(--accent);font-size:1.2rem">—</span>
+      <span class="num" id="mg-kcal" style="color:var(--accent);font-size:1.2rem"></span>
     </div>
     <button class="btn btn-primary btn-block" id="mg-save" style="margin-top:10px">Enregistrer</button>
   </div>`);
@@ -254,7 +254,7 @@ function openMacroGoalsSheet(rerender) {
       upd();
     } else if (mode === 'auto') {
       body.innerHTML = `
-        <div class="muted" style="margin-bottom:12px">Poids de corps actuel : <b>${w} kg</b> · la répartition s'ajuste avec le poids.</div>
+        <div class="muted" style="margin-bottom:12px">Poids actuel <b>${w} kg</b></div>
         <div class="field" style="margin-bottom:12px"><span>Objectif calories</span>
           <div class="cal-adjust-row">
             <button type="button" class="btn btn-secondary cal-step" id="mg-cal-minus">−200</button>
@@ -262,19 +262,19 @@ function openMacroGoalsSheet(rerender) {
             <button type="button" class="btn btn-secondary cal-step" id="mg-cal-plus">+200</button>
           </div></div>
         <div style="margin-bottom:12px">
-          <div class="card-row"><span style="font-size:0.9rem">Prot · ×poids</span>
+          <div class="card-row"><span style="font-size:0.9rem">Protéines en g/kg</span>
             <span class="num" id="mg-pm-val" style="color:${C_PROT}">${(s.protMult ?? 2.2).toFixed(1)}</span></div>
           <input id="mg-pm" type="range" min="1.4" max="3.0" step="0.1" value="${s.protMult ?? 2.2}" style="accent-color:${C_PROT}">
         </div>
         <div style="margin-bottom:12px">
-          <div class="card-row"><span style="font-size:0.9rem">Lip · ×poids</span>
+          <div class="card-row"><span style="font-size:0.9rem">Lipides en g/kg</span>
             <span class="num" id="mg-fm-val" style="color:${C_FAT}">${(s.fatMult ?? 1.0).toFixed(1)}</span></div>
           <input id="mg-fm" type="range" min="0.5" max="1.5" step="0.1" value="${s.fatMult ?? 1.0}" style="accent-color:${C_FAT}">
         </div>
         <div class="card" style="background:var(--surface-2);margin:0;padding:10px">
-          <div class="card-row"><span class="muted" style="color:${C_PROT}">Protéines</span><span class="num" id="mg-auto-p">—</span></div>
-          <div class="card-row"><span class="muted" style="color:${C_CARB}">Glucides (reste)</span><span class="num" id="mg-auto-c">—</span></div>
-          <div class="card-row"><span class="muted" style="color:${C_FAT}">Lipides</span><span class="num" id="mg-auto-f">—</span></div>
+          <div class="card-row"><span class="muted" style="color:${C_PROT}">Protéines</span><span class="num" id="mg-auto-p"></span></div>
+          <div class="card-row"><span class="muted" style="color:${C_CARB}">Glucides</span><span class="num" id="mg-auto-c"></span></div>
+          <div class="card-row"><span class="muted" style="color:${C_FAT}">Lipides</span><span class="num" id="mg-auto-f"></span></div>
         </div>`;
       const upd = () => {
         const cal = +body.querySelector('#mg-cal').value || 0;
@@ -431,7 +431,7 @@ function openAddMealSheet(rerender, prefill = null) {
       <label class="field"><span>Gluc /100g</span><input id="m-carbs" type="number" inputmode="decimal" min="0" placeholder="0" value="${per100.carbs}"></label>
       <label class="field"><span>Lip /100g</span><input id="m-fat" type="number" inputmode="decimal" min="0" placeholder="0" value="${per100.fat}"></label>
     </div>
-    <label class="field" style="margin-bottom:8px"><span>Fibres /100g · optionnel</span><input id="m-fiber" type="number" inputmode="decimal" min="0" placeholder="0" value="${per100.fiber}"></label>
+    <label class="field" style="margin-bottom:8px"><span>Fibres /100 g</span><input id="m-fiber" type="number" inputmode="decimal" min="0" placeholder="0" value="${per100.fiber}"></label>
 
     <div class="m-weight-box">
       <label class="field m-weight-field"><span>Poids consommé (g)</span>
@@ -446,7 +446,7 @@ function openAddMealSheet(rerender, prefill = null) {
     <button class="btn btn-primary btn-block" id="m-add">${pf.editId ? icons.check + ' Enregistrer' : icons.plus + ' Ajouter'}</button>
   </div>`);
 
-  const sheet = openSheet({ title: pf.editId ? 'Modifier le repas' : `Repas — ${fmtDateShort(selectedDate)}`, content: form });
+  const sheet = openSheet({ title: pf.editId ? 'Modifier le repas' : `Repas du ${fmtDateShort(selectedDate)}`, content: form });
 
   const scale = () => {
     const p100 = parseFloat(form.querySelector('#m-prot').value) || 0;
@@ -639,13 +639,13 @@ function openRecipesSheet(rerender) {
     const sheet = openSheet({ title: 'Mes recettes', content: form });
     const list = form.querySelector('#r-list');
     for (const r of recipes) {
-      const nIng = (r.ingredients && r.ingredients.length) ? ` · ${r.ingredients.length} aliment(s)` : '';
+      const nIng = (r.ingredients && r.ingredients.length) ? `&ensp;${r.ingredients.length} aliment${r.ingredients.length > 1 ? 's' : ''}` : '';
       const item = el(`<div class="swipe-row recipe-row">
         <button class="swipe-del" data-del aria-label="Supprimer la recette">${icons.trash}</button>
         <div class="swipe-content recipe-item">
         <div class="recipe-info">
           <div class="recipe-name">${esc(r.name)}</div>
-          <div class="meal-macros">${calcKcal(r.prot, r.carbs, r.fat)} kcal · ${macroLine(r.prot, r.carbs, r.fat, r.fiber)}${nIng}</div>
+          <div class="meal-macros">${calcKcal(r.prot, r.carbs, r.fat)} kcal&ensp;${macroLine(r.prot, r.carbs, r.fat, r.fiber)}${nIng}</div>
         </div>
         <div style="display:flex;gap:4px">
           <button class="icon-btn" data-edit aria-label="Modifier">${icons.edit}</button>
@@ -690,7 +690,7 @@ function openRecipeEditor(onSaved, existing = null) {
   const form = el(`<div>
     <label class="field"><span>Nom de la recette</span><input id="re-name" type="text" placeholder="Bowl protéiné" autocomplete="off" value="${state.name.replace(/"/g, '&quot;')}"></label>
     <div class="re-add-row">
-      <span class="muted" style="font-size:0.8rem">Ajouter un aliment :</span>
+      <span class="muted" style="font-size:0.8rem">Ajouter un aliment</span>
       <div style="display:flex;gap:6px">
         <button class="btn btn-secondary btn-sm" id="re-search" aria-label="Rechercher">${icons.search}</button>
         <button class="btn btn-secondary btn-sm" id="re-scan" aria-label="Code-barre">${icons.barcode}</button>
@@ -713,7 +713,7 @@ function openRecipeEditor(onSaved, existing = null) {
           <div class="swipe-content re-ing">
           <div class="re-ing-info">
             <div class="re-ing-name">${esc(ing.name)}${ing.weight ? ` <span class="muted">(${ing.weight} g)</span>` : ''}</div>
-            <div class="meal-macros">${calcKcal(ing.prot, ing.carbs, ing.fat)} kcal · ${macroLine(ing.prot, ing.carbs, ing.fat, ing.fiber, { round: true })}</div>
+            <div class="meal-macros">${calcKcal(ing.prot, ing.carbs, ing.fat)} kcal&ensp;${macroLine(ing.prot, ing.carbs, ing.fat, ing.fiber, { round: true })}</div>
           </div>
           </div>
         </div>`);
@@ -725,7 +725,7 @@ function openRecipeEditor(onSaved, existing = null) {
     const t = totals();
     form.querySelector('#re-totals').innerHTML = `
       <div class="re-tot-row"><span>Total recette</span><b class="num" style="color:var(--accent)">${calcKcal(t.prot, t.carbs, t.fat)} kcal</b></div>
-      <div class="re-tot-row muted"><span>P ${round(t.prot)} · G ${round(t.carbs)} · L ${round(t.fat)}${t.fiber ? ` · ${round(t.fiber)}g fibres` : ''}</span></div>`;
+      <div class="re-tot-row muted"><span>P ${round(t.prot)}&ensp;G ${round(t.carbs)}&ensp;L ${round(t.fat)}${t.fiber ? `&ensp;F ${round(t.fiber)}` : ''}</span></div>`;
   };
   renderIngs();
 
@@ -799,7 +799,7 @@ function openBarcodeSheet(rerender, opts = {}) {
         <video id="bc-video" playsinline autoplay muted></video>
         <img id="bc-frozen" alt="Image figée" style="display:none">
         <div class="bc-cam-reticle"></div>
-        <div class="bc-photo-hint" id="bc-photo-hint">${icons.barcode}<span>L'appareil photo du téléphone s'ouvre : photographie le code-barre, l'analyse se fait ici.</span></div>
+        <div class="bc-photo-hint" id="bc-photo-hint">${icons.barcode}<span>Photographie le code-barre</span></div>
       </div>
       <input type="file" accept="image/*" capture="environment" id="bc-file" hidden>
       <div class="segment bc-mode" id="bc-mode">
@@ -810,7 +810,7 @@ function openBarcodeSheet(rerender, opts = {}) {
         <button class="btn btn-primary btn-block" id="bc-shoot">${icons.barcode} Prendre la photo</button>
         <button class="btn btn-secondary btn-block" id="bc-retry" style="display:none">Reprendre</button>
       </div>
-      <div class="muted" id="bc-status" style="text-align:center;margin-top:10px">Cadre le code-barre dans le viseur puis prends la photo. Le sens n'a pas d'importance.</div>
+      <div class="muted" id="bc-status" style="text-align:center;margin-top:10px">Cadre le code-barre dans le viseur</div>
       <div class="bc-manual-row">
         <input type="text" inputmode="numeric" id="bc-manual-code" placeholder="Ou saisis les chiffres (ex: 3017620422003)">
         <button class="btn btn-secondary btn-sm" id="bc-manual-go">Valider</button>
@@ -836,8 +836,8 @@ function openBarcodeSheet(rerender, opts = {}) {
 
   const fileEl = content.querySelector('#bc-file');
   const zoneEl = content.querySelector('#bc-cam-zone');
-  const LIVE_HINT = 'Cadre le code-barre dans le viseur puis prends la photo. Le sens n\'a pas d\'importance.';
-  const PHOTO_HINT = 'Aucune autorisation demandée : c\'est l\'appareil photo du téléphone qui prend la photo.';
+  const LIVE_HINT = 'Cadre le code-barre dans le viseur';
+  const PHOTO_HINT = 'Photo prise par l\'appareil photo, sans autorisation';
 
   // Démarrage de la caméra (mode viseur uniquement)
   async function startLive() {
@@ -907,7 +907,7 @@ function openBarcodeSheet(rerender, opts = {}) {
 
   async function handleCode(code) {
     if (stoppedByUser) return;
-    statusEl.textContent = `Code ${code} — recherche du produit…`;
+    statusEl.textContent = `Code ${code}, recherche…`;
     try {
       const product = await fetchProductByBarcode(code);
       if (stoppedByUser) return;
@@ -1009,7 +1009,7 @@ function openRecipeAddSheet(rerender, recipe, getCat, setCat, opts = {}) {
       <div class="ra-ing">
         <span class="ra-ing-name">${esc(i.name)}${i.weight ? ` <span class="muted">(${i.weight} g)</span>` : ''}</span>
         <span class="muted">${calcKcal(i.prot, i.carbs, i.fat)} kcal</span>
-      </div>`).join('')}</div>` : '<div class="muted" style="font-size:0.8rem;margin-bottom:8px">Recette sans détail d\'ingrédients.</div>'}
+      </div>`).join('')}</div>` : '<div class="muted" style="font-size:0.8rem;margin-bottom:8px">Sans détail d\'ingrédients</div>'}
     <label class="field ra-mult"><span>Multiplicateur (portions)</span>
       <input id="ra-mult" type="number" inputmode="decimal" min="0.1" step="0.5" value="${mult}"></label>
     <div class="ra-totals" id="ra-totals"></div>
@@ -1026,7 +1026,7 @@ function openRecipeAddSheet(rerender, recipe, getCat, setCat, opts = {}) {
     const s = scaled();
     form.querySelector('#ra-totals').innerHTML = `
       <div class="re-tot-row"><span>Total ${mult !== 1 ? `(×${mult})` : ''}</span><b class="num" style="color:var(--accent)">${calcKcal(s.prot, s.carbs, s.fat)} kcal</b></div>
-      <div class="re-tot-row muted"><span>P ${round(s.prot)} · G ${round(s.carbs)} · L ${round(s.fat)}${s.fiber ? ` · ${round(s.fiber)}g fibres` : ''}</span></div>`;
+      <div class="re-tot-row muted"><span>P ${round(s.prot)}&ensp;G ${round(s.carbs)}&ensp;L ${round(s.fat)}${s.fiber ? `&ensp;F ${round(s.fiber)}` : ''}</span></div>`;
   };
   refresh();
 
@@ -1086,7 +1086,7 @@ function openFoodSearchSheet(rerender, opts = {}) {
 
   const form = el(`<div>
     <div class="fs-searchbar">
-      <input id="fs-search" type="text" placeholder="Rechercher…" autocomplete="off" class="field-input-solo">
+      <input id="fs-search" type="text" placeholder="Rechercher" autocomplete="off" class="field-input-solo">
       <button class="fs-quick" id="fs-quick" aria-label="Ajout rapide" title="Ajout rapide">${icons.flame}</button>
     </div>
     ${onPick ? '' : `<div class="segment segment-meals" id="fs-meal" style="margin-top:10px">
@@ -1146,7 +1146,7 @@ function openFoodSearchSheet(rerender, opts = {}) {
     const item = el(`<button class="hist-item">
       <div class="hist-info">
         <div class="hist-name">${esc(name)}</div>
-        <div class="meal-macros">100 g : ${kcal100} kcal · ${macroLine(per100.prot, per100.carbs, per100.fat, per100.fiber, { round: true })}${meta || ''}</div>
+        <div class="meal-macros">100 g : ${kcal100} kcal&ensp;${macroLine(per100.prot, per100.carbs, per100.fat, per100.fiber, { round: true })}${meta || ''}</div>
       </div>
       <span class="hist-add">${icons.plus}</span>
     </button>`);
@@ -1164,7 +1164,7 @@ function openFoodSearchSheet(rerender, opts = {}) {
       const p100 = e.per100 || { prot: e.prot, carbs: e.carbs, fat: e.fat, fiber: e.fiber };
       const name = e.baseName || e.name || 'Aliment';
       const weight = e.weight || 100;
-      list.appendChild(rowFood(name, p100, weight, ` · dernier : ${weight} g`, addDirect));
+      list.appendChild(rowFood(name, p100, weight, `&ensp;dernier ${weight} g`, addDirect));
     }
   };
 
@@ -1206,7 +1206,7 @@ function openFoodSearchSheet(rerender, opts = {}) {
     const item = el(`<button class="hist-item">
       <div class="hist-info">
         <div class="hist-name">${esc(r.name)}</div>
-        <div class="meal-macros">${calcKcal(r.prot, r.carbs, r.fat)} kcal · ${macroLine(r.prot, r.carbs, r.fat, r.fiber)}</div>
+        <div class="meal-macros">${calcKcal(r.prot, r.carbs, r.fat)} kcal&ensp;${macroLine(r.prot, r.carbs, r.fat, r.fiber)}</div>
         ${sub ? `<div class="hist-sub">${esc(sub)}</div>` : ''}
       </div>
       <span class="hist-add">${icons.plus}</span>
@@ -1289,7 +1289,7 @@ function openFoodSearchSheet(rerender, opts = {}) {
         e.baseName || e.name || 'Aliment',
         e.per100 || { prot: e.prot, carbs: e.carbs, fat: e.fat, fiber: e.fiber },
         e.weight || 100,
-        ` · dernier : ${e.weight || 100} g`,
+        `&ensp;dernier ${e.weight || 100} g`,
         addDirect,
       ));
     section('Historique', hist);
@@ -1416,8 +1416,8 @@ export function renderCoachCard(rerender, opts = {}) {
   if (ins.status === 'on_track') {
     tone = 'good';
     msg = dir === 'down'
-      ? `Tu perds ${absRate} kg/sem — rythme idéal, tiens le cap.`
-      : `Tu prends ${absRate} kg/sem — bonne progression, continue.`;
+      ? `Tu perds ${absRate} kg/sem, rythme idéal`
+      : `Tu prends ${absRate} kg/sem, bonne progression`;
   } else if (ins.status === 'plateau') {
     tone = 'warn';
     msg = dir === 'down'
@@ -1433,11 +1433,11 @@ export function renderCoachCard(rerender, opts = {}) {
   } else if (ins.status === 'cooldown') {
     tone = 'neutral';
     const rest = Math.max(0, 10 - ins.daysSinceAdjust);
-    msg = `Ajustement récent — laisse encore ~${rest} j au poids pour répondre avant de réévaluer.`;
+    msg = `Ajustement récent, prochain bilan dans ${rest} j`;
   } else { // hold (objectif maintenance / recomposition)
     tone = 'good';
     msg = Math.abs(rate) < ins.stallThreshold
-      ? `Poids stable (${rateStr}) — tu es à ta maintenance, idéal pour une recomposition.`
+      ? `Poids stable (${rateStr}), tu es à ta maintenance`
       : `Ton poids ${rate > 0 ? 'monte' : 'descend'} (${rateStr}). Ajuste si tu veux le stabiliser.`;
   }
 
@@ -1445,8 +1445,8 @@ export function renderCoachCard(rerender, opts = {}) {
   let maintLine = '';
   if (ins.maintenanceEst) {
     maintLine = store.userData.settings.calorieAuto
-      ? `Maintenance réelle estimée : <b>~${ins.maintenanceEst} kcal</b> — mesurée sur ta réponse pondérale, pas une formule.`
-      : `Maintenance estimée : <b>~${ins.maintenanceEst} kcal</b> (moyenne ${ins.avgIntake} kcal · ${rateStr}).`;
+      ? `Maintenance mesurée : <b>~${ins.maintenanceEst} kcal</b>`
+      : `Maintenance estimée : <b>~${ins.maintenanceEst} kcal</b> (moyenne ${ins.avgIntake} kcal, ${rateStr})`;
   }
 
   // Adopter la maintenance mesurée : seulement pour un objectif maintenance,
@@ -1603,7 +1603,7 @@ export function render(container) {
   // complet. Au-delà d'une semaine on ne fait plus défiler à l'aveugle.
   const chipFor = (d) => {
     const dDay = store.userData.nutrition.byDate[d];
-    let diffHtml = '<span class="d-diff empty">·</span>';
+    let diffHtml = '<span class="d-diff empty"></span>';
     if (dDay && dDay.meals && dDay.meals.length) {
       const dTot = store.dayTotals(d);
       const dGoal = macroGoalsFor(d);
@@ -1655,8 +1655,7 @@ export function render(container) {
           </div>
         </div>
         ${day && day.smoothed ? `<button class="smooth-note" id="btn-smooth-note">
-          <span>Objectif ajusté de <b>${day.smoothed.delta > 0 ? '+' : ''}${day.smoothed.delta} kcal</b>
-          — lissage du ${fmtDateShort(day.smoothed.from)}</span>${icons.chevron}
+          <span>Objectif ajusté de <b>${day.smoothed.delta > 0 ? '+' : ''}${day.smoothed.delta} kcal</b>, lissage du ${fmtDateShort(day.smoothed.from)}</span>${icons.chevron}
         </button>` : ''}
         <div class="macro-actions">
           <button class="btn btn-ghost btn-sm btn-block" id="btn-macro-goals">${icons.edit} Objectifs macros</button>

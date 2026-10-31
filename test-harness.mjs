@@ -163,6 +163,31 @@ assert(mealSheet && mealSheet.querySelectorAll('#m-cat button').length === 4, 'A
 assert(mealSheet.querySelector('#m-fiber'), 'Ajout repas : champ fibres optionnel');
 clearOverlays();
 
+console.log('== v7.0 : bugs segments / carte, textes sans points medians ==');
+{
+  // Plusieurs segments dans un meme bloc : aucun ne doit etre traite comme la barre du bas
+  const box = document.createElement('div');
+  box.innerHTML = '<div class="segment"><button class="active">A</button><button>B</button></div><div class="segment"><button class="active">C</button><button>D</button></div>';
+  document.body.appendChild(box);
+  await new Promise((r) => setTimeout(r, 0));
+  assert([...box.querySelectorAll('.segment')].every((s) => s.classList.contains('rs') && !s.classList.contains('rs-nav')), 'Segments : le 2e segment d\'un bloc reste un segment (plus de barre geante)');
+  box.remove();
+  // Carte : la face qui tourne le dos est masquee (Safari ignore backface-visibility sur un canvas)
+  const gs = await import('./utils/gestures.js');
+  const fc = gs.flipCard({ front: 'R', back: 'V' });
+  document.body.appendChild(fc);
+  fc.flip();
+  const [f0, f1] = fc.querySelectorAll('.flip-card__face');
+  assert(f0.style.visibility === 'hidden' && f1.style.visibility === '', 'Carte : recto masque une fois retournee');
+  fc.remove();
+  // Textes : plus de point median ni de tiret cadratin dans l'interface
+  for (const f of ['home', 'nutrition', 'workout', 'activity', 'settings']) {
+    const src = fs.readFileSync(new URL(`./modules/${f}.js`, import.meta.url), 'utf8');
+    const ui = src.split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
+    assert(!/[·—]/.test(ui), `Textes : pas de point median ni de tiret dans ${f}.js`);
+  }
+}
+
 console.log('== v6.12 : compteur a rouleaux, carte holographique, calendrier en bas ==');
 {
   const gs = await import('./utils/gestures.js');

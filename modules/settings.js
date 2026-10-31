@@ -7,7 +7,7 @@ import { RANK_ORDER, RANK_META, DIV_LP, ONYX_LP, rankBadge, liftPercentile, LEVE
 import { openExercisePicker, customRefMap, exerciseLookup } from './workout.js';
 import { backfillNutritionGoals, freezePastGoals } from './nutrition.js';
 
-const VERSION = '6.12';
+const VERSION = '7.0';
 
 // Familles de matériel (filtre de la base d'exercices), en français.
 const EQUIP_FAMILY_FR = {
@@ -87,7 +87,7 @@ export function render(container) {
           <div class="avatar">${icons.user}</div>
           <div>
             <h3 style="margin:0">${u.profile.name ? esc(u.profile.name) : 'Profil'}</h3>
-            <div class="muted">${u.profile.age} ans · ${u.profile.weight} kg · ${u.profile.height} cm</div>
+            <div class="muted">${u.profile.age} ans, ${u.profile.weight} kg, ${u.profile.height} cm</div>
           </div>
         </div>
         <button class="icon-btn" id="btn-edit-profile" aria-label="Modifier">${icons.edit}</button>
@@ -103,7 +103,7 @@ export function render(container) {
       </div>
       <div id="row-db-full"></div>
       <div class="settings-row" style="flex-direction:column;align-items:stretch">
-        <div class="row-label" style="margin-bottom:6px">Filtre équipement <span class="muted">(aucun = tout)</span></div>
+        <div class="row-label" style="margin-bottom:6px">Équipement disponible</div>
         <div id="equip-filter" class="equip-grid"></div>
       </div>
       <button class="btn btn-secondary btn-block" id="btn-rank-ladder" style="margin-top:10px">${icons.book} Rangs & Top %</button>
@@ -113,7 +113,7 @@ export function render(container) {
     <div class="card settings-section">
       <h3>Activité</h3>
       <div class="settings-row">
-        <div><div class="row-label">Synchro des pas</div><div class="row-sub">Récupérer les pas depuis l'app Santé</div></div>
+        <span class="row-label">Pas depuis Santé</span>
         <button class="btn btn-secondary btn-sm" id="btn-health-sync">${icons.steps}</button>
       </div>
     </div>
@@ -146,7 +146,7 @@ export function render(container) {
         <input type="file" id="import-file" accept="application/json" style="display:none">
       </div>
       <div class="settings-row">
-        <div><div class="row-label">Effacer l'historique</div><div class="row-sub">Garde les réglages</div></div>
+        <span class="row-label">Effacer l'historique</span>
         <button class="btn btn-secondary btn-sm" id="btn-clear-history">Effacer</button>
       </div>
       <div class="settings-row">
@@ -158,12 +158,11 @@ export function render(container) {
     <!-- 7. À PROPOS -->
     <div class="card settings-section">
       <div class="settings-row"><span class="row-label">OmniFit</span><span class="num">v${VERSION}</span></div>
-      <div class="settings-row"><span class="row-label">Données</span><span class="muted">100% locales</span></div>
     </div>
   </div>`);
   container.appendChild(root);
 
-  root.querySelector('#row-db-full').replaceWith(toggleRow('Base complète', 'exerciseDbFull', 'Décoché : débutant uniquement'));
+  root.querySelector('#row-db-full').replaceWith(toggleRow('Tous les exercices', 'exerciseDbFull'));
   const rowsInt = root.querySelector('#rows-interface');
   rowsInt.appendChild(toggleRow('Notifications', 'notificationsEnabled'));
 
@@ -256,7 +255,7 @@ function openExportModal() {
     { key: 'workouts', label: 'Entraînements' },
   ];
   const content = el(`<div>
-    <div class="muted" style="font-size:0.78rem;margin-bottom:10px">Choisis les données à inclure dans l'export. Réglages, profil, routines et recettes sont toujours inclus.</div>
+    <div class="muted" style="font-size:0.78rem;margin-bottom:10px">Toujours inclus : réglages, profil, routines, recettes</div>
     <div class="field-stack">
       ${cats.map((c) => `<label class="settings-row" style="cursor:pointer">
         <span class="row-label">${c.label}</span>
@@ -293,7 +292,7 @@ function openHealthSyncModal() {
     </div>
 
     <div class="hs-method">
-      <div class="hs-method-h">Méthode A — App installée (recommandé)</div>
+      <div class="hs-method-h">Méthode A, app installée</div>
       <div class="muted" style="font-size:0.8rem;line-height:1.5;margin-bottom:10px">Le raccourci <b>copie</b> les 7 jours, tu les colles ici. C'est la méthode fiable pour l'app installée sur l'écran d'accueil.</div>
       <button class="btn btn-primary btn-block" id="hs-paste">${icons.copy} Coller les pas depuis le presse-papier</button>
       <div class="hs-steps" style="margin-top:12px">
@@ -305,7 +304,7 @@ function openHealthSyncModal() {
     </div>
 
     <div class="hs-method">
-      <div class="hs-method-h">Méthode B — Dans Safari (automatique)</div>
+      <div class="hs-method-h">Méthode B, dans Safari</div>
       <div class="muted" style="font-size:0.8rem;line-height:1.5;margin-bottom:10px">Si tu ouvres OmniFit dans Safari. Le raccourci ouvre cette adresse avec les 7 jours en paramètre (paires séparées par <code>;</code>).</div>
       <div class="hs-url">
         <div class="hs-url-label">Adresse à composer</div>
@@ -320,7 +319,7 @@ function openHealthSyncModal() {
     </div>
   </div>`);
 
-  openModal({ title: 'Synchro des pas — Santé', content, actions: [{ label: 'Fermer' }] });
+  openModal({ title: 'Pas depuis Santé', content, actions: [{ label: 'Fermer' }] });
 
   // Méthode A : lecture du presse-papier → enregistrement multi-jours
   content.querySelector('#hs-paste').addEventListener('click', async () => {
@@ -354,7 +353,7 @@ function openClearHistoryModal(rerender) {
     { key: 'steps', label: 'Pas', sub: 'Compteur de pas quotidien' },
   ];
   const content = el(`<div>
-    <div class="muted" style="font-size:0.78rem;margin-bottom:10px">Choisis les données à effacer. Les réglages, le profil, les routines et les recettes sont conservés.</div>
+    <div class="muted" style="font-size:0.78rem;margin-bottom:10px">Toujours conservés : réglages, profil, routines, recettes</div>
     <div class="field-stack">
       ${cats.map((c) => `<label class="settings-row" style="cursor:pointer">
         <div><div class="row-label">${c.label}</div><div class="row-sub">${c.sub}</div></div>
@@ -391,10 +390,10 @@ function openRankLadderModal() {
   const ladderRows = RANK_ORDER.map((id, i) => {
     const meta = RANK_META[id];
     const lo = i * DIV_LP * 3;
-    const range = id === 'onyx' ? `${ONYX_LP}+ LP` : `${lo} – ${lo + DIV_LP * 3 - 1} LP`;
+    const range = id === 'onyx' ? `${ONYX_LP}+ LP` : `${lo} à ${lo + DIV_LP * 3 - 1} LP`;
     return `<div class="ladder-row">
       ${rankBadge(id, 52)}
-      <div><div class="ladder-name" style="color:${meta.color}">${meta.name}</div><div class="muted" style="font-size:0.72rem">${range}${id !== 'onyx' ? ' · 3 divisions (III → I)' : ' · rang unique'}</div></div>
+      <div><div class="ladder-name" style="color:${meta.color}">${meta.name}</div><div class="muted" style="font-size:0.72rem">${range}${id !== 'onyx' ? ', 3 divisions' : ', rang unique'}</div></div>
     </div>`;
   }).join('');
 

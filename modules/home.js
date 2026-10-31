@@ -552,13 +552,22 @@ export function render(container) {
   container.querySelector('#home-kcal').addEventListener('click', () => goToPage(PAGE_NUTRITION));
   container.querySelector('#home-activity').addEventListener('click', () => goToPage(PAGE_ACTIVITY));
 
-  // Coach métabolique : il vit sur l'accueil (et non plus dans Nutrition).
+  // Jours de pesée déjà couverts sur les 5 qui déclenchent le coach.
+function coachDays() {
+  const ws = [...store.userData.weights].sort((a, b) => a.date.localeCompare(b.date)).filter((w) => w.date > todayISO(-14));
+  if (!ws.length) return 0;
+  const span = (new Date(ws[ws.length - 1].date) - new Date(ws[0].date)) / 86400000;
+  return Math.min(5, Math.round(span) + 1);
+}
+
+// Coach métabolique : il vit sur l'accueil (et non plus dans Nutrition).
   const coachHost = container.querySelector('#coach-host');
   if (coachHost) {
     const coachEl = renderCoachCard(rerender, { compact: true });
     const card = coachEl || el(`<div class="card stat-card coach-card coach-empty">
       <div class="coach-head"><span class="coach-title">${icons.flame} Coach</span></div>
-      <div class="coach-msg-empty">Pèse-toi pendant 5 jours pour activer les conseils d'ajustement.</div>
+      <div class="coach-wait"><span class="num">${coachDays()}</span><small>/5</small></div>
+      <div class="coach-wait-lbl">jours de pesée</div>
     </div>`);
     // Toucher le coach ouvre le choix de phase (sèche / maintenance / prise) :
     // c'est ce réglage qui détermine ses conseils.

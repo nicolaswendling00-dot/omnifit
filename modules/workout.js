@@ -372,7 +372,7 @@ function sessionImprovement(workout) {
 export function openExercisePicker(onPick, title = 'Ajouter un exercice') {
   const overlay = el(`<div class="picker-overlay">
     <div class="picker-topbar">
-      <input id="exo-search" type="text" placeholder="Rechercher…" autocomplete="off">
+      <input id="exo-search" type="text" placeholder="Rechercher" autocomplete="off">
       <button class="icon-btn" id="picker-close" aria-label="Fermer">${icons.close}</button>
     </div>
     <div class="picker-list" id="exo-list"></div>
@@ -395,7 +395,7 @@ export function openExercisePicker(onPick, title = 'Ajouter un exercice') {
     for (const e of items.slice(0, 80)) {
       const ranked = lpMap[e.id] !== undefined;
       const rk = ranked ? rankFromLP(lpMap[e.id]) : null;
-      const chip = rk ? `<span class="rank-inline" title="${rk.name}${rk.division ? ' ' + rk.division : ''}">${rankBadge(rk.id, 46)}</span>` : '<span class="rank-inline muted" style="font-size:0.66rem">—</span>';
+      const chip = rk ? `<span class="rank-inline" title="${rk.name}${rk.division ? ' ' + rk.division : ''}">${rankBadge(rk.id, 46)}</span>` : '<span class="rank-inline"></span>';
       const b = el(`<button class="exo-search-item"><span>${esc((exerciseLookup(e.id) || e).name)}</span>${chip}</button>`);
       b.addEventListener('click', () => { const picked = exerciseLookup(e.id) || e; close(); onPick(picked); });
       list.appendChild(b);
@@ -435,9 +435,9 @@ function openExerciseEditor(onSaved, existing = null) {
   };
 
   const muscleSummary = (list) => (list.length
-    ? list.map((x) => `${muscleLabel(x.m)} ${x.p}%`).join(' · ')
+    ? list.map((x) => `${muscleLabel(x.m)} ${x.p}%`).join(', ')
     : 'Aucun');
-  const equipSummary = () => (draft.equip.length ? draft.equip.map(equipLabel).join(' · ') : 'Non renseigné');
+  const equipSummary = () => (draft.equip.length ? draft.equip.map(equipLabel).join(', ') : 'Non renseigné');
   const rankSummary = () => {
     if (!draft.refExercise) return 'Aucun (pas de rang)';
     const d = exerciseLookup(draft.refExercise);
@@ -478,7 +478,7 @@ function openExerciseEditor(onSaved, existing = null) {
   // ---- Panneau « Classement » : exercice de référence + coefficient ----
   const openRankSheet = () => {
     const c = el(`<div>
-      <div class="row-sub" style="margin-bottom:10px">Rattache cet exercice à un mouvement connu pour lui attribuer un rang.</div>
+      <div class="row-sub" style="margin-bottom:10px">Mouvement de référence pour le rang</div>
       <button type="button" class="btn btn-secondary btn-block" id="xr-pick" style="justify-content:space-between">
         <span id="xr-name">${esc(draft.refExercise ? rankSummary().replace(/ ×[\d.]+$/, '') : 'Aucun (pas de rang)')}</span>${icons.chevron}
       </button>
@@ -551,7 +551,7 @@ function openExerciseEditor(onSaved, existing = null) {
       tot.className = `ex-total ${t === 100 ? 'ok' : 'warn'}`;
       tot.textContent = t === 100
         ? 'Total 100 % ✓'
-        : `Total ${t} % — ${t < 100 ? `${100 - t} % à répartir` : `${t - 100} % de trop`}`;
+        : `Total ${t} %, ${t < 100 ? `${100 - t} % à répartir` : `${t - 100} % de trop`}`;
       for (const r of c.querySelectorAll('.mus-edit-row')) {
         const v = parseFloat(r.querySelector('.mus-edit-p').value) || 0;
         r.classList.toggle('on', v > 0);
@@ -603,7 +603,6 @@ function openExerciseEditor(onSaved, existing = null) {
         <span class="num" id="xrest-val" style="color:var(--accent)">${draft.rest}s</span>
       </div>
       <input id="xrest" type="range" min="30" max="300" step="15" value="${draft.rest}">
-      <div class="muted" style="font-size:0.72rem;margin-top:6px">Le minuteur démarre à la validation d'une série.</div>
       <button type="button" class="btn btn-primary btn-block" data-done style="margin-top:14px">Terminé</button>
     </div>`);
     c.querySelector('#xrest').addEventListener('input', (e) => {
@@ -647,7 +646,7 @@ function openExerciseEditor(onSaved, existing = null) {
           if (!name) { toast('Nom requis', 'error'); return 'keep'; }
           if (!draft.primary.length) { toast('Au moins 1 muscle principal', 'error'); return 'keep'; }
           const t = totalPct();
-          if (t !== 100) { toast(`Répartition à ${t} % — il faut 100 %`, 'error'); return 'keep'; }
+          if (t !== 100) { toast(`Répartition à ${t} %, il faut 100 %`, 'error'); return 'keep'; }
 
           if (existing) {
             if (existing.isCustom) {
@@ -874,7 +873,7 @@ function buildExerciseDetail(exerciseId) {
             <div class="rank-name" style="color:${rk.color}">${rankName}</div>
             <div class="rank-back-lp">${lpLabel(rk)}</div>
             ${rk.division ? `<div class="rank-back-bar"><div style="width:${rk.lp}%;background:${rk.color}"></div></div>` : '<div class="rank-back-sub">Rang ultime atteint</div>'}`
-    : '<div class="rank-back-sub" style="padding:0 24px;text-align:center">Non classé — réalise cet exercice pour obtenir un rang</div>'}
+    : '<div class="rank-back-sub" style="padding:0 24px;text-align:center">Non classé</div>'}
         </div>
       </div>
     </div>`;
@@ -1025,7 +1024,7 @@ function openWorkoutDetail(w, highlightId = null) {
 
     ${w.notes ? `<div class="wd-note"><span class="eyebrow">Note</span>${esc(w.notes)}</div>` : ''}
 
-    <div class="wd-list-head"><span class="eyebrow">Exercices · ${w.exercises.length}</span><span class="muted">Toucher pour le détail</span></div>
+    <div class="wd-list-head"><span class="eyebrow">Exercices</span><span class="muted num">${w.exercises.length}</span></div>
     ${w.exercises.map((wx) => {
       const def = exerciseLookup(wx.exerciseId) || { name: wx.exerciseId };
       const hl = wx.exerciseId === highlightId;
@@ -1038,7 +1037,7 @@ function openWorkoutDetail(w, highlightId = null) {
           <span class="wd-exo-rank">${rk ? rankBadge(rk.id, 40) : ''}</span>
           <span class="wd-exo-title">
             <span class="wd-exo-name">${esc(def.name)}</span>
-            <span class="wd-exo-sub">${rk ? `<b style="color:${rk.color}">${rk.division ? `${rk.name} ${rk.division}` : rk.name}</b> · ` : ''}${wx.sets.length} série${wx.sets.length > 1 ? 's' : ''}</span>
+            <span class="wd-exo-sub">${rk ? `<b style="color:${rk.color}">${rk.division ? `${rk.name} ${rk.division}` : rk.name}</b>, ` : ''}${wx.sets.length} série${wx.sets.length > 1 ? 's' : ''}</span>
           </span>
           <span class="wd-exo-meta">
             ${wx.ss ? `<span class="ss-chip">SS${wx.ss}</span>` : ''}
@@ -1100,7 +1099,7 @@ function addSessionToRoutine(w) {
   const ids = w.exercises.map((wx) => wx.exerciseId);
   const input = el(`<div class="field-stack">
     <label class="field"><span>Nom de la routine</span><input type="text" class="rt-name-input" placeholder="Push A" value="Séance du ${fmtDateFull(w.date)}" autofocus></label>
-    <div class="muted" style="font-size:0.75rem">${ids.length} exercice${ids.length > 1 ? 's' : ''} · les séries précédentes s'afficheront dans la colonne PRÉC quand tu lanceras la routine.</div>
+    <div class="muted" style="font-size:0.75rem">${ids.length} exercice${ids.length > 1 ? 's' : ''}</div>
   </div>`);
   openModal({
     title: 'Ajouter aux routines',
@@ -1198,7 +1197,7 @@ function openSupersetSheet(idx) {
   if (!others.length) { toast('Ajoute d\'abord un autre exercice', 'error'); return; }
 
   const form = el(`<div>
-    <div class="muted" style="margin-bottom:10px">Sélectionne les exercices à lier en superset :</div>
+    <div class="muted" style="margin-bottom:10px">Exercices à lier</div>
     ${others.map((o) => {
       const d = exerciseLookup(o.x.exerciseId) || { name: '?' };
       const checked = wx.ss && o.x.ss === wx.ss;
@@ -1315,7 +1314,7 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null, resum
     const msTime = document.getElementById('ms-time');
     if (msTime) msTime.textContent = formatTime(secs);
     const msRest = document.getElementById('ms-rest');
-    if (msRest) msRest.textContent = restInterval ? `· Repos ${formatTime(restRemaining)}` : '';
+    if (msRest) msRest.textContent = restInterval ? `Repos ${formatTime(restRemaining)}` : '';
   };
   tick(); // affichage immédiat (utile à la reprise)
   chronoInterval = setInterval(tick, 1000);
@@ -1621,7 +1620,7 @@ function showSummary(exercises, closeSession) {
     ${promotions.length ? `<div class="rank-promo-banner">
       ${promotions.map((p) => `<div class="rank-promo-row">
         ${rankBadge(p.afterRank.id, 44)}
-        <div><div class="rank-promo-title">Nouveau rang !</div><div class="rank-promo-name" style="color:${p.afterRank.color}">${p.name} → ${p.afterRank.division ? `${p.afterRank.name} ${p.afterRank.division}` : p.afterRank.name}</div></div>
+        <div><div class="rank-promo-title">Nouveau rang</div><div class="rank-promo-name" style="color:${p.afterRank.color}">${p.name} → ${p.afterRank.division ? `${p.afterRank.name} ${p.afterRank.division}` : p.afterRank.name}</div></div>
       </div>`).join('')}
     </div>` : ''}
     ${lpRows.length ? `<h3 style="margin:2px 0 6px">Gains de LP</h3>
@@ -1629,14 +1628,13 @@ function showSummary(exercises, closeSession) {
     ${progress.length ? `<h3 style="margin:14px 0 6px">Tu as progressé sur</h3>
       <div class="recap-list">${progress.map((p) => `<div class="recap-row"><span>${esc(p.name)}</span>${impBadge(p.imp, false)}</div>`).join('')}</div>` : ''}
     <h3 style="margin:14px 0 6px">Coefficients d'atténuation</h3>
-    <div class="muted" style="font-size:0.72rem;margin-bottom:8px">Implication moyenne par muscle (1.0 = moteur principal) · Δ vs dernière séance</div>
     <table class="volume-table">
       <thead><tr><th>Muscle</th><th>Atténuation</th><th>Δ</th></tr></thead>
       <tbody>${breakdown.map((m) => {
         const v = byMuscle[m] || 0;
         const lastV = lastMuscleVolume(m);
         const imp = lastV ? Math.round(((v / lastV) - 1) * 100) : null;
-        return `<tr><td>${muscleLabel(m)}</td><td class="tnum" style="color:var(--accent)">${atten[m].toFixed(2)}</td><td>${imp != null ? impBadge(imp, false) : '<span class="muted">—</span>'}</td></tr>`;
+        return `<tr><td>${muscleLabel(m)}</td><td class="tnum" style="color:var(--accent)">${atten[m].toFixed(2)}</td><td>${imp != null ? impBadge(imp, false) : ''}</td></tr>`;
       }).join('')}</tbody>
     </table>
     <button class="btn btn-secondary btn-block" id="sum-note" style="margin-top:14px">${icons.edit} <span id="sum-note-lbl">${session.notes ? 'Modifier la note' : 'Note de séance'}</span></button>
@@ -2013,14 +2011,12 @@ function renderVolumeDashboard(host, rerender) {
             <td>${r.m.label}</td>
             <td class="tnum">${r.done}</td>
             <td class="tnum">${r.goal}</td>
-            <td class="tnum ${r.pct >= 100 ? 'pct-ok' : r.pct >= 50 ? '' : 'pct-warn'}">${r.goal ? r.pct + '%' : '—'}</td>
+            <td class="tnum ${r.pct >= 100 ? 'pct-ok' : r.pct >= 50 ? '' : 'pct-warn'}">${r.goal ? r.pct + '%' : ''}</td>
           </tr>`).join('')}
         </tbody>
       </table>
-      <div class="muted" style="font-size:0.68rem;margin-top:4px">Touchez un muscle pour sa progression</div>
       <div class="chart-wrap" style="margin-top:14px;height:180px"><canvas id="vol-chart"></canvas></div>
       <h3 style="margin-top:16px;margin-bottom:2px">Amélioration des séances</h3>
-      <div class="muted" style="font-size:0.7rem;margin-bottom:6px">Coefficient d'amélioration (%) au fil du temps</div>
       <div class="chart-wrap" style="height:170px"><canvas id="imp-chart"></canvas></div>
     </div>
   </div>`);
@@ -2088,7 +2084,7 @@ function openExerciseBrowser() {
   let sortMode = 'alpha'; // 'alpha' | 'rank'
   const overlay = el(`<div class="picker-overlay">
     <div class="picker-topbar">
-      <input id="xb-search" type="text" placeholder="Rechercher un exercice…" autocomplete="off">
+      <input id="xb-search" type="text" placeholder="Rechercher un exercice" autocomplete="off">
       <button class="icon-btn" id="xb-close" aria-label="Fermer">${icons.close}</button>
     </div>
     <div class="segment" id="xb-sort" style="margin:0 0 8px">
@@ -2206,7 +2202,6 @@ function openMuscleChart(muscleId) {
 
   const content = el(`<div>
     <h3 style="margin:0 0 4px">Exercices cette semaine</h3>
-    <div class="muted" style="font-size:0.7rem;margin-bottom:8px">Ce qui a compté pour ${muscleLabel(muscleId)} sur 7 jours</div>
     <div id="mus-exos">${exoRows.length ? '' : '<div class="empty-state">Aucun exercice cette semaine</div>'}</div>
     <h3 style="margin:16px 0 6px">Amélioration</h3>
     <div class="chart-wrap" style="height:170px"><canvas id="mus-chart"></canvas></div>
@@ -2216,7 +2211,7 @@ function openMuscleChart(muscleId) {
     const row = el(`<div class="mus-exo-row" data-exo="${id}">
       <div>
         <div class="mus-exo-name">${esc(e.name)} ${e.primary ? '' : '<span class="badge violet" style="font-size:0.56rem">secondaire</span>'}</div>
-        <div class="muted">${e.sets} série${e.sets > 1 ? 's' : ''} · ${Math.round(e.vol).toLocaleString('fr-FR')} kg pondérés</div>
+        <div class="muted">${e.sets} série${e.sets > 1 ? 's' : ''}, ${Math.round(e.vol).toLocaleString('fr-FR')} kg pondérés</div>
       </div>
       ${icons.chevron}
     </div>`);
@@ -2264,7 +2259,7 @@ export function render(container) {
     <div id="calendar-host"></div>
     <div class="card">
       <div class="card-row collapse-head" id="routine-toggle" style="margin-bottom:8px;cursor:pointer">
-        <h3 style="margin:0;display:flex;align-items:center;gap:6px"><span class="collapse-caret">${icons.chevron}</span> Routines <span class="muted" style="font-size:0.72rem">(${routines.length})</span></h3>
+        <h3 style="margin:0;display:flex;align-items:center;gap:6px"><span class="collapse-caret">${icons.chevron}</span> Routines <span class="muted num">${routines.length}</span></h3>
         <button class="btn btn-secondary btn-sm" id="btn-new-routine">${icons.plus}</button>
       </div>
       <div id="routine-list" class="collapse-body">${routines.length ? '' : '<div class="empty-state">Aucune routine</div>'}</div>

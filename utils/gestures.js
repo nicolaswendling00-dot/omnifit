@@ -292,7 +292,7 @@ function rubberSegment(seg, nav = false) {
 function enhanceAll(root) {
   if (root.nodeType !== 1) return;
   if (root.classList.contains('segment')) rubberSegment(root);
-  root.querySelectorAll('.segment').forEach(rubberSegment);
+  root.querySelectorAll('.segment').forEach((s) => rubberSegment(s));
 }
 if (typeof document !== 'undefined' && document.body) {
   enhanceAll(document.body);
@@ -363,13 +363,26 @@ export function attachSwipeToDelete(list, { rowSelector, contentSelector, width 
     if (!collapse) { settle(r, 0); fire(r); return; }
     setOpen(r, false);
     if (reduced()) { fire(r); return; }
+    // 1. la ligne file à gauche et le rouge couvre toute la largeur ;
+    // 2. le bord droit du rouge part vers la gauche, en gelée (ressort qui
+    //    rebondit) ; 3. une fois le rouge disparu, la ligne se referme et
+    //    l'élément est supprimé.
+    const W = r.offsetWidth;
+    const del = delOf(r);
     s.spread.to(1, SPRING_UI);
-    s.x.to(r.offsetWidth, { ...SPRING_UI, velocity: v }).then(() => {
-      r.style.height = `${r.offsetHeight}px`;
-      void r.offsetHeight; // fige la hauteur de départ avant la transition
-      r.classList.add('sw-collapsing');
-      setTimeout(() => fire(r), 200);
+    s.x.to(W, { duration: 0.25, bounce: 0, velocity: v });
+    let done = false;
+    const gone = channel((k) => {
+      if (del) del.style.clipPath = `inset(0 ${Math.max(0, k) * W}px 0 0 round 12px)`;
+      if (!done && k > 0.96) {
+        done = true;
+        r.style.height = `${r.offsetHeight}px`;
+        void r.offsetHeight; // fige la hauteur de départ avant la transition
+        r.classList.add('sw-collapsing');
+        setTimeout(() => fire(r), 160);
+      }
     });
+    setTimeout(() => gone.to(1, { duration: 0.42, bounce: 0.35 }), 140);
   };
 
   // Un tap sur le bouton rouge passe aussi par l'animation de repli.
@@ -604,6 +617,14 @@ export function flipCard({ front, back, label = 'Carte', width = 280, holo = nul
   let hovering = false;
   const paint = () => {
     rotor.style.transform = `perspective(1100px) rotateX(${tx.x + drift.x}deg) rotateY(${turn.x + ty.x + drift.y}deg)`;
+    // Safari ignore backface-visibility sur un canvas WebGL : sans ça, le recto
+    // réapparaît en miroir au dos. On masque donc la face qui tourne le dos.
+    const facing = Math.cos(((turn.x + ty.x + drift.y) * Math.PI) / 180) >= 0;
+    if (facing !== card._facing) {
+      card._facing = facing;
+      faces[0].style.visibility = facing ? '' : 'hidden';
+      faces[1].style.visibility = facing ? 'hidden' : '';
+    }
     const f = Math.abs(Math.cos((turn.x * Math.PI) / 180));
     shadow.style.transform = `translate(${-(ty.x + drift.y) * 0.7}px, ${(tx.x + drift.x) * 0.7}px) scaleX(${0.08 + 0.92 * f})`;
     shadow.style.opacity = String(0.1 + 0.9 * f * f);
