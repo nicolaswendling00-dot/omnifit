@@ -671,9 +671,10 @@ body > .picker-overlay {
 }
 .hk-main { grid-column: 1; grid-row: 1; min-width: 0; }
 .hk-numbers { display: flex; align-items: baseline; gap: 6px; min-width: 0; flex-wrap: wrap; }
-.home-kcal .hk-numbers { flex-wrap: nowrap; }
+/* Objectif sous le chiffre : la hauteur ne bouge pas quand on passe à 4 chiffres */
+.home-kcal .hk-numbers { flex-direction: column; align-items: flex-start; gap: 4px; }
 .hk-big { font-size: 3.4rem; line-height: 1; }
-.hk-goal { font-size: 0.95rem; color: var(--text-2); font-weight: 600; font-stretch: var(--wide); font-variant-numeric: tabular-nums; }
+.hk-goal { white-space: nowrap; font-size: 0.95rem; color: var(--text-2); font-weight: 600; font-stretch: var(--wide); font-variant-numeric: tabular-nums; }
 .hk-donut { display: contents; }
 .hk-donut svg { grid-column: 2; grid-row: 1 / span 2; align-self: center; width: clamp(110px, 36vw, 150px); height: auto; }
 .hk-donut-legend { grid-column: 1; grid-row: 2; align-self: end; white-space: nowrap; display: flex; flex-direction: column; gap: 8px; margin-top: 12px; font-size: 1rem; font-weight: 600; font-stretch: var(--wide); color: var(--text-2); font-variant-numeric: tabular-nums; }
