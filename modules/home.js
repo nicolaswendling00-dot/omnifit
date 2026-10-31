@@ -2,7 +2,7 @@
 import { store, todayISO } from '../utils/storage.js';
 import { calculateSMA } from '../utils/math.js';
 import { el, icons, openModal, toast, ringSVG, haptic, makeChart, fmtDateFull, attachSwipeToDelete, dateBar } from '../utils/ui.js';
-import { flipCard, channel } from '../utils/gestures.js';
+import { openRankCard } from '../utils/rankCard.js';
 import { lineChartOptions, lineDataset } from '../utils/charts.js';
 import { goToPage, PAGE_NUTRITION, PAGE_ACTIVITY, getViewDate, isViewingToday } from '../utils/nav.js';
 import { macroGoals, macroGoalsFor, renderCoachCard } from './nutrition.js';
@@ -262,56 +262,15 @@ function renderWeightChart(canvas) {
   weightChart = makeChart(canvas, { type: 'line', data: { labels, datasets }, options }, weightChart);
 }
 
-// Recto de la carte de rang redessiné dans un canvas : c'est l'image sur
-// laquelle le shader holographique pose son motif. Mêmes éléments que la face
-// HTML (fond, lueur et liseré à la couleur du rang, badge, nom, LP).
-async function rankCardArt(rank, label, w, h) {
-  const k = Math.min(window.devicePixelRatio || 1, 2);
-  const cv = document.createElement('canvas');
-  cv.width = Math.round(w * k); cv.height = Math.round(h * k);
-  const ctx = cv.getContext('2d');
-  ctx.scale(k, k);
-  const css = getComputedStyle(document.body);
-  ctx.fillStyle = css.getPropertyValue('--surface').trim() || '#0C0E13';
-  ctx.fillRect(0, 0, w, h);
-  const glow = ctx.createRadialGradient(w / 2, 0, 0, w / 2, 0, h * 0.7);
-  glow.addColorStop(0, rank.color + '38');
-  glow.addColorStop(1, rank.color + '00');
-  ctx.fillStyle = glow;
-  ctx.fillRect(0, 0, w, h);
-  ctx.fillStyle = rank.color;
-  ctx.fillRect(22, 0, w - 44, 3);
-  const img = new Image();
-  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(rankBadge(rank.id, 400));
-  await img.decode();
-  const b = Math.min(200, w * 0.62);
-  ctx.drawImage(img, (w - b) / 2, h * 0.47 - b * 0.62, b, b);
-  try { await document.fonts.load('800 20px Archivo'); } catch (_) { /* police système */ }
-  ctx.textAlign = 'center';
-  if ('fontStretch' in ctx) ctx.fontStretch = 'semi-expanded';
-  ctx.fillStyle = rank.color;
-  ctx.font = `800 ${Math.round(w * 0.1)}px Archivo, sans-serif`;
-  ctx.fillText(label.toUpperCase(), w / 2, h * 0.47 + b * 0.5);
-  ctx.fillStyle = css.getPropertyValue('--text').trim() || '#F4F6FA';
-  ctx.font = `800 ${Math.round(w * 0.066)}px Archivo, sans-serif`;
-  ctx.fillText(lpLabel(rank), w / 2, h * 0.47 + b * 0.5 + w * 0.1);
-  return cv;
-}
-
-// Rang global : une carte au format carte à jouer, posée au centre de
-// l'écran. Recto : le badge, le nom du rang et les LP. Verso : le détail.
-// Toucher la carte la retourne ; toucher à côté (ou Échap) la referme.
+// Rang global : la carte commune (utils/rankCard.js), avec au verso le détail.
 function openGlobalRankModal(gr) {
   const label = gr.rank.division ? `${gr.rank.name} ${gr.rank.division}` : gr.rank.name;
   const pct = gr.rank.lpNeeded ? Math.round((gr.rank.lp / gr.rank.lpNeeded) * 100) : 100;
-  const card = flipCard({
-    label: `Rang global ${label}`,
-    holo: { art: (w, h) => rankCardArt(gr.rank, label, w, h) },
-    front: `<div class="rk-face" style="--rk:${gr.rank.color}">
-      <div class="rk-badge">${rankBadge(gr.rank.id, 200)}</div>
-      <div class="rk-name">${label}</div>
-      <div class="rk-lp num">${lpLabel(gr.rank)}</div>
-    </div>`,
+  openRankCard({
+    rank: gr.rank,
+    label,
+    ariaLabel: `Rang global ${label}`,
+    holo: true,
     back: `<div class="rk-face rk-back" style="--rk:${gr.rank.color}">
       <div class="rk-back-title">Rang global</div>
       <div class="rk-back-name">${label}</div>
@@ -324,21 +283,6 @@ function openGlobalRankModal(gr) {
       </div>
     </div>`,
   });
-  const scrim = el('<div class="scrim rk-scrim"><div class="rk-stage"></div><div class="rk-hint">Toucher la carte pour la retourner</div></div>');
-  const stage = scrim.querySelector('.rk-stage');
-  stage.appendChild(card);
-  document.body.appendChild(scrim);
-  // Entrée : la carte arrive en grandissant, avec un ressort
-  const enter = channel((v) => { stage.style.transform = `scale(${v})`; stage.style.opacity = String(Math.min(1, (v - 0.6) / 0.4)); }, 0.6);
-  requestAnimationFrame(() => { scrim.classList.add('visible'); enter.to(1, { duration: 0.45, bounce: 0.25 }); });
-  const close = () => {
-    scrim.classList.remove('visible');
-    enter.to(0.6, { duration: 0.25 });
-    setTimeout(() => scrim.remove(), 240);
-  };
-  scrim._close = close;
-  scrim.addEventListener('click', (e) => { if (!card.contains(e.target)) close(); });
-  card.focus({ preventScroll: true });
 }
 
 // Couleurs macros, alignées sur l'onglet Nutrition

@@ -8,8 +8,9 @@ import { formatTime, workoutMuscleVolume, weeklySetsByMuscle, muscleAttenuation 
 import { el, esc, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, fmtDateFull, celebrateLP, makeChart, normalizeStr, closeAllOverlays, attachSwipeToDelete, slideAway, pageFab, dateBar } from '../utils/ui.js';
 import { lineChartOptions, lineDataset } from '../utils/charts.js';
 import { bodyMapSVG } from '../utils/bodyMap.js';
-import { computeExerciseLP, computeExerciseLPDetailed, rankFromLP, rankBadge, getStandards, lpLabel } from '../utils/ranks.js';
+import { computeExerciseLP, computeExerciseLPDetailed, rankFromLP, rankBadge, getStandards } from '../utils/ranks.js';
 import { PAGE_WORKOUT, getViewDate } from '../utils/nav.js';
+import { openRankCard } from '../utils/rankCard.js';
 
 let volumeChart = null;
 let impChart = null;
@@ -376,7 +377,7 @@ export function openExercisePicker(onPick, title = 'Ajouter un exercice') {
       <input id="exo-search" type="text" placeholder="Rechercher" autocomplete="off">
     </div>
     <div class="picker-list" id="exo-list"></div>
-    <button class="btn btn-secondary btn-block" id="btn-custom" style="margin:8px 0 calc(10px + var(--safe-b))">${icons.plus} Exercice custom</button>
+    <button class="btn btn-secondary btn-block" id="btn-custom" style="margin:8px 0 0">${icons.plus} Exercice custom</button>
   </div>`);
   const { close } = openSheet({ title, content: overlay, variant: 'tall' });
   const list = overlay.querySelector('#exo-list');
@@ -851,24 +852,14 @@ function buildExerciseDetail(exerciseId) {
     }
   }
 
-  // Carte recto-verso : au recto les muscles de l'exercice, au verso son rang.
+  // Les muscles de l'exercice ; les toucher ouvre la carte de rang de
+  // l'exercice, la même que celle du rang global (holo au rang Onyx seulement).
   const rk = exerciseRank(exerciseId);
   const rankName = rk ? (rk.division ? `${rk.name} ${rk.division}` : rk.name) : '';
-  const rankBlock = `<div class="rank-flip" id="ed-rank" role="button" tabindex="0" aria-pressed="false" aria-label="Carte des muscles. Toucher pour afficher le rang">
-      <div class="rank-flip-inner">
-        <div class="rank-face rank-front">
-          ${bodyMapSVG(exerciseIntensity(def), { size: 214, label: 'Muscles sollicités par l\'exercice' })}
-          <div class="flip-hint">${icons.swap} Rang</div>
-        </div>
-        <div class="rank-face rank-back"${rk ? ` style="border-color:${rk.color}"` : ''}>
-          ${rk ? `${rankBadge(rk.id, 120)}
-            <div class="rank-name" style="color:${rk.color}">${rankName}</div>
-            <div class="rank-back-lp">${lpLabel(rk)}</div>
-            ${rk.division ? `<div class="rank-back-bar"><div style="width:${rk.lp}%;background:${rk.color}"></div></div>` : '<div class="rank-back-sub">Rang ultime atteint</div>'}`
-    : '<div class="rank-back-sub" style="padding:0 24px;text-align:center">Non classé</div>'}
-        </div>
-      </div>
-    </div>`;
+  const rankBlock = `<button type="button" class="ed-body" id="ed-rank" aria-label="Muscles sollicités. Toucher pour voir la carte de rang">
+      ${bodyMapSVG(exerciseIntensity(def), { size: 214, label: 'Muscles sollicités par l\'exercice' })}
+      <span class="flip-hint">${rk ? rankBadge(rk.id, 18) : ''} Rang</span>
+    </button>`;
 
   const form = el(`<div>
     ${rankBlock}
@@ -891,14 +882,13 @@ function buildExerciseDetail(exerciseId) {
   </div>`);
 
   const rankEl = form.querySelector('#ed-rank');
-  if (rankEl) {
-    const toggle = () => {
-      rankEl.classList.toggle('flipped');
-      rankEl.setAttribute('aria-pressed', rankEl.classList.contains('flipped') ? 'true' : 'false');
-    };
-    rankEl.addEventListener('click', toggle);
-    rankEl.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
-  }
+  rankEl.addEventListener('click', () => openRankCard({
+    rank: rk,
+    label: rankName,
+    title: def.name,
+    ariaLabel: `${def.name}, ${rk ? rankName : 'non classé'}`,
+    holo: !!rk && rk.id === 'onyx',
+  }));
 
   const hostH = form.querySelector('#ed-history');
   // Séance retenue comme référence (colonne PRÉC) : on la met en évidence.
@@ -2004,7 +1994,7 @@ function openExerciseBrowser() {
       <button data-s="rank">Par rang</button>
     </div>
     <div class="picker-list" id="xb-list"></div>
-    <button class="btn btn-secondary btn-block" id="xb-custom" style="margin:8px 0 calc(10px + var(--safe-b))">${icons.plus} Ajouter un exercice custom</button>
+    <button class="btn btn-secondary btn-block" id="xb-custom" style="margin:8px 0 0">${icons.plus} Ajouter un exercice custom</button>
   </div>`);
   const { close } = openSheet({ title: 'Exercices', content: overlay, variant: 'tall' });
   const list = overlay.querySelector('#xb-list');
