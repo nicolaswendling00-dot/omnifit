@@ -832,7 +832,7 @@ function popState(el, state) {
   el.dataset.al = state;
 }
 function watchListItem(el) {
-  if (el._al || !listIO) return;
+  if (el._al || !listIO || el.closest('.no-al')) return;
   // Une ligne dans une autre ligne déjà animée (bouton dans une ligne glissable) : on laisse le parent.
   if (el.parentElement && el.parentElement.closest(LIST_ITEMS)) return;
   el._al = true;

@@ -5,7 +5,7 @@ import { store, todayISO } from '../utils/storage.js';
 import { EXERCISES, MUSCLES, muscleLabel, AKA, EQUIPMENT, equipLabel } from '../data/exercises.js';
 import { reorderList, rollingCounter } from '../utils/gestures.js';
 import { formatTime, workoutMuscleVolume, weeklySetsByMuscle, muscleAttenuation } from '../utils/math.js';
-import { el, esc, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, fmtDateFull, celebrateLP, makeChart, normalizeStr, closeAllOverlays, attachSwipeToDelete } from '../utils/ui.js';
+import { el, esc, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, fmtDateFull, celebrateLP, makeChart, normalizeStr, closeAllOverlays, attachSwipeToDelete, slideAway } from '../utils/ui.js';
 import { lineChartOptions, lineDataset } from '../utils/charts.js';
 import { bodyMapSVG } from '../utils/bodyMap.js';
 import { computeExerciseLP, computeExerciseLPDetailed, rankFromLP, rankBadge, getStandards, lpLabel } from '../utils/ranks.js';
@@ -382,10 +382,7 @@ export function openExercisePicker(onPick, title = 'Ajouter un exercice') {
   const wasOpen = document.body.classList.contains('overlay-open');
   document.body.classList.add('overlay-open');
 
-  const close = () => {
-    overlay.remove();
-    if (!wasOpen) document.body.classList.remove('overlay-open');
-  };
+  const close = () => slideAway(overlay, () => { if (!wasOpen) document.body.classList.remove('overlay-open'); });
   const list = overlay.querySelector('#exo-list');
   const renderList = (q = '') => {
     const nq = normalizeStr(q);
@@ -1939,7 +1936,7 @@ function openFullCalendar() {
   document.body.appendChild(overlay);
   const wasOpen = document.body.classList.contains('overlay-open');
   document.body.classList.add('overlay-open');
-  const close = () => { overlay.remove(); if (!wasOpen) document.body.classList.remove('overlay-open'); };
+  const close = () => slideAway(overlay, () => { if (!wasOpen) document.body.classList.remove('overlay-open'); });
 
   const scroll = overlay.querySelector('#cal-scroll');
   const start = parseISO(earliestDataDate());
@@ -2097,7 +2094,7 @@ function openExerciseBrowser() {
   document.body.appendChild(overlay);
   const wasOpen = document.body.classList.contains('overlay-open');
   document.body.classList.add('overlay-open');
-  const close = () => { overlay.remove(); if (!wasOpen) document.body.classList.remove('overlay-open'); };
+  const close = () => slideAway(overlay, () => { if (!wasOpen) document.body.classList.remove('overlay-open'); });
   const list = overlay.querySelector('#xb-list');
   const draw = (q = '') => {
     const nq = normalizeStr(q);

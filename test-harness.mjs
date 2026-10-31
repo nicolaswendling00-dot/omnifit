@@ -163,6 +163,26 @@ assert(mealSheet && mealSheet.querySelectorAll('#m-cat button').length === 4, 'A
 assert(mealSheet.querySelector('#m-fiber'), 'Ajout repas : champ fibres optionnel');
 clearOverlays();
 
+console.log('== v7.1 : nutrition animee, historique, graphique vide ==');
+{
+  nutrition.render(pages.nutrition);
+  const nh = pages.nutrition;
+  assert(nh.querySelector('[data-tw="n-kcal"]') && nh.querySelectorAll('[data-tw-ring]').length === 4, 'Nutrition : chiffres et anneaux animables');
+  assert(!/Appuie sur/.test(nh.textContent), 'Nutrition : plus de phrase « Appuie sur + »');
+  nh.querySelector('#date-more').click();
+  const ov = [...document.querySelectorAll('.cal-overlay')].pop();
+  assert(ov.querySelector('#ncal-scroll.cal-scroll-rev') && ov.querySelectorAll('.cal-month').length <= 3, 'Historique nutrition : ouvert en bas, 3 mois tout de suite');
+  await new Promise((r) => setTimeout(r, 200));
+  assert(ov.querySelectorAll('.cal-month').length >= 12, 'Historique nutrition : au moins un an consultable');
+  ov.querySelector('#ncal-close').click();
+  assert(!document.querySelector('.cal-overlay'), 'Historique nutrition : se ferme');
+  const css = fs.readFileSync(new URL('./style.css', import.meta.url), 'utf8');
+  assert(!/font-weight:\s*(300|400)\b/.test(css), 'Typo : aucune graisse fine');
+  assert(/\.picker-overlay\.leaving/.test(css) && /pickerUp/.test(css), 'Ecrans plein ecran : montent et redescendent par le bas');
+  const hsrc = fs.readFileSync(new URL('./modules/home.js', import.meta.url), 'utf8');
+  assert(/axisTitle\('Poids \(kg\)'\)/.test(hsrc) && !/if \(!all\.length\) \{ weightChart = makeChart/.test(hsrc), 'Poids : graphique avec axes meme sans pesee');
+}
+
 console.log('== v7.0 : bugs segments / carte, textes sans points medians ==');
 {
   // Plusieurs segments dans un meme bloc : aucun ne doit etre traite comme la barre du bas

@@ -1,4 +1,7 @@
 // OmniFit — Helpers UI partagés (modals, sheets, toasts, icônes SVG)
+import { channel } from './gestures.js';
+
+const reducedMotion = () => !window.matchMedia || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const ICONS_LINE = {
   home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-6h6v6"/></svg>',
@@ -211,6 +214,66 @@ export function confirmModal(title, message, onConfirm, danger = false) {
 // Utile avant d'ouvrir un écran plein comme le mode séance : celui-ci passe
 // SOUS les panneaux (z-index inférieur), et l'utilisateur devrait sinon fermer
 // à la main la fiche ou la fenêtre depuis laquelle il vient.
+// Ferme un écran plein écran (calendrier complet, choix d'exercice) en le
+// faisant redescendre, comme les panneaux.
+export function slideAway(overlay, done) {
+  const end = () => { overlay.remove(); if (done) done(); };
+  if (reducedMotion()) { end(); return; }
+  overlay.classList.add('leaving');
+  setTimeout(end, 240);
+}
+
+// Chiffres et anneaux qui changent d'un rendu à l'autre : au lieu de sauter
+// à la nouvelle valeur, les chiffres défilent (compteur très rapide) et les
+// anneaux se remplissent ou se vident, toujours en 0,6 s.
+//   [data-tw="clé"]      : élément dont le texte est un nombre entier
+//   [data-tw-ring="clé"] : conteneur d'un anneau (ringSVG)
+const twPrev = new Map();
+const TW_MS = 600;
+const easeOutCubic = (x) => 1 - Math.pow(1 - x, 3);
+function countTo(node, from, to) {
+  const t0 = performance.now();
+  const step = (now) => {
+    const k = Math.min(1, (now - t0) / TW_MS);
+    node.textContent = String(Math.round(from + (to - from) * easeOutCubic(k)));
+    if (k < 1 && node.isConnected) window.requestAnimationFrame(step);
+  };
+  node.textContent = String(from);
+  window.requestAnimationFrame(step);
+}
+export function tweenValues(root) {
+  const still = reducedMotion();
+  root.querySelectorAll('[data-tw]').forEach((n) => {
+    const key = n.dataset.tw;
+    const to = parseInt(n.textContent, 10);
+    if (Number.isNaN(to)) return;
+    const from = twPrev.get(key);
+    twPrev.set(key, to);
+    if (!still && from != null && from !== to) countTo(n, from, to);
+  });
+  root.querySelectorAll('[data-tw-ring]').forEach((w) => {
+    const key = w.dataset.twRing;
+    const fg = w.querySelector('.ring-fg');
+    const label = w.querySelector('.ring-label');
+    if (!fg) return;
+    const to = parseFloat(fg.getAttribute('stroke-dashoffset'));
+    const prev = twPrev.get(key);
+    twPrev.set(key, to);
+    const lTo = label ? parseInt(label.textContent, 10) : NaN;
+    const lPrev = twPrev.get(key + ':l');
+    if (!Number.isNaN(lTo)) twPrev.set(key + ':l', lTo);
+    if (still || prev == null) return;
+    if (Math.abs(prev - to) > 0.5) {
+      fg.style.transition = 'none';
+      fg.style.strokeDashoffset = `${prev}px`;
+      void window.getComputedStyle(fg).strokeDashoffset; // fige le point de départ
+      fg.style.transition = '';
+      fg.style.strokeDashoffset = `${to}px`;
+    }
+    if (label && lPrev != null && !Number.isNaN(lTo) && lPrev !== lTo) countTo(label, lPrev, lTo);
+  });
+}
+
 export function closeAllOverlays() {
   // `.picker-overlay` (navigateur d'exercices, calendrier complet) compte aussi :
   // il est en z-index 150 et recouvrirait la séance, qui est en 90.
@@ -239,6 +302,23 @@ export function openSheet({ title, content, onClose = null, headerAction = null,
   else body.appendChild(content);
 
   const sheet = scrim.querySelector('.sheet');
+  // Contenu qui change de taille (mode d'un réglage, section qui apparaît) :
+  // la hauteur du panneau suit en gelée (ressort qui rebondit) au lieu de sauter.
+  if (window.ResizeObserver) {
+    let lastH = 0; let run = 0;
+    const hCh = channel((h) => { sheet.style.height = `${h}px`; });
+    new ResizeObserver(() => {
+      const from = run ? hCh.x : lastH;
+      sheet.style.height = '';
+      const to = sheet.offsetHeight;
+      lastH = to;
+      if (!from || Math.abs(to - from) < 2 || !scrim.classList.contains('visible') || reducedMotion()) return;
+      const id = ++run;
+      sheet.style.height = `${from}px`;
+      hCh.jump(from);
+      hCh.to(to, { duration: 0.5, bounce: 0.3 }).then(() => { if (run === id) { run = 0; sheet.style.height = ''; } });
+    }).observe(body.firstElementChild || body);
+  }
   let closed = false;
   const close = () => {
     if (closed) return; // déjà fermé (clic sur le fond après une action, etc.)

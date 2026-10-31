@@ -206,10 +206,9 @@ let weightRange = 90;
 
 function renderWeightChart(canvas) {
   const all = store.userData.weights;
-  if (!all.length) { weightChart = makeChart(canvas, { type: 'line', data: { labels: [], datasets: [] } }, weightChart); return; }
-
   // Plage : soit les N derniers jours, soit tout depuis la première pesée.
-  const first = all[0].date;
+  // Sans pesée, on affiche quand même la plage choisie, axes et titres compris.
+  const first = all.length ? all[0].date : todayISO(-(weightRange || 30) + 1);
   const start = weightRange ? todayISO(-weightRange + 1) : first;
   const from = start < first ? first : start;
   const nDays = Math.max(1, Math.round((new Date(todayISO()) - new Date(from)) / 86400000) + 1);
@@ -242,6 +241,15 @@ function renderWeightChart(canvas) {
   const labels = days.map((d) => (nDays > 120 ? d.slice(5, 7) + '/' + d.slice(2, 4) : d.slice(8) + '/' + d.slice(5, 7)));
 
   const options = lineChartOptions({ legend: datasets.length > 1, ySuffix: ' kg', yTicks: 4, xTicks: 5 });
+  const axisTitle = (text) => ({ display: true, text, color: '#8A9099', font: { size: 11, family: 'Archivo', weight: '600' } });
+  options.scales.x.title = axisTitle('Date');
+  options.scales.y.title = axisTitle('Poids (kg)');
+  if (!all.length) {
+    // Échelle autour du poids du profil : la grille reste lisible à vide.
+    const bw = Math.round(store.userData.profile.weight || 75);
+    options.scales.y.suggestedMin = bw - 3;
+    options.scales.y.suggestedMax = bw + 3;
+  }
   if (caloriesVisible) {
     options.scales.y1 = {
       position: 'left',

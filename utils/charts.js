@@ -35,7 +35,7 @@ function withAlpha(color, a) {
 //   legend   : afficher la légende (défaut false)
 export function lineChartOptions(opts = {}) {
   const grid = 'rgba(148, 163, 184, 0.10)';
-  const tick = { color: '#8A9099', font: { size: 10, family: 'Archivo' } };
+  const tick = { color: '#8A9099', font: { size: 11, family: 'Archivo', weight: '600' } };
   return {
     responsive: true,
     maintainAspectRatio: false,
@@ -44,7 +44,7 @@ export function lineChartOptions(opts = {}) {
     interaction: { intersect: false, mode: 'index' },
     plugins: {
       legend: opts.legend
-        ? { labels: { color: '#8A9099', boxWidth: 10, usePointStyle: true, font: { size: 10, family: 'Archivo' } } }
+        ? { labels: { color: '#8A9099', boxWidth: 10, usePointStyle: true, font: { size: 11, family: 'Archivo', weight: '600' } } }
         : { display: false },
       tooltip: {
         backgroundColor: 'rgba(10, 10, 12, 0.94)',

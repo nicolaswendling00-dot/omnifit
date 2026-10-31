@@ -1,7 +1,7 @@
 // OmniFit — PAGE 1 : Nutrition (macros couleur, fibres, modes grammes/auto/%, repas typés, recettes)
 import { store, todayISO } from '../utils/storage.js';
 import { calcKcal, fiberGoalFromKcal, metabolicInsight } from '../utils/math.js';
-import { el, esc, icons, openSheet, openModal, toast, ringSVG, confirmModal, fmtDateShort, haptic, celebrateLP, normalizeStr, attachSwipeToDelete } from '../utils/ui.js';
+import { el, esc, icons, openSheet, openModal, toast, ringSVG, confirmModal, fmtDateShort, haptic, celebrateLP, normalizeStr, attachSwipeToDelete, tweenValues, slideAway } from '../utils/ui.js';
 import { startCameraStream, captureFrame, decodeBarcodeFromFile } from '../utils/barcode.js';
 import { fetchProductByBarcode } from '../utils/openfoodfacts.js';
 import { FOODS, FOOD_CATEGORIES } from '../data/foods.js';
@@ -17,6 +17,27 @@ function foodMatches(f, nq) {
 import { PRESET_RECIPES, presetToRecipe } from '../data/recipes.js';
 
 let selectedDate = todayISO();
+// Dernier état affiché (jour, nombre de repas) : sert à faire apparaître
+// « Aucun repas » en douceur quand on supprime le dernier repas du jour.
+let lastShown = { date: null, n: 0 };
+const motionOff = () => !window.matchMedia || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// Changement de jour : l'ancienne liste de repas glisse et s'efface pendant
+// que la nouvelle arrive du côté opposé.
+function crossfadeMeals(container, ghost, dir) {
+  const nl = container.querySelector('#meal-list');
+  if (!ghost || !nl || motionOff() || !nl.animate) return;
+  const host = nl.parentElement;
+  host.style.position = 'relative';
+  ghost.removeAttribute('id');
+  ghost.classList.add('no-al');
+  Object.assign(ghost.style, { position: 'absolute', left: `${nl.offsetLeft}px`, top: `${nl.offsetTop}px`, width: `${nl.offsetWidth}px`, pointerEvents: 'none' });
+  host.appendChild(ghost);
+  ghost.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: `translateX(${-dir * 28}px)` }],
+    { duration: 220, easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' }).onfinish = () => ghost.remove();
+  nl.animate([{ opacity: 0, transform: `translateX(${dir * 28}px)` }, { opacity: 1, transform: 'none' }],
+    { duration: 340, delay: 60, easing: 'cubic-bezier(.22,1,.36,1)', fill: 'backwards' });
+}
 let currentRerender = null;
 const mealOpen = {};
 
@@ -1504,22 +1525,22 @@ function openNutritionCalendar(rerender) {
       <h3 style="margin:0;flex:1">Historique nutrition</h3>
       <button class="icon-btn" id="ncal-close" aria-label="Fermer">${icons.close}</button>
     </div>
-    <div class="cal-scroll" id="ncal-scroll"></div>
+    <div class="cal-scroll cal-scroll-rev" id="ncal-scroll"></div>
   </div>`);
   document.body.appendChild(overlay);
   const wasOpen = document.body.classList.contains('overlay-open');
   document.body.classList.add('overlay-open');
-  const close = () => { overlay.remove(); if (!wasOpen) document.body.classList.remove('overlay-open'); };
+  const close = () => slideAway(overlay, () => { if (!wasOpen) document.body.classList.remove('overlay-open'); });
 
-  // On remonte à la première journée renseignée (ou au mois courant si vide).
-  const dates = Object.keys(byDate).filter((d) => byDate[d] && byDate[d].meals && byDate[d].meals.length).sort();
-  const first = dates.length ? dates[0] : today;
+  // Départ : la plus ancienne donnée (repas, pesée, séance), et au moins un
+  // an en arrière, pour pouvoir consulter les mois sans repas saisis.
+  const dates = Object.keys(byDate).filter((d) => byDate[d] && byDate[d].meals && byDate[d].meals.length);
+  const firsts = [todayISO(-365), ...dates, ...(store.userData.weights || []).map((w) => w.date), ...(store.userData.workouts || []).map((w) => w.date)];
+  const first = firsts.sort()[0];
   const [fy, fm] = first.split('-').map(Number);
   const [ty, tm] = today.split('-').map(Number);
 
-  const scroll = overlay.querySelector('#ncal-scroll');
-  let y = fy; let m = fm - 1;
-  while (y < ty || (y === ty && m <= tm - 1)) {
+  const monthEl = (y, m) => {
     const firstDay = new Date(y, m, 1);
     const offset = (firstDay.getDay() + 6) % 7;      // semaine commençant lundi
     const nDays = new Date(y, m + 1, 0).getDate();
@@ -1544,11 +1565,25 @@ function openNutritionCalendar(rerender) {
         <span class="cal-dnum">${day}</span>${diff}
       </button>`));
     }
-    scroll.appendChild(wrap);
-    m++; if (m > 11) { m = 0; y++; }
+    return wrap;
+  };
+  // Du mois en cours vers le passé ; la liste en column-reverse s'ouvre en bas
+  // et les mois plus anciens se rangent au-dessus, trois tout de suite, le
+  // reste juste après.
+  const months = [];
+  for (let y = ty, m = tm - 1; y > fy || (y === fy && m >= fm - 1); m--) {
+    months.push([y, m]);
+    if (m === 0) { m = 12; y--; }
   }
-  // Ouvre sur le mois en cours (en bas de la liste)
-  requestAnimationFrame(() => { scroll.scrollTop = scroll.scrollHeight; });
+  const scroll = overlay.querySelector('#ncal-scroll');
+  months.splice(0, 3).forEach(([y, m]) => scroll.appendChild(monthEl(y, m)));
+  const more = () => {
+    if (!overlay.isConnected || !months.length) return;
+    const [y, m] = months.shift();
+    scroll.appendChild(monthEl(y, m));
+    setTimeout(more, 0);
+  };
+  setTimeout(more, 60);
 
   scroll.addEventListener('click', (e) => {
     const b = e.target.closest('.cal-day');
@@ -1598,6 +1633,8 @@ export function render(container) {
   const fiberGoal = fiberGoalFromKcal(mg.kcalGoal, store.userData.settings.fiberPer1000 ?? 15);
   const day = store.userData.nutrition.byDate[selectedDate];
   const meals = day ? day.meals : [];
+  const fadeEmpty = !meals.length && lastShown.date === selectedDate && lastShown.n > 0;
+  lastShown = { date: selectedDate, n: meals.length };
 
   // Ruban : les 7 derniers jours seulement, puis un « + » qui ouvre l'historique
   // complet. Au-delà d'une semaine on ne fait plus défiler à l'aveugle.
@@ -1630,26 +1667,26 @@ export function render(container) {
     <div>
       <div class="nutrition-header">
         <div class="kcal-total">
-          <span class="num kcal-consumed">${consumed}</span>
+          <span class="num kcal-consumed" data-tw="n-kcal">${consumed}</span>
           <span class="kcal-sep">/ ${mg.kcalGoal} kcal</span>
         </div>
         <div class="kcal-sub">
-          <span>${remaining >= 0 ? `${Math.round(remaining)} kcal restantes` : `${Math.abs(Math.round(remaining))} kcal au-dessus`}</span>
+          <span>${remaining >= 0 ? `<span data-tw="n-rest">${Math.round(remaining)}</span> kcal restantes` : `<span data-tw="n-over">${Math.abs(Math.round(remaining))}</span> kcal au-dessus`}</span>
         </div>
         <div class="macro-rings">
-          <div class="ring-item">
+          <div class="ring-item" data-tw-ring="n-p">
             ${ringSVG({ size: 66, stroke: 7, progress: totals.prot / mg.protG, color: C_PROT, label: `${Math.round(totals.prot)}` })}
             <div class="ring-caption">Prot / ${mg.protG}g</div>
           </div>
-          <div class="ring-item">
+          <div class="ring-item" data-tw-ring="n-c">
             ${ringSVG({ size: 66, stroke: 7, progress: totals.carbs / mg.carbsG, color: C_CARB, label: `${Math.round(totals.carbs)}` })}
             <div class="ring-caption">Gluc / ${mg.carbsG}g</div>
           </div>
-          <div class="ring-item">
+          <div class="ring-item" data-tw-ring="n-f">
             ${ringSVG({ size: 66, stroke: 7, progress: totals.fat / mg.fatG, color: C_FAT, label: `${Math.round(totals.fat)}` })}
             <div class="ring-caption">Lip / ${mg.fatG}g</div>
           </div>
-          <div class="ring-item ring-item-sm">
+          <div class="ring-item ring-item-sm" data-tw-ring="n-fb">
             ${ringSVG({ size: 50, stroke: 6, progress: totals.fiber / fiberGoal, color: C_FIBER, label: `${Math.round(totals.fiber)}` })}
             <div class="ring-caption">Fib / ${fiberGoal}g</div>
           </div>
@@ -1672,7 +1709,7 @@ export function render(container) {
           </div>
         </div>
         <div id="meal-list">
-          ${meals.length ? '' : '<div class="empty-state">Aucun repas.<br>Appuie sur + pour en ajouter.</div>'}
+          ${meals.length ? '' : `<div class="empty-state${fadeEmpty ? ' empty-in' : ''}">Aucun repas</div>`}
         </div>
       </div>
     </div>`));
@@ -1742,8 +1779,12 @@ export function render(container) {
     if (e.target.closest('#date-more')) { openNutritionCalendar(rerender); return; }
     const chip = e.target.closest('.date-chip');
     if (!chip || !chip.dataset.date) return;
+    const prev = selectedDate;
+    const old = container.querySelector('#meal-list');
+    const ghost = old ? old.cloneNode(true) : null;
     selectedDate = chip.dataset.date;
     rerender();
+    if (prev !== selectedDate) crossfadeMeals(container, ghost, selectedDate > prev ? 1 : -1);
   });
   const active = container.querySelector('.date-chip.active');
   if (active && active.scrollIntoView) active.scrollIntoView({ inline: 'center', block: 'nearest' });
@@ -1762,5 +1803,6 @@ export function render(container) {
     });
   }
   container.querySelector('#btn-recipes').addEventListener('click', () => openRecipesSheet(rerender));
+  tweenValues(container);
   ensureFab();
 }
