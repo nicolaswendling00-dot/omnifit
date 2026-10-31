@@ -589,9 +589,10 @@ body > .picker-overlay {
 .exo-search-item .rank-inline { margin-left: auto; flex: none; }
 
 /* Sections repliables */
-.collapse-caret { display: inline-flex; align-items: center; transition: transform var(--dur-med) var(--ease); }
+/* Flèche vers le bas quand la section est ouverte, vers la droite quand elle est repliée */
+.collapse-caret { display: inline-flex; align-items: center; transform: rotate(90deg); transition: transform var(--dur-med) var(--ease); }
 .collapse-caret svg { width: 18px; height: 18px; }
-.card.collapsed .collapse-caret, .meal-group.collapsed .collapse-caret { transform: rotate(-90deg); }
+.card.collapsed .collapse-caret, .meal-group.collapsed .collapse-caret { transform: none; }
 .collapse-body { overflow: hidden; max-height: 1600px; transition: max-height var(--dur-med) var(--ease-std); }
 .collapse-body-tall { max-height: 2000px; }
 .card.collapsed .collapse-body { max-height: 0; }
@@ -823,7 +824,7 @@ body > .picker-overlay {
 /* Repas */
 .meal-group { margin-bottom: 4px; }
 .meal-cat-head {
-  display: flex; justify-content: space-between; align-items: baseline;
+  display: flex; justify-content: space-between; align-items: center;
   margin: 14px 0 4px; padding-bottom: 6px; border-bottom: 1px solid var(--line);
   font-size: 0.86rem; font-weight: 600;
   cursor: pointer; user-select: none;
@@ -995,16 +996,11 @@ body[data-page="3"] #fab-page-3 { display: flex; }
 .cal-day.is-today { box-shadow: inset 0 0 0 1.5px var(--accent); }
 .cal-day.is-sel { background: rgba(var(--accent-rgb), 0.16); }
 .cal-dnum { line-height: 1; }
-/* Jour de séance : les deux silhouettes occupent la case, le numéro du jour
-   se pose par-dessus, comme sur un calendrier de compétition. */
-.cal-day.has-session { justify-content: center; padding: 3px 1px; }
-.cal-day .bm-cal { width: 100%; height: auto; max-height: 68px; display: block; }
-.cal-day.has-session .cal-dnum {
-  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-  font-size: 0.95rem; font-weight: 700; font-stretch: var(--wide); color: #fff;
-  text-shadow: 0 0 4px rgba(0, 0, 0, 0.9), 0 0 10px rgba(0, 0, 0, 0.6);
-}
-.cal-day:not(.has-session) .cal-dnum { margin: auto 0; font-size: 0.95rem; }
+/* Le numéro du jour en haut de chaque case ; les jours de séance montrent
+   dessous les deux silhouettes, sans rien écrire par-dessus. */
+.cal-day { padding: 5px 1px 3px; }
+.cal-day .cal-dnum { order: -1; font-size: 0.8rem; font-weight: 700; font-stretch: var(--wide); margin-bottom: 2px; }
+.cal-day .bm-cal { width: 100%; height: auto; max-height: 56px; display: block; }
 .cal-mus { font-size: 0.54rem; font-weight: 600; color: var(--accent); line-height: 1.05; text-align: center; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: auto; }
 
 .routine-exos { list-style: none; counter-reset: rexo; margin: 8px 0 12px; padding: 0; }

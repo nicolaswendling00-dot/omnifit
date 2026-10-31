@@ -1362,7 +1362,7 @@ console.log('== v6.1 : anatomie detaillee et carte du corps ==');
   workout.render(pages.workout);
   const cell = pages.workout.querySelector(`.cal-day[data-date="${todayISO(-1)}"]`);
   assert(cell.querySelector('svg.body-map'), 'Calendrier : silhouettes dans la case');
-  assert(cell.querySelector('.cal-dnum').textContent === String(Number(todayISO(-1).slice(8))), 'Calendrier : numero du jour par-dessus');
+  assert(cell.querySelector('.cal-dnum').textContent === String(Number(todayISO(-1).slice(8))), 'Calendrier : numero du jour en haut de la case');
   assert(!cell.querySelector('.cal-mus'), 'Calendrier : plus de libelle de muscle');
   const quadFill = cell.querySelector('use[href="#bm-f-quads"]').getAttribute('fill');
   const chestFill = cell.querySelector('use[href="#bm-f-lowerChest"]').getAttribute('fill');
