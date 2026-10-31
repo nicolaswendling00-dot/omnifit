@@ -345,9 +345,9 @@ export function createHolo(canvas, { preset = 'bursts', radius = 22 } = {}) {
       gl.uniform2f(u.uLight, lightX, lightY);
       gl.uniform1f(u.uDistance, 1100 / cw);
       gl.uniform1i(u.uPreset, Math.max(0, PRESETS.indexOf(preset)));
-      gl.uniform1f(u.uIntensity, 0.85);
+      gl.uniform1f(u.uIntensity, 0.55); // adouci : l'effet couvrait trop le badge
       gl.uniform1f(u.uScale, 1);
-      gl.uniform1f(u.uEdge, 0.8);
+      gl.uniform1f(u.uEdge, 0.6);
       gl.uniform1f(u.uFrame, 0.04);
       gl.uniform1f(u.uRadius, radius / cw);
       gl.uniform1f(u.uGlare, 0.5);
