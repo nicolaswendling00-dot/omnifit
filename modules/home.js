@@ -234,7 +234,7 @@ function renderWeightChart(canvas) {
     datasets.push(lineDataset('Tendance', smaValues, '#7C3AED', { fill: false, borderWidth: 2, borderDash: [5, 4], yAxisID: 'y' }));
   }
   if (caloriesVisible) {
-    datasets.push(lineDataset('Calories', calValues, '#FB923C', { fill: false, borderWidth: 2, yAxisID: 'y1' }));
+    datasets.push(lineDataset('Calories', calValues, '#8D95A3', { fill: false, borderWidth: 2, yAxisID: 'y1' }));
   }
 
   // Étiquettes : jour/mois sur les courtes plages, mois seul au-delà.
@@ -255,7 +255,7 @@ function renderWeightChart(canvas) {
       position: 'left',
       grid: { display: false, drawBorder: false },
       border: { display: false },
-      ticks: { color: '#FB923C', font: { size: 10, family: 'Archivo' }, maxTicksLimit: 4, padding: 6 },
+      ticks: { color: '#8D95A3', font: { size: 10, family: 'Archivo' }, maxTicksLimit: 4, padding: 6 },
     };
   }
 
@@ -342,15 +342,15 @@ function openGlobalRankModal(gr) {
 }
 
 // Couleurs macros, alignées sur l'onglet Nutrition
-const C_PROT = '#FB923C';
-const C_CARB = '#38BDF8';
-const C_FAT = '#8B5CF6';
+const C_PROT = 'var(--mac-p)';
+const C_CARB = 'var(--mac-g)';
+const C_FAT = 'var(--mac-l)';
 
 // Répartition des macros en anneau : chaque part correspond à la CONTRIBUTION
 // CALORIQUE du macronutriment (prot ×4, gluc ×4, lip ×9), pas à sa masse — un
 // gramme de lipide pèse deux fois plus dans l'assiette énergétique.
 // Dessiné en arcs SVG dans le style de l'app (anneau fin, couleurs macros).
-function macroDonut(prot, carbs, fat, size = 92) {
+function macroDonut(prot, carbs, fat, goals = {}, size = 92) {
   const kP = (prot || 0) * 4;
   const kC = (carbs || 0) * 4;
   const kF = (fat || 0) * 9;
@@ -370,10 +370,11 @@ function macroDonut(prot, carbs, fat, size = 92) {
   // ainsi la même taille tout au long de la journée. On affiche les GRAMMES
   // consommés — l'anneau montre déjà la répartition en proportion, le chiffre
   // utile au quotidien est la quantité restante à couvrir.
+  const row = (color, name, v, g) => `<span><b style="color:${color}">${name}</b> ${Math.round(v || 0)}${g ? ` / ${g}` : ''} g</span>`;
   const legend = `<div class="hk-donut-legend">
-      <span style="color:${C_PROT}">P ${Math.round(prot || 0)}g</span>
-      <span style="color:${C_CARB}">G ${Math.round(carbs || 0)}g</span>
-      <span style="color:${C_FAT}">L ${Math.round(fat || 0)}g</span>
+      ${row(C_PROT, 'Prot', prot, goals.protG)}
+      ${row(C_CARB, 'Gluc', carbs, goals.carbsG)}
+      ${row(C_FAT, 'Lip', fat, goals.fatG)}
     </div>`;
 
   // Rien de consommé : anneau creux, pas de camembert trompeur.
@@ -440,13 +441,9 @@ function weightSparkline(weights) {
   const line = smoothPath(pts);
   const area = `${line} L ${W} ${H} L 0 ${H} Z`;
   return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
-    <defs><linearGradient id="hw-grad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.32"/>
-      <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
-    </linearGradient></defs>
-    <path d="${area}" fill="url(#hw-grad)"/>
-    <path d="${line}" fill="none" stroke="var(--accent)" stroke-width="1.8"
-      stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" opacity="0.8"/>
+    <path d="${area}" fill="var(--accent)" fill-opacity="0.1"/>
+    <path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2"
+      stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
   </svg>`;
 }
 
@@ -486,61 +483,58 @@ export function render(container) {
 
   container.appendChild(el(`
     <div class="home-fit">
-      <div class="page-title"><h1>OmniFit</h1></div>
+      <div class="page-title"><h1>Accueil</h1></div>
 
-      <div class="card card-glow gr-card" id="gr-card">
-        <div class="gr-top">
-          <div class="gr-badge">${rankBadge(gr.rank.id, 52)}</div>
-          <div class="gr-info">
-            <div class="gr-rank-name" style="color:${gr.rank.color}">${grRankLabel}</div>
-            <div class="gr-lp">${lpLabel(gr.rank)}</div>
-          </div>
-          <div class="gr-streak" title="Jours consécutifs">${gr.streak > 0 ? `${icons.flame}<span>${gr.streak}</span>` : ''}</div>
-        </div>
-        <div class="gr-progress"><i style="width:${Math.round(grProgress * 100)}%;background:${gr.rank.color}"></i></div>
-      </div>
-
-      <div class="home-duo home-top-duo">
       <div class="card stat-card home-kcal" id="home-kcal">
-        <div class="stat-head">${icons.flame} Calories</div>
+        <div class="hk-main">
+          <div class="stat-head">Calories</div>
+          <div class="hk-numbers">
+            <span class="num hk-big">${Math.round(totals.kcal)}</span>
+            <span class="hk-goal">/ ${mg.kcalGoal} kcal</span>
+          </div>
+        </div>
+        ${macroDonut(totals.prot, totals.carbs, totals.fat, mg)}
+      </div>
+
+      <div class="card stat-card home-activity" id="home-activity">
+        <div class="stat-head">Pas</div>
         <div class="hk-numbers">
-          <span class="num hk-big">${Math.round(totals.kcal)}</span>
-          <span class="hk-goal">/ ${mg.kcalGoal} kcal</span>
+          <span class="num ha-big">${steps.toLocaleString('fr-FR')}</span>
+          <span class="hk-goal">/ ${stepsGoal.toLocaleString('fr-FR')}</span>
         </div>
-        ${macroDonut(totals.prot, totals.carbs, totals.fat)}
+        <div class="ha-track">${stepsTrack(steps / stepsGoal)}</div>
       </div>
+
+      <div class="card stat-card home-weight" id="home-weight">
+        <div class="hw-content">
+          <div class="stat-head">Poids</div>
+          <div class="num w-now">${currentW}<small>kg</small></div>
+        </div>
+        <div class="hw-curve">${weightSparkline(store.userData.weights)}</div>
+      </div>
+
       <div id="coach-host"></div>
-      </div>
-
-      <div class="home-duo">
-        <div class="card stat-card home-weight" id="home-weight">
-          <div class="hw-bg">${weightSparkline(store.userData.weights)}</div>
-          <div class="hw-content">
-            <div class="stat-head">${icons.user} Poids</div>
-            <div class="num w-now">${currentW}<small>kg</small></div>
-          </div>
-        </div>
-
-        <div class="card stat-card home-activity" id="home-activity">
-          <div class="ha-content">
-            <div class="stat-head">${icons.activity} Activité</div>
-            <div class="hk-numbers">
-              <span class="num ha-big">${steps.toLocaleString('fr-FR')}</span>
-              <span class="hk-goal">/ ${stepsGoal.toLocaleString('fr-FR')}</span>
-            </div>
-            <div class="ha-track">${stepsTrack(steps / stepsGoal)}</div>
-          </div>
-        </div>
-      </div>
 
       <div class="card stat-card home-water" id="home-water">
-        <div class="hwa-left">
-          ${icons.water}
-          <span class="num hwa-val">${water.toFixed(2).replace(/0$/, '')}<small>L</small></span>
-          <span class="hwa-goal">/ ${settings.waterGoal} L</span>
+        <div class="stat-head">Eau</div>
+        <div class="hk-numbers">
+          <span class="num hwa-val">${water.toFixed(2).replace(/0$/, '')}</span>
+          <span class="hk-goal">/ ${settings.waterGoal} L</span>
         </div>
         <div class="hwa-bar"><i style="width:${Math.min(100, Math.round((water / settings.waterGoal) * 100))}%"></i></div>
-        <button class="btn btn-secondary btn-sm" id="btn-add-water">+0.25</button>
+        <button class="btn btn-secondary btn-sm" id="btn-add-water" aria-label="Ajouter 0.25 L">+0.25</button>
+      </div>
+
+      <div class="card gr-card" id="gr-card">
+        <div class="gr-badge">${rankBadge(gr.rank.id, 40)}</div>
+        <div class="gr-info">
+          <div class="gr-line">
+            <span class="gr-rank-name" style="color:${gr.rank.color}">${grRankLabel}</span>
+            <span class="gr-lp">${lpLabel(gr.rank)}</span>
+          </div>
+          <div class="gr-progress"><i style="width:${Math.round(grProgress * 100)}%;background:${gr.rank.color}"></i></div>
+        </div>
+        <div class="gr-streak" title="Jours consécutifs">${gr.streak > 0 ? `${icons.flame}<span>${gr.streak}</span>` : ''}</div>
       </div>
     </div>`));
 
@@ -573,9 +567,7 @@ function coachDays() {
   if (coachHost) {
     const coachEl = renderCoachCard(rerender, { compact: true });
     const card = coachEl || el(`<div class="card stat-card coach-card coach-empty">
-      <div class="coach-head"><span class="coach-title">${icons.flame} Coach</span></div>
-      <div class="coach-wait"><span class="num">${coachDays()}</span><small>/5</small></div>
-      <div class="coach-wait-lbl">jours de pesée</div>
+      <div class="coach-head"><span class="coach-title">Coach</span><span class="coach-rate"><b class="num">${coachDays()}</b> / 5 jours de pesée</span></div>
     </div>`);
     // Toucher le coach ouvre le choix de phase (sèche / maintenance / prise) :
     // c'est ce réglage qui détermine ses conseils.

@@ -81,12 +81,12 @@ assert(pages.nutrition.querySelector('#btn-recipes'), 'Nutrition : bouton Recett
 assert(pages.nutrition.querySelector('.kcal-total .kcal-consumed'), 'Nutrition : kcal consommées affichées en haut');
 assert(pages.nutrition.querySelector('.kcal-sep').textContent.includes('2227'), 'Nutrition : objectif total kcal (/2227) affiché en haut');
 assert(!pages.nutrition.querySelector('.fiber-line'), 'Nutrition : ligne fibres retirée (doublon de l\'anneau)');
-// v3 : couleurs macros (prot orange)
+// Couleurs macros : jetons --mac-* (cyan, bleu, violet)
 const protRing = pages.nutrition.querySelector('.macro-rings .ring-item svg');
-assert(protRing && protRing.innerHTML.includes('#FB923C'), 'Nutrition : anneau protéines en orange (#FB923C)');
+assert(protRing && protRing.innerHTML.includes('var(--mac-p)'), 'Nutrition : anneau protéines au jeton --mac-p');
 
 workout.render(pages.workout);
-assert(pages.workout.querySelector('#btn-new-session'), 'Workout : bouton nouvelle séance');
+assert(document.querySelector('#fab-page-2 .fab'), 'Workout : bouton nouvelle séance');
 assert(pages.workout.querySelector('#volume-host .volume-table'), 'Workout : table volume hebdo');
 assert(pages.workout.querySelector('#vol-goals-btn'), 'Workout : objectifs de volume déplacés ici');
 assert(pages.workout.querySelector('#calendar-host .cal-grid'), 'Workout : calendrier 2 semaines présent');
@@ -115,7 +115,7 @@ assert(mgGrams.kcalGoal === 2227, `macroGoals grammes = calcKcal(120,250,83) = $
 assert(mathmod.fiberGoalFromKcal(2000) === 30, 'Objectif fibres : 15 g / 1000 kcal (2000 → 30)');
 
 console.log('== Log activité : champs empilés ==');
-pages.activity.querySelector('#btn-log-steps').click();
+document.querySelector('#fab-page-3 .fab').click();
 assert(document.querySelector('.modal .field-stack') && !document.querySelector('.modal .field-row'), 'Log pas : champs empilés (fin superposition)');
 clearOverlays();
 
@@ -176,7 +176,7 @@ console.log('== v7.2 : suppression de repas, coach, panneaux ==');
   assert(pages.nutrition.querySelector('[data-tw="n-kcal"]').textContent !== kcalBefore, 'Repas : calories mises a jour tout de suite');
   assert(!pages.nutrition.querySelector('.meal-group') && /Aucun repas/.test(pages.nutrition.querySelector('#meal-list').textContent), 'Repas : groupe retire et « Aucun repas » revient');
   const css = fs.readFileSync(new URL('./style.css', import.meta.url), 'utf8');
-  assert(!/\.coach-card::after \{/.test(css) && /\.coach-card\.coach-good \{ background: linear-gradient/.test(css), 'Coach : plus de trait, degrade discret selon le resultat');
+  assert(!/\.coach-card::after \{/.test(css) && !/coach-good \{ background: linear-gradient/.test(css) && /\.coach-good \.coach-rate \{ color: var\(--success\)/.test(css), 'Coach : ni trait ni dégradé, le ton se lit sur le rythme');
   const hsrc = fs.readFileSync(new URL('./modules/home.js', import.meta.url), 'utf8');
   assert(/title: 'Eau', content: form, actions: \[\]/.test(hsrc), 'Eau : plus de bouton Fermer');
 }
@@ -367,7 +367,7 @@ assert(store.userData.recipes.length === 0, 'deleteRecipe fonctionne');
 
 console.log('== Séance : résumé avec coefficients d\'atténuation ==');
 // Nouvelle séance : on choisit d'abord routine ou séance vide
-pages.workout.querySelector('#btn-new-session').click();
+document.querySelector('#fab-page-2 .fab').click();
 const startSheet = [...document.querySelectorAll('.sheet')].find((s) => s.querySelector('.ns-list'));
 assert(startSheet, 'Séance : choix routine / séance vide au démarrage');
 assert(startSheet.querySelector('.ns-empty'), 'Séance : option « séance vide » proposée');
@@ -729,12 +729,12 @@ uiCel.celebrateLP(cbtn, { label: '+ LP' });
 assert(document.getElementById('lp-fx-layer'), 'Animation LP : couche de particules creee');
 // Icone search dans les deux jeux
 assert(uiMod.icons.search || true, 'Icone search disponible');
-// Macro-actions centre + bouton smooth absolu
+// Macro-actions : rangée de boutons libellés de même largeur
 const cssMa = fs.readFileSync(new URL('./style.css', import.meta.url), 'utf8');
-assert(/\.macro-actions \{[^}]*justify-content: center/.test(cssMa), 'Macro : bouton objectif centre');
-assert(/\.macro-actions #btn-smooth \{[^}]*position: absolute/.test(cssMa), 'Macro : bouton lisser en absolu (ne decale pas)');
-// Puces de date largeur fixe
-assert(/\.date-chip \{[^}]*width: 58px/.test(cssMa), 'Dates : largeur fixe (independante du contenu)');
+assert(/\.macro-actions \{[^}]*display: flex/.test(cssMa), 'Macro : boutons en rangée');
+assert(/\.macro-actions \.btn \{[^}]*flex: 1 1 0/.test(cssMa), 'Macro : boutons de même largeur');
+// Puces de date : se partagent la largeur, avec un minimum
+assert(/\.date-chip \{[^}]*min-width: 38px/.test(cssMa), 'Dates : largeur partagée, minimum 38 px');
 
 console.log('== v4.3 : coach métabolique (maintenance + stagnation) ==');
 {
@@ -911,7 +911,7 @@ console.log('== v5.2 : suppression des pesées et relevés de pas ==');
   // Séance vide en tête du menu de démarrage
   clearOverlays();
   workout.render(pages.workout);
-  pages.workout.querySelector('#btn-new-session').click();
+  document.querySelector('#fab-page-2 .fab').click();
   const nsSheet = [...document.querySelectorAll('.sheet')].find((s) => s.querySelector('.ns-list'));
   const first = nsSheet.querySelector('.ns-list').firstElementChild;
   assert(first && first.classList.contains('ns-empty'), 'Séance : « séance vide » en haut de la liste');
@@ -989,21 +989,17 @@ console.log('== v5.5 : lissage modifiable + inertie de fermeture ==');
 console.log('== v5.6 : accueil, ruban, series persistantes, coefficient ==');
 {
   const cssV6 = fs.readFileSync(new URL('./style.css', import.meta.url), 'utf8');
-  // Les 4 cartes du milieu vivent dans `.home-duo`, qui n'est pas une carte :
-  // sans regle dediee, elles entraient sans animation.
-  assert(/\.home-fit > \.home-duo > \.card \{ animation: cardIn/.test(cssV6),
-    'Accueil : les cartes des duos sont animees comme les autres');
-  assert(/\.home-fit > \*:nth-child\(3\) > \.card:nth-child\(2\) \{ animation-delay/.test(cssV6),
-    'Accueil : cascade appliquee a l\'interieur des duos');
+  // Toutes les cartes de l'accueil sont enfants directs de .home-fit (plus de duos)
   // v6 : les entrees en cascade ne se jouent qu'au PREMIER affichage d'une page
-  assert(/\.page\.anim-in \.home-fit > \.home-duo > \.card/.test(cssV6),
-    'Animations : reservees au premier affichage (.page.anim-in)');
+  assert(/\.page\.anim-in \.home-fit > \.card \{ animation: cardIn/.test(cssV6),
+    'Animations accueil : toutes les cartes, au premier affichage (.page.anim-in)');
+  assert(!/home-duo/.test(cssV6), 'Accueil : plus de règles mortes pour les duos');
   assert(!/^\.meal-row[^{]*\{[^}]*animation/m.test(cssV6) && !/^\.set-row[^{]*\{[^}]*animation/m.test(cssV6),
     'Animations : les lignes ne se rejouent plus a chaque rendu (plus de clignotement)');
 
   home.render(pages.home);
   const legend = pages.home.querySelector('.hk-donut-legend').textContent;
-  assert(/P \d+g/.test(legend) && /L \d+g/.test(legend), 'Accueil : macros de l\'anneau en grammes');
+  assert(/Prot \d+ \/ \d+ g/.test(legend) && /Lip \d+ \/ \d+ g/.test(legend), 'Accueil : macros en grammes, avec leur objectif');
   assert(!legend.includes('%'), 'Accueil : plus de pourcentages dans l\'anneau');
 
   nutrition.render(pages.nutrition);
@@ -1020,7 +1016,7 @@ console.log('== v5.6 : accueil, ruban, series persistantes, coefficient ==');
   store.addWorkout(mk(todayISO(-2), rep(6, { weight: 80, reps: 8 })));    // 2x le volume, meilleure serie plus faible
 
   workout.render(pages.workout);
-  pages.workout.querySelector('#btn-new-session').click();
+  document.querySelector('#fab-page-2 .fab').click();
   document.querySelector('.sheet .ns-empty').click();
   const ov6 = document.querySelector('.session-overlay');
   ov6.querySelector('#s-add-exo').click();
@@ -1132,7 +1128,7 @@ console.log('== v5.7 : materiel, editeur d\'exercice ==');
   store.addWorkout({ id: 'br2', date: todayISO(-2), totalTime: 600, exercises: [{ exerciseId: 'legPress', brand: 'Panatta', sets: [{ weight: 150, reps: 10 }] }] });
 
   workout.render(pages.workout);
-  pages.workout.querySelector('#btn-new-session').click();
+  document.querySelector('#fab-page-2 .fab').click();
   document.querySelector('.sheet .ns-empty').click();
   const ov7 = document.querySelector('.session-overlay');
   ov7.querySelector('#s-add-exo').click();
@@ -1264,7 +1260,7 @@ console.log('== v6.0 : iPhone, percentile, progression, fluidite ==');
   store.userData.workouts = [];
   store.addWorkout({ id: 'p1', date: todayISO(-3), totalTime: 600, exercises: [{ exerciseId: 'benchPress', sets: [{ weight: 80, reps: 8 }, { weight: 70, reps: 10 }] }] });
   workout.render(pages.workout);
-  pages.workout.querySelector('#btn-new-session').click();
+  document.querySelector('#fab-page-2 .fab').click();
   document.querySelector('.sheet .ns-empty').click();
   const ovP = document.querySelector('.session-overlay');
   ovP.querySelector('#s-add-exo').click();
@@ -1376,7 +1372,7 @@ console.log('== v6.1 : anatomie detaillee et carte du corps ==');
 
   // Fiche d'exercice : recto carte du corps, verso rang
   workout.render(pages.workout);
-  pages.workout.querySelector('#btn-new-session').click();
+  document.querySelector('#fab-page-2 .fab').click();
   document.querySelector('.sheet .ns-empty').click();
   const ovB = document.querySelector('.session-overlay');
   ovB.querySelector('#s-add-exo').click();

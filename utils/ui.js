@@ -45,6 +45,22 @@ export function el(html) {
   return t.content.firstElementChild;
 }
 
+// Bouton « ajouter » flottant d'un onglet, même place et même forme partout
+// (comme celui de Nutrition). Posé dans body : dans le carrousel transformé,
+// un élément fixe ne resterait pas fixe sur iOS. Visible via body[data-page].
+export function pageFab(page, icon, label, onClick) {
+  const id = `fab-page-${page}`;
+  let wrap = document.getElementById(id);
+  if (!wrap) {
+    wrap = el(`<div class="fab-wrap" id="${id}" data-for="${page}"><button class="fab"></button></div>`);
+    document.body.appendChild(wrap);
+  }
+  const btn = wrap.firstElementChild;
+  btn.innerHTML = icon;
+  btn.setAttribute('aria-label', label);
+  btn.onclick = onClick;
+}
+
 // Échappe une chaîne destinée à être injectée en innerHTML. À utiliser pour
 // TOUT texte venant de l'utilisateur ou d'une source externe : noms d'aliments,
 // de recettes, d'exercices custom, notes de séance, produits Open Food Facts.

@@ -17,9 +17,10 @@
   --wide: 112%;                /* largeur des titres et des chiffres */
 
   --bg: #000000;
-  --surface: #0C0E13;
-  --surface-2: #14171E;
-  --surface-3: #1C2029;
+  /* Les cartes n'ont plus de bordure : c'est l'écart de fond qui les détache */
+  --surface: #101318;
+  --surface-2: #181B22;
+  --surface-3: #20242D;
   --line: rgba(255, 255, 255, 0.07);
   --line-2: rgba(255, 255, 255, 0.13);
   --border: var(--line);
@@ -42,7 +43,13 @@
   --success: #22C55E;
   --danger: #F43F5E;
   --warning: #F59E0B;
-  --water: #38BDF8;
+  --water: #4F8CFF;
+
+  /* Macros : déclinées du cyan et du violet de la marque */
+  --mac-p: #00D9FF;
+  --mac-g: #4F8CFF;
+  --mac-l: #A78BFA;
+  --mac-f: #8D95A3;
 
   --header-bg: rgba(0, 0, 0, 0.94);
   --scrim: rgba(0, 0, 0, 0.72);
@@ -101,6 +108,8 @@ body.palette-light {
   --text-2: #5B6472;
   --text-3: #8A92A0;
   --success: #15A34A; --danger: #E11D48; --warning: #B45309;
+  --water: #2563EB;
+  --mac-p: #0A9FD8; --mac-g: #2563EB; --mac-l: #7C3AED; --mac-f: #5B6472;
   --header-bg: rgba(243, 245, 249, 0.96);
   --scrim: rgba(16, 19, 28, 0.45);
   --shadow-2: 0 24px 60px rgba(16, 19, 28, 0.18);
@@ -150,7 +159,7 @@ h3 { font-size: 1rem; }
 /* Micro-libellé en capitales espacées (« PRIZE POOL » chez EWC) */
 .eyebrow {
   display: block;
-  font-size: 0.86rem; font-weight: 600;
+  font-size: 0.75rem; font-weight: 500;
   color: var(--text-2);
   margin-bottom: 8px;
 }
@@ -185,17 +194,13 @@ canvas { max-width: 100%; }
 }
 .page > div { max-width: 640px; margin: 0 auto; }
 
-.page-title { margin: 4px 0 18px; display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; }
+/* Pas de grand titre de page : l'onglet actif de la barre du bas nomme déjà
+   l'écran. Le h1 reste pour les lecteurs d'écran. */
+.page-title { display: contents; }
 .page-title h1 {
-  font-size: 2.15rem; font-weight: 700; font-stretch: var(--wide);
-  letter-spacing: -0.035em; line-height: 1;
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
 }
-/* Titre accompagné d'actions : le titre garde toute sa largeur, les actions
-   passent dessous plutôt que de déborder de l'écran. */
-.page-title-actions { flex-wrap: wrap; align-items: center; row-gap: 12px; }
-.page-title-actions h1 { flex: 1 0 100%; }
-.title-actions { display: flex; gap: 8px; flex: 1; }
-.title-actions .btn-primary { margin-left: auto; }
 
 
 
@@ -207,7 +212,6 @@ canvas { max-width: 100%; }
   padding: 6px 6px var(--safe-b);
   display: flex;
   background: var(--bg);
-  border-top: 1px solid var(--line);
   z-index: 50;
 }
 .nav-btn {
@@ -233,7 +237,6 @@ canvas { max-width: 100%; }
 /* ---------- Cartes ---------- */
 .card {
   background: var(--surface);
-  border: 1px solid var(--line);
   border-radius: var(--r-card);
   padding: 16px;
   margin-bottom: 12px;
@@ -244,15 +247,17 @@ canvas { max-width: 100%; }
   background: var(--surface);
 }
 .card-glow::before { content: none; }
-/* Titres de section : micro-libellés */
+/* Trois niveaux de texte, distincts par la taille, la largeur et la couleur :
+   titre de carte (1rem, élargi, blanc), libellé d'un chiffre (0.75rem, gris),
+   texte courant (0.9rem). */
 .card > h3, .card-row > h3 {
-  font-size: 0.86rem; font-weight: 600;
-  color: var(--text-2); margin-bottom: 10px;
+  font-size: 1rem; font-weight: 600; font-stretch: 106%;
+  color: var(--text); margin-bottom: 10px;
 }
 .card-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 /* Tuiles de statistiques (libellé en micro-capitales, grand chiffre) */
-.grid-2 > .card > .muted:first-child { font-size: 0.86rem; font-weight: 600; margin-bottom: 6px; }
+.grid-2 > .card > .muted:first-child { font-size: 0.75rem; font-weight: 500; margin-bottom: 6px; }
 .grid-2 > .card > .num { font-size: 1.7rem; line-height: 1; }
 
 /* ---------- Boutons ---------- */
@@ -269,7 +274,7 @@ canvas { max-width: 100%; }
 .btn-block svg { width: 20px; height: 20px; }
 .btn-primary { background: var(--accent); color: var(--on-accent); }
 .btn-primary:active { opacity: 0.88; }
-.btn-secondary { background: var(--surface-3); color: var(--text); border: 1px solid var(--line); }
+.btn-secondary { background: var(--surface-3); color: var(--text); }
 .btn-danger { background: var(--danger); color: #fff; }
 .btn-ghost { background: transparent; color: var(--text-2); }
 .btn-sm { min-height: 38px; padding: 7px 13px; font-size: 0.7rem; border-radius: 12px; }
@@ -327,7 +332,7 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
 .switch input:checked + .slider::before { transform: translateX(20px); background: var(--on-accent); }
 
 /* Sélecteur segmenté : l'option active est un aplat d'accent */
-.segment { display: flex; gap: 2px; padding: 3px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-btn); overflow: hidden; }
+.segment { display: flex; gap: 2px; padding: 3px; background: var(--surface-2); border-radius: var(--r-btn); overflow: hidden; }
 .segment button {
   flex: 1; background: none; border: none; color: var(--text-2);
   font-size: 0.86rem; font-weight: 600;
@@ -575,122 +580,105 @@ body > .picker-overlay {
    ACCUEIL — tient dans un seul écran, jamais de défilement
    ============================================================ */
 #page-home { overflow: hidden; padding-bottom: 10px; padding-top: calc(var(--safe-t) + 12px); }
+/* Ordre d'importance : calories (seule carte qui grandit), pas, poids, coach,
+   puis l'eau et le rang en lignes compactes. */
 .home-fit {
-  display: flex; flex-direction: column; gap: 10px;
-  /* 2 px de marge : sans eux, l arrondi des hauteurs rognait le bord bas de la carte Eau */
+  display: flex; flex-direction: column; gap: 8px;
+  /* 2 px de marge : sans eux, l arrondi des hauteurs rognait le bord bas de la dernière carte */
   height: calc(100dvh - var(--nav-h) - var(--safe-b) - var(--safe-t) - 24px);
   overflow: hidden;
 }
 .home-fit > * { margin-bottom: 0 !important; flex: 0 0 auto; }
-.home-fit .page-title { margin: 0 0 2px; }
-.home-fit .page-title h1 { font-size: 1.9rem; }
-/* Les deux rangées de cartes se partagent la hauteur restante */
-.home-fit .home-top-duo { flex: 1.35 1 0; min-height: 0; }
-.home-fit > .home-duo:not(.home-top-duo) { flex: 1 1 0; min-height: 0; }
-.home-duo { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.home-duo > * { min-width: 0; min-height: 0; }
 .home-fit .card { overflow: hidden; }
 
-.stat-card { margin-bottom: 0; padding: 14px; cursor: pointer; transition: transform var(--dur-fast) var(--spring); }
+.stat-card { margin-bottom: 0; padding: 16px; cursor: pointer; transition: transform var(--dur-fast) var(--spring); }
 .stat-card:active { transform: scale3d(0.98, 0.98, 1); }
-.stat-head {
-  display: flex; align-items: center; gap: 6px; margin-bottom: 8px;
-  color: var(--text-2); font-size: 0.86rem; font-weight: 600;
-}
-.stat-head svg { width: 14px; height: 14px; color: var(--accent); }
+/* Titre de carte : même niveau que les h3 des autres onglets */
+.stat-head { font-size: 1rem; font-weight: 600; font-stretch: 106%; color: var(--text); margin-bottom: 8px; }
 
-/* Rang global : carte héros */
-.gr-card { cursor: pointer; padding: 14px 16px; }
-.gr-top { display: flex; align-items: center; gap: 12px; }
-.gr-badge { flex: 0 0 auto; display: flex; }
-.gr-info { flex: 1; min-width: 0; }
-.gr-rank-name { font-size: 1.15rem; font-weight: 700; font-stretch: var(--wide); letter-spacing: 0.02em; }
-.gr-lp { font-size: 0.72rem; color: var(--text-2); font-variant-numeric: tabular-nums; font-weight: 600; }
-.gr-streak { flex: 0 0 auto; display: flex; align-items: center; gap: 4px; color: var(--warning); font-weight: 700; font-size: 0.95rem; font-stretch: var(--wide); padding: 6px 10px; border-radius: 999px; background: rgba(245, 158, 11, 0.12); }
-.gr-streak:empty { display: none; }
-.gr-streak svg { width: 15px; height: 15px; }
-.gr-progress { height: 6px; border-radius: 6px; background: var(--surface-3); overflow: hidden; margin: 12px 0 0; }
-.gr-progress i { display: block; height: 100%; border-radius: 6px; transition: width var(--dur-med) var(--ease); }
-
-/* Calories */
-.home-kcal { display: flex; flex-direction: column; gap: 8px; }
-.hk-numbers { display: flex; align-items: baseline; gap: 6px; min-width: 0; flex-wrap: wrap; }
-.hk-big { font-size: clamp(1.7rem, 8vw, 2.4rem); line-height: 0.95; }
-.hk-goal { font-size: 0.72rem; color: var(--text-2); font-weight: 600; }
-.hk-donut { display: flex; align-items: center; gap: 12px; margin-top: auto; }
-.hk-donut svg { width: clamp(64px, 22vw, 92px); height: auto; flex: none; }
-.hk-donut-legend { display: flex; flex-direction: column; gap: 5px; font-size: 0.72rem; font-weight: 700; font-variant-numeric: tabular-nums; font-stretch: var(--wide); }
-
-/* Coach (demi-largeur) */
+/* Coach : pleine largeur. Le ton se lit sur le rythme (vert ou rouge), le
+   fond reste celui des autres cartes. */
 .coach-card { position: relative; }
-/* Coach : pas de trait ; un dégradé discret vert quand le rythme est bon,
-   rouge quand il faut ajuster, rien tant qu'il n'y a pas assez de pesées. */
-.coach-card.coach-good { background: linear-gradient(160deg, rgba(34, 197, 94, 0.14), transparent 62%), var(--surface); }
-.coach-card.coach-warn { background: linear-gradient(160deg, rgba(244, 63, 94, 0.14), transparent 62%), var(--surface); }
-.coach-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
-.coach-title { display: inline-flex; align-items: center; gap: 6px; font-size: 0.86rem; font-weight: 600; color: var(--text-2); }
-.coach-title svg { width: 14px; height: 14px; color: var(--accent); }
-.coach-warn .coach-title svg { color: var(--warning); }
-.coach-good .coach-title svg { color: var(--success); }
-.coach-rate { font-size: 0.7rem; font-weight: 600; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.coach-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.coach-title { font-size: 1rem; font-weight: 600; font-stretch: 106%; color: var(--text); }
+.coach-rate { font-size: 0.75rem; font-weight: 500; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.coach-rate b { color: var(--text); font-weight: 700; }
+.coach-good .coach-rate { color: var(--success); }
+.coach-warn .coach-rate { color: var(--danger); }
 .coach-msg { font-size: 0.9rem; line-height: 1.45; color: var(--text); }
-.coach-maint { font-size: 0.76rem; line-height: 1.4; color: var(--text-2); margin-top: 8px; }
+.coach-maint { font-size: 0.75rem; line-height: 1.4; color: var(--text-2); margin-top: 8px; }
 .coach-maint b { color: var(--accent); font-variant-numeric: tabular-nums; }
 .coach-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .coach-actions .coach-btn { flex: 1 1 auto; }
-.coach-compact { display: flex; flex-direction: column; gap: 4px; overflow: hidden; }
-.coach-compact .coach-msg { font-size: 0.76rem; line-height: 1.35; }
-.coach-compact .coach-maint { font-size: 0.66rem; margin-top: 4px; }
-.coach-compact .coach-actions { margin-top: auto; padding-top: 8px; }
-.coach-compact .coach-actions .btn { font-size: 0.6rem; padding: 6px 8px; min-height: 32px; border-radius: 10px; }
-.coach-compact .coach-rate { font-size: 0.64rem; }
-.coach-wait { margin-top: 8px; display: flex; align-items: baseline; gap: 2px; }
-.coach-wait .num { font-size: 2.4rem; line-height: 1; }
-.coach-wait small { font-size: 1rem; color: var(--text-2); font-weight: 600; }
-.coach-wait-lbl { margin-top: 4px; font-size: 0.82rem; color: var(--text-2); }
+.coach-compact .coach-msg { font-size: 0.85rem; line-height: 1.35; }
+.coach-compact .coach-actions { margin-top: 10px; }
+.coach-compact .coach-actions .btn { min-height: 36px; }
+.coach-empty .coach-head { margin-bottom: 0; }
 
-/* Poids et activité */
-.home-weight, .home-activity { position: relative; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
-.hw-bg { position: absolute; inset: auto 0 0 0; height: 62%; opacity: 0.6; pointer-events: none; }
-.hw-bg svg { width: 100%; height: 100%; display: block; }
-.hw-content, .ha-content { position: relative; z-index: 1; display: flex; flex-direction: column; height: 100%; gap: 4px; }
-.w-now { font-size: clamp(1.6rem, 7.5vw, 2.2rem); line-height: 0.95; margin-top: auto; }
-.w-now small { font-size: 0.45em; color: var(--text-2); margin-left: 3px; font-weight: 600; }
-.ha-big { font-size: clamp(1.6rem, 7.5vw, 2.2rem); line-height: 0.95; }
-.ha-track { margin-top: auto; padding: 10px 22px 6px 2px; }
-.ha-line { position: relative; height: 5px; border-radius: 4px; background: var(--surface-3); }
+/* Calories : la carte principale, elle prend la hauteur restante. Chiffre en
+   haut à gauche, grammes en bas à gauche, anneau à droite sur toute la hauteur. */
+.home-kcal {
+  flex: 1 1 0 !important; min-height: 148px;
+  display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto 1fr; column-gap: 16px;
+}
+.hk-main { grid-column: 1; grid-row: 1; min-width: 0; }
+.hk-numbers { display: flex; align-items: baseline; gap: 6px; min-width: 0; flex-wrap: wrap; }
+.hk-big { font-size: 3rem; line-height: 1; }
+.hk-goal { font-size: 0.75rem; color: var(--text-2); font-weight: 500; }
+.hk-donut { display: contents; }
+.hk-donut svg { grid-column: 2; grid-row: 1 / span 2; align-self: center; width: clamp(96px, 30vw, 132px); height: auto; }
+.hk-donut-legend { grid-column: 1; grid-row: 2; align-self: end; display: flex; flex-direction: column; gap: 4px; margin-top: 12px; font-size: 0.8rem; font-weight: 500; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.hk-donut-legend b { display: inline-block; width: 3em; font-weight: 600; }
+
+/* Pas : pleine largeur, le chiffre puis la piste jusqu'au drapeau */
+.ha-big { font-size: 2rem; line-height: 1; }
+.ha-track { margin-top: 16px; padding: 0 20px 0 0; }
+.ha-line { position: relative; height: 6px; border-radius: 4px; background: var(--surface-3); }
 /* La largeur porte la VRAIE valeur ; seule l'échelle est animée : si
    l'animation ne se joue pas, la barre affiche quand même la bonne valeur. */
 .ha-fill { display: block; height: 100%; border-radius: 4px; background: var(--grad); transform-origin: left center; }
-.ha-dot { position: absolute; top: 50%; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); transform: translate(-50%, -50%); box-shadow: 0 0 0 3px var(--surface); }
+.ha-dot { position: absolute; top: 50%; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); transform: translate(-50%, -50%); box-shadow: 0 0 0 3px var(--surface); }
 .ha-flag { position: absolute; right: -20px; top: 50%; transform: translateY(-50%); width: 12px; height: 16px; color: var(--text-3); }
 .ha-flag.done { color: var(--success); }
 .ha-flag svg { width: 100%; height: 100%; display: block; fill: none; }
 
-/* Eau : une ligne compacte */
-.home-water { display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 14px !important; cursor: pointer; }
-.hwa-left { display: flex; align-items: baseline; gap: 5px; flex: 0 0 auto; }
-.hwa-left svg { width: 16px; height: 16px; color: var(--water); align-self: center; }
-.hwa-val { font-size: 1.05rem; }
-.hwa-val small { font-size: 0.62em; color: var(--text-2); }
-.hwa-goal { font-size: 0.68rem; color: var(--text-2); font-weight: 600; }
-.hwa-bar { flex: 1; height: 5px; border-radius: 4px; background: rgba(56, 189, 248, 0.14); overflow: hidden; }
+/* Poids : carte basse, le chiffre à gauche, la courbe de tendance à droite */
+.home-weight { display: flex; align-items: center; gap: 16px; }
+.hw-content { flex: none; }
+.hw-content .stat-head { margin-bottom: 4px; }
+.w-now { font-size: 1.6rem; line-height: 1; }
+.w-now small { font-size: 0.5em; color: var(--text-2); margin-left: 4px; font-weight: 500; }
+.hw-curve { flex: 1; min-width: 0; height: 52px; }
+.hw-curve svg { width: 100%; height: 100%; display: block; }
+
+/* Eau : une seule ligne, libellé, quantité, barre, raccourci */
+.home-water { display: flex; align-items: center; gap: 12px; padding-top: 10px; padding-bottom: 10px; }
+.home-water .stat-head { margin: 0; }
+.home-water .hk-numbers { flex: none; }
+.hwa-val { font-size: 1.1rem; line-height: 1; }
+.hwa-bar { flex: 1; min-width: 0; height: 6px; border-radius: 4px; background: var(--surface-3); overflow: hidden; }
 .hwa-bar i { display: block; height: 100%; background: var(--water); border-radius: 4px; transition: width var(--dur-med) var(--ease); }
-.home-water .btn { flex: 0 0 auto; min-height: 34px; padding: 4px 12px; }
+.home-water .btn { flex: none; min-height: 36px; padding: 4px 12px; font-size: 0.8rem; }
+
+/* Rang global : une ligne compacte en bas de l'accueil */
+.gr-card { cursor: pointer; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+.gr-badge { flex: 0 0 auto; display: flex; }
+.gr-info { flex: 1; min-width: 0; }
+.gr-line { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.gr-rank-name { font-size: 1rem; font-weight: 700; font-stretch: var(--wide); }
+.gr-lp { font-size: 0.75rem; color: var(--text-2); font-variant-numeric: tabular-nums; font-weight: 500; }
+.gr-streak { flex: 0 0 auto; display: flex; align-items: center; gap: 4px; color: var(--text); font-weight: 700; font-size: 0.9rem; font-stretch: var(--wide); }
+.gr-streak:empty { display: none; }
+.gr-streak svg { width: 16px; height: 16px; color: var(--accent); }
+.gr-progress { height: 4px; border-radius: 4px; background: var(--surface-3); overflow: hidden; margin-top: 8px; }
+.gr-progress i { display: block; height: 100%; border-radius: 4px; transition: width var(--dur-med) var(--ease); }
 
 /* Écrans courts (iPhone SE…) : on récupère de la hauteur pour tenir sans défiler */
 @media (max-height: 720px) {
-  .home-fit { gap: 8px; }
-  .home-fit .page-title { display: none; }
-  .home-fit .gr-card { padding: 10px 12px; }
-  .home-fit .gr-badge svg { width: 40px; height: 40px; }
-  .home-fit .gr-rank-name { font-size: 0.95rem; }
-  .home-fit .gr-progress { margin-top: 8px; }
-  .home-fit .stat-card { padding: 10px; }
-  .home-fit .stat-head { font-size: 0.54rem; margin-bottom: 4px; }
-  .home-water { padding: 7px 10px !important; }
-  .hw-bg { height: 52%; }
-  .coach-compact .coach-msg { font-size: 0.7rem; }
+  .home-fit .stat-card { padding: 12px; }
+  .hk-big { font-size: 2.4rem; }
+  .hk-donut svg { width: 88px; }
+  .home-kcal { min-height: 120px; }
 }
 
 /* Fenêtres de l'accueil */
@@ -738,36 +726,39 @@ body > .picker-overlay {
   margin: calc(-1 * var(--space) - var(--safe-t)) calc(-1 * var(--space)) 12px;
   padding: calc(var(--space) + var(--safe-t)) var(--space) 6px;
   background: var(--header-bg);
-  border-bottom: 1px solid var(--line);
   z-index: 10;
 }
 .kcal-total { text-align: center; }
 .kcal-consumed { font-size: 2.6rem; line-height: 1; }
 .kcal-sep { font-size: 0.95rem; color: var(--text-2); font-weight: 600; margin-left: 4px; }
 .kcal-sub { display: flex; justify-content: center; gap: 14px; font-size: 0.86rem; font-weight: 600; color: var(--text-2); margin: 4px 0 8px; }
-.macro-rings { display: flex; justify-content: space-around; align-items: center; padding-bottom: 6px; }
+/* Anneaux alignés par le haut ; l'anneau des fibres, plus petit, est centré
+   dans la même hauteur (66 px) pour que les quatre légendes soient sur une ligne. */
+.macro-rings { display: flex; justify-content: space-around; align-items: flex-start; padding-bottom: 8px; }
 .macro-rings .ring-item { text-align: center; }
-.macro-rings .ring-caption { font-size: 0.86rem; font-weight: 600; color: var(--text-2); margin-top: 3px; }
-.macro-rings .ring-item-sm .ring-caption { font-size: 0.56rem; }
+.macro-rings .ring { margin: 0 auto; }
+.macro-rings .ring-item-sm .ring { margin: 8px auto; }
+.macro-rings .ring-caption { font-size: 0.75rem; font-weight: 500; color: var(--text-2); margin-top: 4px; }
 .fiber-tag { color: var(--water); }
 
-.macro-actions { position: relative; display: flex; justify-content: center; align-items: center; margin-top: 0; }
-.macro-actions #btn-macro-goals { width: 100%; margin-top: 0 !important; min-height: 34px; }
-.macro-actions #btn-smooth { position: absolute; right: 0; top: 0; bottom: 0; width: 40px; display: inline-flex; align-items: center; justify-content: center; background: var(--surface-3); min-height: 34px; padding: 0; }
-.macro-actions #btn-smooth svg { width: 18px; height: 18px; }
+/* Réglages des objectifs : une rangée de boutons libellés, de même largeur */
+.macro-actions { display: flex; gap: 8px; }
+.macro-actions .btn { flex: 1 1 0; min-width: 0; font-size: 0.8rem; }
+.macro-actions .btn svg { width: 16px; height: 16px; }
 
-.date-ribbon { display: flex; gap: 8px; overflow-x: auto; margin: 8px 0 0; padding: 0 2px 4px; touch-action: pan-x; }
+/* Les jours se partagent toute la largeur ; au delà de 8 puces, le ruban défile */
+.date-ribbon { display: flex; gap: 4px; overflow-x: auto; margin: 8px 0 0; padding: 0 0 4px; touch-action: pan-x; }
 .date-chip {
-  flex: 0 0 auto; width: 58px;
-  background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px;
-  color: var(--text-2); font-size: 0.86rem; font-weight: 600;
-  padding: 7px 6px; min-height: 44px; cursor: pointer; text-align: center; overflow: hidden;
+  flex: 1 0 38px; min-width: 38px;
+  background: var(--surface-2); border: none; border-radius: 12px;
+  color: var(--text-2); font-size: 0.72rem; font-weight: 500;
+  padding: 7px 2px; min-height: 44px; cursor: pointer; text-align: center; overflow: hidden;
   transition: transform var(--dur-fast) var(--spring), background var(--dur-fast) var(--ease-std), border-color var(--dur-fast) var(--ease-std);
 }
 .date-chip:active { transform: scale3d(0.92, 0.92, 1); }
 .date-chip .d-num { display: block; font-weight: 700; font-size: 1rem; font-stretch: var(--wide); color: var(--text); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 .date-chip.today .d-num { color: var(--accent); }
-.date-chip.active { border-color: var(--accent); background: rgba(var(--accent-rgb), 0.1); color: var(--accent); }
+.date-chip.active { background: rgba(var(--accent-rgb), 0.16); color: var(--accent); }
 /* Écart calorique du jour : vert à ±100 kcal, rouge au-delà */
 .date-chip .d-diff { display: block; margin-top: 2px; font-size: 0.58rem; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; position: relative; }
 .date-chip .d-diff.ok { color: var(--success); }
@@ -775,7 +766,7 @@ body > .picker-overlay {
 .date-chip .d-diff.empty { color: var(--text-3); }
 .date-chip .d-smoothed { display: inline-block; width: 4px; height: 4px; border-radius: 50%; background: var(--accent); margin-left: 3px; vertical-align: middle; }
 /* Puce « + » : ouvre l'historique complet */
-.date-chip.date-more { display: flex; align-items: center; justify-content: center; width: 44px; color: var(--accent); border-style: dashed; }
+.date-chip.date-more { display: flex; align-items: center; justify-content: center; flex: 0 0 38px; color: var(--text-2); }
 .date-chip.date-more .d-more { font-size: 1.3rem; font-weight: 600; line-height: 1; }
 
 /* Repas */
@@ -801,10 +792,10 @@ body > .picker-overlay {
 .meal-name { font-weight: 600; font-size: 0.92rem; }
 .meal-macros { color: var(--text-2); font-size: 0.72rem; margin-top: 2px; }
 .meal-kcal { font-weight: 700; font-stretch: var(--wide); color: var(--text); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.mac-p { color: #F59E0B; font-weight: 600; }
-.mac-g { color: #38BDF8; font-weight: 600; }
-.mac-l { color: #A78BFA; font-weight: 600; }
-.mac-f { color: #22C55E; font-weight: 600; }
+.mac-p { color: var(--mac-p); font-weight: 600; }
+.mac-g { color: var(--mac-g); font-weight: 600; }
+.mac-l { color: var(--mac-l); font-weight: 600; }
+.mac-f { color: var(--mac-f); font-weight: 600; }
 
 /* Objectifs (compteur kcal toujours visible) */
 .macro-kcal-sticky { position: sticky; bottom: 0; display: flex; justify-content: space-between; align-items: center; padding: 12px; margin: 6px calc(-1 * var(--space)) 0; background: var(--surface); border-top: 1px solid var(--line); }
@@ -902,14 +893,18 @@ body > .picker-overlay {
 .bc-final-kcal span { font-size: 0.86rem; font-weight: 600; color: var(--text-2); }
 .bc-final-macros { font-size: 0.82rem; color: var(--text-2); margin-top: 2px; }
 
-/* Bouton flottant (Nutrition) — dans body, hors du carrousel */
+/* Bouton flottant « ajouter » : même place sur Nutrition, Entraînement, Activité — dans body, hors du carrousel */
 .fab-wrap {
   position: fixed; right: 16px;
   bottom: calc(var(--nav-h) + 16px + var(--safe-b));
   display: none; flex-direction: column; align-items: center; gap: 14px;
   z-index: 40;
 }
-body[data-page="1"] #fab-nutrition-wrap { display: flex; }
+body[data-page="1"] #fab-nutrition-wrap,
+body[data-page="2"] #fab-page-2,
+body[data-page="3"] #fab-page-3 { display: flex; }
+/* Place sous le dernier élément pour qu'il ne passe pas sous le bouton */
+#page-nutrition, #page-workout, #page-activity { padding-bottom: 96px; }
 .fab {
   width: 60px; height: 60px; border-radius: 20px;
   background: var(--accent); color: var(--on-accent); border: none;
@@ -1325,13 +1320,14 @@ button.wd-exo { display: block; width: 100%; text-align: left; border: none; col
    ============================================================ */
 /* Activité (v6.8) : tout tient sur un écran — anneau + 3 chiffres, puis
    l'histogramme des jours. Toucher l'anneau = objectif, une barre = saisie. */
-.steps-hero { display: flex; align-items: center; gap: 16px; padding: 16px; }
+.steps-hero { position: relative; display: flex; align-items: center; gap: 16px; padding: 16px; }
+.steps-import { position: absolute; top: 6px; right: 6px; }
 .steps-ring { flex: 0 0 auto; background: none; border: 0; padding: 0; cursor: pointer; border-radius: 50%; }
 .steps-hero .ring { display: block; }
 .steps-hero .ring-label { font-size: 28px; font-weight: 600; fill: var(--text); }
 .steps-hero .ring-sub { font-size: 11px; fill: var(--text-2); }
 .steps-kpis { flex: 1; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.steps-kpi .eyebrow { display: block; margin-bottom: 2px; font-size: 0.56rem; }
+.steps-kpi .eyebrow { display: block; margin-bottom: 2px; }
 .steps-kpi b { font-size: 1.35rem; line-height: 1.05; }
 .steps-kpi b small { font-size: 0.6em; color: var(--text-2); }
 .steps-kpi b.ok { color: var(--success); }
@@ -1382,17 +1378,12 @@ button.wd-exo { display: block; width: 100%; text-align: left; border: none; col
 .page.anim-in > div > .card,
 .page.anim-in > div > .grid-2,
 .page.anim-in > div > .nutrition-header,
-.page.anim-in .home-fit > .card,
-.page.anim-in .home-fit > .home-duo > .card { animation: cardIn 420ms var(--ease) both; }
+.page.anim-in .home-fit > .card { animation: cardIn 420ms var(--ease) both; }
 /* Cascade : chaque bloc entre un peu après le précédent */
 .page.anim-in > div > *:nth-child(2), .page.anim-in .home-fit > *:nth-child(2) { animation-delay: 40ms; }
 .page.anim-in > div > *:nth-child(3), .page.anim-in .home-fit > *:nth-child(3) { animation-delay: 80ms; }
 .page.anim-in > div > *:nth-child(4), .page.anim-in .home-fit > *:nth-child(4) { animation-delay: 120ms; }
 .page.anim-in > div > *:nth-child(n+5), .page.anim-in .home-fit > *:nth-child(n+5) { animation-delay: 160ms; }
-.page.anim-in .home-fit > *:nth-child(3) > .card:nth-child(1) { animation-delay: 80ms; }
-.page.anim-in .home-fit > *:nth-child(3) > .card:nth-child(2) { animation-delay: 100ms; }
-.page.anim-in .home-fit > *:nth-child(4) > .card:nth-child(1) { animation-delay: 120ms; }
-.page.anim-in .home-fit > *:nth-child(4) > .card:nth-child(2) { animation-delay: 140ms; }
 /* Les lignes des listes entrent avec la page… et seulement avec elle :
    rejouées à chaque rendu (série validée, repas ajouté), elles clignotaient. */
 .page.anim-in .meal-row, .page.anim-in .steps-list-item { animation: itemIn 360ms var(--ease) both; animation-delay: 120ms; }

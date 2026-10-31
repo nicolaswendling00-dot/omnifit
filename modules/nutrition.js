@@ -41,11 +41,12 @@ function crossfadeMeals(container, ghost, dir) {
 let currentRerender = null;
 const mealOpen = {};
 
-// Couleurs macros : Prot orange · Glucides bleu clair · Lipides violet
-const C_PROT = '#FB923C';
-const C_CARB = '#38BDF8';
-const C_FAT = '#8B5CF6';
-const C_FIBER = '#22C55E';
+// Couleurs macros (jetons --mac-* de style.css) : prot cyan, glucides bleu,
+// lipides violet, fibres en gris (anneau secondaire).
+const C_PROT = 'var(--mac-p)';
+const C_CARB = 'var(--mac-g)';
+const C_FAT = 'var(--mac-l)';
+const C_FIBER = 'var(--mac-f)';
 
 const MEAL_TYPES = ['Petit-Déjeuner', 'Déjeuner', 'Dîner', 'Snack'];
 
@@ -59,7 +60,7 @@ function findRecipe(id) {
   return preset ? presetToRecipe(preset) : null;
 }
 
-// Génère le texte coloré des macros : P orange, G bleu, L violet, F vert.
+// Génère le texte coloré des macros : P cyan, G bleu, L violet, F gris.
 // `opts.round` arrondit à 1 décimale. Les fibres n'apparaissent que si > 0.
 function macroLine(prot, carbs, fat, fiber, opts = {}) {
   const r = opts.round ? (v) => Math.round((v || 0) * 10) / 10 : (v) => (v || 0);
@@ -232,9 +233,9 @@ function openMacroGoalsSheet(rerender) {
     </div>
     <div id="mg-body"></div>
     <div style="margin:8px 0 4px">
-      <div class="card-row"><span style="font-size:0.9rem;color:#38BDF8">Fibres / 1000 kcal</span>
-        <span class="num" id="mg-fiber-val" style="color:#38BDF8">${s.fiberPer1000 ?? 15} g</span></div>
-      <input id="mg-fiber-per" type="range" min="5" max="25" step="1" value="${s.fiberPer1000 ?? 15}" style="accent-color:#38BDF8">
+      <div class="card-row"><span style="font-size:0.9rem;color:var(--mac-f)">Fibres / 1000 kcal</span>
+        <span class="num" id="mg-fiber-val" style="color:var(--mac-f)">${s.fiberPer1000 ?? 15} g</span></div>
+      <input id="mg-fiber-per" type="range" min="5" max="25" step="1" value="${s.fiberPer1000 ?? 15}" style="accent-color:var(--accent)">
     </div>
     <div class="macro-kcal-sticky">
       <span class="muted">Calories cibles</span>
@@ -1477,7 +1478,7 @@ export function renderCoachCard(rerender, opts = {}) {
 
   const card = el(`<div class="card coach-card coach-${tone}${opts.compact ? ' stat-card coach-compact' : ''}">
     <div class="coach-head">
-      <span class="coach-title">${icons.flame} Coach</span>
+      <span class="coach-title">Coach</span>
       <span class="coach-rate">${rateStr}</span>
     </div>
     <div class="coach-msg">${msg}</div>
@@ -1690,8 +1691,8 @@ export function render(container, opts = {}) {
           <span>Objectif ajusté de <b>${day.smoothed.delta > 0 ? '+' : ''}${day.smoothed.delta} kcal</b>, lissage du ${fmtDateShort(day.smoothed.from)}</span>${icons.chevron}
         </button>` : ''}
         <div class="macro-actions">
-          <button class="btn btn-ghost btn-sm btn-block" id="btn-macro-goals">${icons.edit} Objectifs macros</button>
-          ${Math.abs(remaining) > 100 ? `<button class="btn btn-ghost btn-sm" id="btn-smooth" title="Lisser l'écart calorique">${icons.swap}</button>` : ''}
+          <button class="btn btn-secondary btn-sm" id="btn-macro-goals">${icons.edit} Objectifs</button>
+          ${Math.abs(remaining) > 100 ? `<button class="btn btn-secondary btn-sm" id="btn-smooth">${icons.swap} Lisser l'écart</button>` : ''}
         </div>
         <div class="date-ribbon no-swipe" id="date-ribbon">${ribbon}</div>
       </div>

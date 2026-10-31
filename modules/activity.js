@@ -1,6 +1,7 @@
 // OmniFit — PAGE 3 : Activité (pas)
 import { store, todayISO, parseStepsPayload } from '../utils/storage.js';
-import { el, icons, openModal, openSheet, toast, ringSVG, fmtDateShort, haptic } from '../utils/ui.js';
+import { el, icons, openModal, openSheet, toast, ringSVG, fmtDateShort, haptic, pageFab } from '../utils/ui.js';
+import { PAGE_ACTIVITY } from '../utils/nav.js';
 
 let viewDays = 7;
 const stepGoal = () => store.userData.settings.stepsGoal || 10000;
@@ -252,15 +253,10 @@ export function render(container) {
   container.innerHTML = '';
   container.appendChild(el(`
     <div class="steps-page">
-      <div class="page-title page-title-actions">
-        <h1>Activité</h1>
-        <div class="title-actions">
-          <button class="btn btn-ghost btn-sm" id="btn-import-steps" title="Importer les pas depuis Santé" aria-label="Importer les pas depuis Santé">${icons.download}</button>
-          <button class="btn btn-primary btn-sm" id="btn-log-steps" aria-label="Ajouter des pas">${icons.plus}</button>
-        </div>
-      </div>
+      <div class="page-title"><h1>Activité</h1></div>
 
       <div class="card card-glow steps-hero">
+        <button class="icon-btn steps-import" id="btn-import-steps" title="Importer les pas depuis Santé" aria-label="Importer les pas depuis Santé">${icons.download}</button>
         <button type="button" class="steps-ring" id="btn-step-goal" aria-label="Modifier l'objectif de pas">
           ${ringSVG({ size: 148, stroke: 12, progress: steps / goal, gradient: true, label: steps.toLocaleString('fr-FR'), sub: `/ ${goal.toLocaleString('fr-FR')}` })}
         </button>
@@ -287,7 +283,7 @@ export function render(container) {
       </div>
     </div>`));
 
-  container.querySelector('#btn-log-steps').addEventListener('click', () => openLogStepsModal(rerender));
+  pageFab(PAGE_ACTIVITY, icons.plus, 'Ajouter des pas', () => openLogStepsModal(rerender));
   container.querySelector('#btn-step-goal').addEventListener('click', () => openStepGoalModal(rerender));
   container.querySelector('#btn-import-steps').addEventListener('click', () => importStepsFromClipboard(rerender));
   container.querySelector('#view-toggle').addEventListener('click', (e) => {

@@ -5,10 +5,11 @@ import { store, todayISO } from '../utils/storage.js';
 import { EXERCISES, MUSCLES, muscleLabel, AKA, EQUIPMENT, equipLabel } from '../data/exercises.js';
 import { reorderList, rollingCounter } from '../utils/gestures.js';
 import { formatTime, workoutMuscleVolume, weeklySetsByMuscle, muscleAttenuation } from '../utils/math.js';
-import { el, esc, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, fmtDateFull, celebrateLP, makeChart, normalizeStr, closeAllOverlays, attachSwipeToDelete, slideAway } from '../utils/ui.js';
+import { el, esc, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, fmtDateFull, celebrateLP, makeChart, normalizeStr, closeAllOverlays, attachSwipeToDelete, slideAway, pageFab } from '../utils/ui.js';
 import { lineChartOptions, lineDataset } from '../utils/charts.js';
 import { bodyMapSVG } from '../utils/bodyMap.js';
 import { computeExerciseLP, computeExerciseLPDetailed, rankFromLP, rankBadge, getStandards, lpLabel } from '../utils/ranks.js';
+import { PAGE_WORKOUT } from '../utils/nav.js';
 
 let volumeChart = null;
 let impChart = null;
@@ -2231,9 +2232,6 @@ export function render(container) {
   container.innerHTML = '';
   const root = el(`<div>
     <div class="page-title"><h1>Entraînement</h1></div>
-    <button class="btn btn-primary btn-block" id="btn-new-session" style="margin-bottom:var(--space)">
-      ${icons.play} ${active ? 'Reprendre la séance' : 'Nouvelle séance'}
-    </button>
     <div id="calendar-host"></div>
     <div class="card">
       <div class="card-row collapse-head" id="routine-toggle" style="margin-bottom:8px;cursor:pointer">
@@ -2266,7 +2264,7 @@ export function render(container) {
     rlist.appendChild(card);
   }
 
-  root.querySelector('#btn-new-session').addEventListener('click', () => {
+  pageFab(PAGE_WORKOUT, active ? icons.play : icons.plus, active ? 'Reprendre la séance' : 'Nouvelle séance', () => {
     if (session) { openSession(rerender); return; } // reprise : pas de choix à faire
     openStartSessionSheet(rerender);
   });
