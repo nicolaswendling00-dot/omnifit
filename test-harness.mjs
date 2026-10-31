@@ -1453,7 +1453,7 @@ console.log('== v6.2 : LP totaux, panneaux, detail de seance ==');
   // ---- LP : toujours le total cumule
   const rk = await import('./utils/ranks.js');
   const d2 = rk.rankFromLP(1010);
-  assert(d2.name === 'Diamant' && d2.division === 'II', 'LP : 1010 LP = Diamant II');
+  assert(d2.name === 'Comet' && d2.division === 'II', 'LP : 1010 LP = Comet II (ancien Diamant)');
   assert(rk.lpLabel(d2) === '1010 / 1100 LP', `LP : affiche le total et le palier suivant (${rk.lpLabel(d2)})`);
   assert(rk.lpLabel(rk.rankFromLP(2140)) === '2140 LP', 'LP : Onyx affiche son total');
   assert(rk.lpLabel(rk.rankFromLP(0)) === '0 / 100 LP', 'LP : depart a 0');
