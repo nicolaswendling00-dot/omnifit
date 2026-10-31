@@ -397,7 +397,7 @@ export function openExercisePicker(onPick, title = 'Ajouter un exercice') {
   renderList();
   const input = overlay.querySelector('#exo-search');
   input.addEventListener('input', (e) => renderList(e.target.value));
-  setTimeout(() => input.focus(), 250);
+  if (window.matchMedia && window.matchMedia('(pointer: fine)').matches) setTimeout(() => input.focus(), 450); // au doigt, le focus coupait la montée du panneau
   overlay.querySelector('#btn-custom').addEventListener('click', () => {
     close();
     openExerciseEditor((exo) => onPick(exo));
@@ -2008,7 +2008,9 @@ function openExerciseBrowser() {
   </div>`);
   const { close } = openSheet({ title: 'Exercices', content: overlay, variant: 'tall' });
   const list = overlay.querySelector('#xb-list');
-  const draw = (q = '') => {
+  let drawId = 0;
+  const draw = (q = '', first = 150) => {
+    const id = ++drawId;
     const nq = normalizeStr(q);
     const lpMap = lpMapAll();
     const items = allExercises()
@@ -2020,7 +2022,7 @@ function openExerciseBrowser() {
       items.sort((a, b) => a.name.localeCompare(b.name));
     }
     list.innerHTML = items.length ? '' : '<div class="empty-state">Aucun résultat</div>';
-    for (const { e, name, lp } of items.slice(0, 150)) {
+    const addRows = (rows) => { for (const { e, name, lp } of rows) {
       const rk = lp !== undefined ? rankFromLP(lp) : null;
       const chip = rk ? `<span class="rank-inline" title="${rk.name}${rk.division ? ' ' + rk.division : ''}">${rankBadge(rk.id, 46)}</span>` : '<span class="rank-inline muted" style="font-size:0.66rem">non classé</span>';
       // Un exercice custom est glissable vers la gauche pour révéler une
@@ -2049,9 +2051,13 @@ function openExerciseBrowser() {
         b.addEventListener('click', () => { openExerciseDetailSheet(e.id); });
         list.appendChild(b);
       }
-    }
+    } };
+    addRows(items.slice(0, first));
+    // Le reste après la montée du panneau (420 ms) : des dizaines de badges de
+    // rang dessinés pendant l'animation la faisaient saccader sur iPhone.
+    if (items.length > first) setTimeout(() => { if (id === drawId && overlay.isConnected) addRows(items.slice(first, 150)); }, 450);
   };
-  draw();
+  draw('', 14);
 
   // Exercices custom : glisser pour supprimer (avec confirmation)
   attachSwipeToDelete(list, { rowSelector: '.exo-swipe-row', contentSelector: '.exo-search-item', collapse: false });
@@ -2070,7 +2076,9 @@ function openExerciseBrowser() {
       draw(searchInput.value); // rafraîchit la liste avec le nouvel exo
     });
   });
-  setTimeout(() => searchInput.focus(), 250);
+  // Pas de focus automatique au doigt : sur iPhone il fait défiler la page
+  // (voire ouvre le clavier) en pleine montée du panneau, qui se coupe.
+  if (window.matchMedia && window.matchMedia('(pointer: fine)').matches) setTimeout(() => searchInput.focus(), 450);
 }
 
 // Clic sur un muscle : exercices de la semaine qui l'ont travaillé + amélioration dans le temps
