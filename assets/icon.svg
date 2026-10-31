@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- OmniFit : l'infini qui se termine en flèche, en blanc sur fond sombre
+       avec des reflets bleu et violet (direction artistique du logo). -->
+  <defs>
+    <radialGradient id="blue" cx="18%" cy="12%" r="75%">
+      <stop offset="0" stop-color="#2f7bff" stop-opacity=".85"/>
+      <stop offset="1" stop-color="#2f7bff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="violet" cx="92%" cy="96%" r="75%">
+      <stop offset="0" stop-color="#b13cff" stop-opacity=".85"/>
+      <stop offset="1" stop-color="#b13cff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="#07070d"/>
+  <rect width="512" height="512" fill="url(#blue)"/>
+  <rect width="512" height="512" fill="url(#violet)"/>
+  <g transform="translate(256 262) scale(3.3) translate(-50 -50)" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M77 29 L50 55 C42 63 36 70 28 70 C19 70 13 63 13 55 C13 47 19 40 28 40 C36 40 42 46 50 55 C58 64 64 70 72 70 C81 70 87 63 87 55 C87 51 85.5 47.5 83 45"/>
+    <path d="M88 18 L72.5 21.5 L84.5 33.5 Z" fill="#fff" stroke-width="4"/>
+  </g>
+</svg>

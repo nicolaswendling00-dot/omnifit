@@ -1,5 +1,5 @@
 // OmniFit — Service worker (PWA offline)
-const CACHE_NAME = 'omniffit-v7-6';
+const CACHE_NAME = 'omniffit-v8-0';
 const ASSETS = [
   './',
   './index.html',
@@ -30,6 +30,7 @@ const ASSETS = [
   './assets/icon-192.png',
   './assets/icon-512.png',
   './assets/icon-180.png',
+  './assets/icon.svg',
 ];
 
 // Installation : on télécharge chaque fichier en CONTOURNANT le cache HTTP

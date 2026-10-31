@@ -1,7 +1,14 @@
 // OmniFit — PAGE 3 : Activité (pas)
 import { store, todayISO, parseStepsPayload } from '../utils/storage.js';
-import { el, icons, openModal, openSheet, toast, ringSVG, fmtDateShort, haptic, pageFab } from '../utils/ui.js';
-import { PAGE_ACTIVITY } from '../utils/nav.js';
+import { el, icons, openModal, openSheet, toast, ringSVG, fmtDateShort, haptic, pageFab, dateBar } from '../utils/ui.js';
+import { PAGE_ACTIVITY, getViewDate } from '../utils/nav.js';
+
+// Jour décalé de n jours (dates locales AAAA-MM-JJ)
+const shiftISO = (iso, n) => {
+  const [y, m, d] = iso.split('-').map(Number);
+  const t = new Date(y, m - 1, d + n);
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+};
 
 let viewDays = 7;
 const stepGoal = () => store.userData.settings.stepsGoal || 10000;
@@ -51,7 +58,7 @@ function openStepGoalModal(rerender) {
 function openLogStepsModal(rerender, prefill = null) {
   const form = el(`<div class="field-stack">
     <label class="field"><span>Nombre de pas</span><input id="st-count" type="number" inputmode="numeric" min="0" placeholder="8500" value="${prefill && prefill.count != null ? prefill.count : ''}" autofocus></label>
-    <label class="field"><span>Date</span><input id="st-date" type="date" value="${prefill ? prefill.date : todayISO()}"></label>
+    <label class="field"><span>Date</span><input id="st-date" type="date" value="${prefill ? prefill.date : getViewDate()}"></label>
   </div>`);
   openModal({
     title: prefill ? `Pas du ${fmtDateShort(prefill.date)}` : 'Ajouter des pas',
@@ -117,7 +124,7 @@ function barsHTML(days) {
     const hit = v >= stepGoalFor(d);
     const dt = new Date(d + 'T12:00:00');
     const lbl = week ? DAY_LETTERS[dt.getDay()] : ((days.length - 1 - i) % 7 === 0 ? String(dt.getDate()) : '');
-    return `<button type="button" class="sb-col${d === todayISO() ? ' today' : ''}" data-date="${d}" aria-label="${fmtDateShort(d)} : ${v.toLocaleString('fr-FR')} pas">
+    return `<button type="button" class="sb-col${d === getViewDate() ? ' today' : ''}" data-date="${d}" aria-label="${fmtDateShort(d)} : ${v.toLocaleString('fr-FR')} pas">
         ${week ? `<span class="sb-val">${v ? kSteps(v) : ''}</span>` : ''}
         <span class="sb-track"><span class="sb-bar${hit ? ' hit' : ''}" style="height:${v ? Math.max(3, (v / max) * 100).toFixed(1) : 0}%"></span></span>
         <span class="sb-day">${lbl}</span>
@@ -238,11 +245,12 @@ function openStepsGuide(rerender) {
 
 export function render(container) {
   const rerender = () => render(container);
-  const today = todayISO();
+  const today = getViewDate(); // jour consulté, commun à tous les onglets
   const byDate = store.userData.steps.byDate;
   const steps = byDate[today] || 0;
-  const goal = stepGoal();
-  const days = [...Array(viewDays)].map((_, i) => todayISO(i - viewDays + 1));
+  const goal = stepGoalFor(today);
+  // La période affichée se termine sur le jour consulté
+  const days = [...Array(viewDays)].map((_, i) => shiftISO(today, i - viewDays + 1));
   const logged = days.filter((d) => byDate[d] != null);
   const avg = logged.length ? Math.round(logged.reduce((acc, d) => acc + byDate[d], 0) / logged.length) : 0;
   const hits = days.filter((d) => (byDate[d] || 0) >= stepGoalFor(d)).length;
@@ -253,7 +261,6 @@ export function render(container) {
   container.innerHTML = '';
   container.appendChild(el(`
     <div class="steps-page">
-      <div class="page-title"><h1>Activité</h1></div>
 
       <div class="card card-glow steps-hero">
         <button class="icon-btn steps-import" id="btn-import-steps" title="Importer les pas depuis Santé" aria-label="Importer les pas depuis Santé">${icons.download}</button>
@@ -269,7 +276,7 @@ export function render(container) {
 
       <div class="card steps-bars">
         <div class="card-row">
-          <h3>${viewDays === 7 ? '7 derniers jours' : '30 derniers jours'}</h3>
+          <h3>${viewDays} jours</h3>
           <div class="segment" id="view-toggle">
             <button data-d="7" class="${viewDays === 7 ? 'active' : ''}">7 j</button>
             <button data-d="30" class="${viewDays === 30 ? 'active' : ''}">30 j</button>
@@ -282,6 +289,12 @@ export function render(container) {
         </div>
       </div>
     </div>`));
+
+  container.firstElementChild.prepend(dateBar({
+    title: 'Activité',
+    mark: (d) => (byDate[d] == null ? '' : byDate[d] >= stepGoalFor(d) ? 'ok' : 'on'),
+    onChange: rerender,
+  }));
 
   pageFab(PAGE_ACTIVITY, icons.plus, 'Ajouter des pas', () => openLogStepsModal(rerender));
   container.querySelector('#btn-step-goal').addEventListener('click', () => openStepGoalModal(rerender));

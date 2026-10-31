@@ -70,9 +70,9 @@ assert(!pages.home.querySelector('#btn-log-weight') && !pages.home.querySelector
 nutrition.render(pages.nutrition);
 assert(pages.nutrition.querySelector('.nutrition-header'), 'Nutrition : header sticky');
 assert(pages.nutrition.querySelectorAll('.macro-rings .ring-item').length === 4, 'Nutrition : 4 anneaux macros (prot/gluc/lip + fibres)');
-// Ruban : 7 derniers jours + une puce « + » vers l'historique complet
-assert(pages.nutrition.querySelectorAll('.date-chip').length === 8, 'Nutrition : ruban 7 jours + bouton historique');
-assert(pages.nutrition.querySelector('#date-more'), 'Nutrition : puce « + » vers l\'historique');
+// Ruban : 7 derniers jours ; le passé plus ancien passe par le calendrier commun
+assert(pages.nutrition.querySelectorAll('.date-chip').length === 7, 'Nutrition : ruban 7 jours');
+assert(!pages.nutrition.querySelector('#date-more'), 'Nutrition : plus de puce « + », le calendrier est dans l\'en-tete');
 assert(pages.nutrition.querySelector('.nutrition-header .date-ribbon'), 'Nutrition : ruban dans l\'en-tête collant');
 assert(pages.nutrition.querySelector('.date-ribbon.no-swipe'), 'Nutrition : ruban en no-swipe');
 assert(document.getElementById('fab-nutrition-wrap')?.parentElement === document.body, 'Nutrition : FAB global dans body');
@@ -187,15 +187,27 @@ console.log('== v7.1 : nutrition animee, historique, graphique vide ==');
   const nh = pages.nutrition;
   assert(nh.querySelector('[data-tw="n-kcal"]') && nh.querySelectorAll('[data-tw-ring]').length === 4, 'Nutrition : chiffres et anneaux animables');
   assert(!/Appuie sur/.test(nh.textContent), 'Nutrition : plus de phrase « Appuie sur + »');
-  nh.querySelector('#date-more').click();
-  const ov = [...document.querySelectorAll('.cal-overlay')].pop();
-  assert(ov.querySelector('#ncal-scroll.cal-scroll-rev') && ov.querySelectorAll('.cal-month').length <= 3, 'Historique nutrition : ouvert en bas, 3 mois tout de suite');
-  await new Promise((r) => setTimeout(r, 200));
-  assert(ov.querySelectorAll('.cal-month').length >= 12, 'Historique nutrition : au moins un an consultable');
-  assert(ov.closest('.sheet.tall') && !ov.querySelector('#ncal-close'), 'Historique nutrition : panneau du bas, sans croix');
-  ov.closest('.scrim')._close();
+  // Jour commun : le calendrier de l'en-tete choisit le jour pour tous les onglets
+  const pick = nh.querySelector('.date-bar .date-pick');
+  assert(pick && /Aujourd/.test(pick.textContent) && !nh.querySelector('.date-back'), 'En-tete : aujourd\'hui, sans bouton retour');
+  pick.click();
+  const pop = document.querySelector('.day-pop');
+  assert(pop && pop.querySelector('.dp-day.sel.today'), 'Calendrier commun : un mois, aujourd\'hui choisi');
+  assert(pop.querySelector('.dp-next').disabled, 'Calendrier commun : pas de mois futur');
+  pop.querySelector('.dp-prev').click();
+  const day1 = pop.querySelector('.dp-day');
+  const picked = day1.dataset.date;
+  day1.click();
   await new Promise((r) => setTimeout(r, 250));
-  assert(!document.querySelector('.cal-overlay'), 'Historique nutrition : se ferme');
+  assert(!document.querySelector('.day-pop'), 'Calendrier commun : se ferme apres le choix');
+  assert(nh.querySelector('.date-back') && !/Aujourd/.test(nh.querySelector('.date-pick').textContent), 'Autre jour : bouton retour a aujourd\'hui');
+  home.render(pages.home); activity.render(pages.activity); workout.render(pages.workout);
+  for (const p of [pages.home, pages.activity, pages.workout]) {
+    assert(p.querySelector('.date-back'), 'Autre jour : vaut pour tous les onglets');
+  }
+  assert(pages.activity.querySelector(`.sb-col.today[data-date="${picked}"]`), 'Activite : la periode se termine sur le jour choisi');
+  nh.querySelector('.date-back').click();
+  assert(!nh.querySelector('.date-back') && /Aujourd/.test(nh.querySelector('.date-pick').textContent), 'Retour a aujourd\'hui');
   const css = fs.readFileSync(new URL('./style.css', import.meta.url), 'utf8');
   assert(!/font-weight:\s*(300|400)\b/.test(css), 'Typo : aucune graisse fine');
   assert(/\.picker-overlay\.leaving/.test(css) && /pickerUp/.test(css), 'Ecrans plein ecran : montent et redescendent par le bas');
@@ -246,7 +258,7 @@ console.log('== v6.12 : compteur a rouleaux, carte holographique, calendrier en 
   host.remove();
   const wsrc = fs.readFileSync(new URL('./modules/workout.js', import.meta.url), 'utf8');
   assert(/rollingCounter\(overlay\.querySelector\('#s-chrono'\)\)/.test(wsrc), 'Seance : chrono en compteur a rouleaux');
-  assert(/cal-scroll-rev/.test(wsrc) && !/scroll\.scrollTop = scroll\.scrollHeight/.test(wsrc), 'Calendrier : ouvert en bas sans defilement force');
+  assert(!/cal-scroll/.test(wsrc) && /openDayPicker/.test(fs.readFileSync(new URL('./utils/ui.js', import.meta.url), 'utf8')), 'Calendrier : un seul calendrier commun, sans historique a part');
   home.render(pages.home);
   pages.home.querySelector('#gr-card').click();
   const fc = document.querySelector('.rk-scrim .flip-card');
@@ -418,12 +430,7 @@ todayCell.click();
 const detail = [...document.querySelectorAll('.sheet')].pop();
 assert(detail && detail.querySelector('.wd-hero'), 'Calendrier : clic → détail de la séance');
 clearOverlays();
-pages.workout.querySelector('#cal-more').click();
-const calOverlay = document.querySelector('.cal-overlay');
-assert(calOverlay && calOverlay.querySelector('.cal-month'), 'Calendrier : « Voir plus » ouvre l\'historique plein écran (par mois)');
-assert(calOverlay.querySelectorAll('.cal-month').length <= 3, 'Calendrier : ouverture immediate (3 mois au plus, le reste ensuite)');
-assert(calOverlay.closest('.sheet.tall') && !calOverlay.querySelector('#cal-close'), 'Calendrier complet : panneau du bas, sans croix');
-clearOverlays();
+assert(!pages.workout.querySelector('#cal-more') && pages.workout.querySelector('.date-bar .date-pick'), 'Calendrier : historique via le calendrier commun de l\'en-tete');
 
 console.log('== Volume tracking ==');
 const volTable = pages.workout.querySelector('#volume-host .volume-table');
@@ -640,7 +647,7 @@ const nh = pages.nutrition;
 store.addNutritionLog(todayISO(), { name: 'X (500 g)', baseName: 'X', meal: 'Snack', prot: 50, carbs: 300, fat: 120, fiber: 0, kcal: 2480, per100: { prot: 10, carbs: 60, fat: 24 }, weight: 500 });
 nutrition.render(nh);
 assert(!nh.querySelector('#nut-cal'), 'Nutrition : carte calendrier retiree');
-assert(nh.querySelectorAll('.date-chip').length === 8, 'Nutrition : ruban de dates conserve (7 jours + « + »)');
+assert(nh.querySelectorAll('.date-chip').length === 7, 'Nutrition : ruban de dates conserve (7 jours)');
 const chipT = [...nh.querySelectorAll('.date-chip')].find((c) => c.dataset.date === todayISO());
 assert(chipT && chipT.querySelector('.d-diff'), 'Nutrition : ecart calorique affiche dans le ruban');
 assert(chipT.querySelector('.d-diff.bad'), 'Nutrition : gros ecart en rouge');
@@ -1004,8 +1011,7 @@ console.log('== v5.6 : accueil, ruban, series persistantes, coefficient ==');
 
   nutrition.render(pages.nutrition);
   const chips = [...pages.nutrition.querySelectorAll('.date-chip')];
-  assert(chips[0].id === 'date-more', 'Nutrition : le « + » ouvre le ruban a gauche (avant le plus ancien jour)');
-  assert(chips.length === 8, 'Nutrition : toujours 7 jours + le « + »');
+  assert(chips.length === 7 && chips[6].dataset.date === todayISO(), 'Nutrition : 7 jours, aujourd\'hui a droite');
 
   // ---- Progression : on compare la MEILLEURE SERIE d'une seance a la precedente
   store.userData.workouts = [];

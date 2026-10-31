@@ -1,7 +1,7 @@
 // OmniFit — PAGE 1 : Nutrition (macros couleur, fibres, modes grammes/auto/%, repas typés, recettes)
 import { store, todayISO } from '../utils/storage.js';
 import { calcKcal, fiberGoalFromKcal, metabolicInsight } from '../utils/math.js';
-import { el, esc, icons, openSheet, openModal, toast, ringSVG, confirmModal, fmtDateShort, haptic, celebrateLP, normalizeStr, attachSwipeToDelete, tweenValues } from '../utils/ui.js';
+import { el, esc, icons, openSheet, openModal, toast, ringSVG, confirmModal, fmtDateShort, haptic, celebrateLP, normalizeStr, attachSwipeToDelete, tweenValues, dateBar } from '../utils/ui.js';
 import { startCameraStream, captureFrame, decodeBarcodeFromFile } from '../utils/barcode.js';
 import { fetchProductByBarcode } from '../utils/openfoodfacts.js';
 import { FOODS, FOOD_CATEGORIES } from '../data/foods.js';
@@ -15,6 +15,7 @@ function foodMatches(f, nq) {
   return hay.includes(nq) || squash(hay).includes(squash(nq));
 }
 import { PRESET_RECIPES, presetToRecipe } from '../data/recipes.js';
+import { getViewDate, setViewDate } from '../utils/nav.js';
 
 let selectedDate = todayISO();
 // Dernier état affiché (jour, nombre de repas) : sert à faire apparaître
@@ -1512,83 +1513,6 @@ export function renderCoachCard(rerender, opts = {}) {
   return card;
 }
 
-// Historique nutritionnel complet, sur le modèle du calendrier d'entraînement :
-// un mois par bloc, du plus ancien au plus récent, positionné sur le mois en
-// cours à l'ouverture. Chaque jour montre son écart calorique.
-function openNutritionCalendar(rerender) {
-  const byDate = store.userData.nutrition.byDate || {};
-  const today = todayISO();
-  const pad2 = (n) => String(n).padStart(2, '0');
-  const WD = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
-
-  const overlay = el(`<div class="picker-overlay cal-overlay">
-    <div class="cal-scroll cal-scroll-rev" id="ncal-scroll"></div>
-  </div>`);
-  const { close } = openSheet({ title: 'Historique nutrition', content: overlay, variant: 'tall' });
-
-  // Départ : la plus ancienne donnée (repas, pesée, séance), et au moins un
-  // an en arrière, pour pouvoir consulter les mois sans repas saisis.
-  const dates = Object.keys(byDate).filter((d) => byDate[d] && byDate[d].meals && byDate[d].meals.length);
-  const firsts = [todayISO(-365), ...dates, ...(store.userData.weights || []).map((w) => w.date), ...(store.userData.workouts || []).map((w) => w.date)];
-  const first = firsts.sort()[0];
-  const [fy, fm] = first.split('-').map(Number);
-  const [ty, tm] = today.split('-').map(Number);
-
-  const monthEl = (y, m) => {
-    const firstDay = new Date(y, m, 1);
-    const offset = (firstDay.getDay() + 6) % 7;      // semaine commençant lundi
-    const nDays = new Date(y, m + 1, 0).getDate();
-    const wrap = el(`<div class="cal-month">
-      <div class="cal-month-title">${firstDay.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}</div>
-      <div class="cal-wd">${WD.map((d) => `<span>${d}</span>`).join('')}</div>
-      <div class="cal-grid"></div>
-    </div>`);
-    const grid = wrap.querySelector('.cal-grid');
-    for (let i = 0; i < offset; i++) grid.appendChild(el('<span class="cal-empty"></span>'));
-    for (let day = 1; day <= nDays; day++) {
-      const iso = `${y}-${pad2(m + 1)}-${pad2(day)}`;
-      const dDay = byDate[iso];
-      const has = !!(dDay && dDay.meals && dDay.meals.length);
-      let diff = '';
-      if (has) {
-        const v = Math.round(store.dayTotals(iso).kcal - macroGoalsFor(iso).kcalGoal);
-        diff = `<span class="cal-imp ${Math.abs(v) <= 100 ? 'up' : 'down'}">${v > 0 ? '+' : ''}${v}</span>`;
-      }
-      grid.appendChild(el(`<button class="cal-day${has ? ' has-session' : ''}${iso === today ? ' is-today' : ''}${iso > today ? ' dim' : ''}"
-        ${iso > today ? 'disabled' : ''} data-date="${iso}">
-        <span class="cal-dnum">${day}</span>${diff}
-      </button>`));
-    }
-    return wrap;
-  };
-  // Du mois en cours vers le passé ; la liste en column-reverse s'ouvre en bas
-  // et les mois plus anciens se rangent au-dessus, trois tout de suite, le
-  // reste juste après.
-  const months = [];
-  for (let y = ty, m = tm - 1; y > fy || (y === fy && m >= fm - 1); m--) {
-    months.push([y, m]);
-    if (m === 0) { m = 12; y--; }
-  }
-  const scroll = overlay.querySelector('#ncal-scroll');
-  months.splice(0, 3).forEach(([y, m]) => scroll.appendChild(monthEl(y, m)));
-  const more = () => {
-    if (!overlay.isConnected || !months.length) return;
-    const [y, m] = months.shift();
-    scroll.appendChild(monthEl(y, m));
-    setTimeout(more, 0);
-  };
-  setTimeout(more, 60);
-
-  scroll.addEventListener('click', (e) => {
-    const b = e.target.closest('.cal-day');
-    if (!b || b.disabled) return;
-    selectedDate = b.dataset.date;
-    haptic();
-    close();
-    rerender();
-  });
-}
-
 // FAB global dans body (hors du conteneur transformé, sinon invisible sur iOS)
 // Menu déroulant : "+" principal déploie 2 mini-FAB (ajout rapide / scan code-barre).
 function ensureFab() {
@@ -1622,6 +1546,7 @@ export function render(container, opts = {}) {
   const keptList = opts.keepList ? container.querySelector('#meal-list') : null;
   const rerender = () => render(container);
   currentRerender = rerender;
+  selectedDate = getViewDate(); // jour commun à tous les onglets
   const totals = store.dayTotals(selectedDate);
   const mg = macroGoalsFor(selectedDate);
   const consumed = Math.round(totals.kcal);
@@ -1632,8 +1557,8 @@ export function render(container, opts = {}) {
   const fadeEmpty = !meals.length && lastShown.date === selectedDate && lastShown.n > 0;
   if (!keptList) lastShown = { date: selectedDate, n: meals.length };
 
-  // Ruban : les 7 derniers jours seulement, puis un « + » qui ouvre l'historique
-  // complet. Au-delà d'une semaine on ne fait plus défiler à l'aveugle.
+  // Ruban : les 7 derniers jours. Les jours plus anciens se choisissent dans le
+  // calendrier de l'en-tête, le même pour tous les onglets.
   const chipFor = (d) => {
     const dDay = store.userData.nutrition.byDate[d];
     let diffHtml = '<span class="d-diff empty"></span>';
@@ -1652,11 +1577,7 @@ export function render(container, opts = {}) {
   // Le jour consulté peut être hors de la semaine : on l'ajoute pour qu'il
   // reste visible et sélectionné dans le ruban.
   if (!days7.includes(selectedDate)) days7.unshift(selectedDate);
-  // Le « + » ouvre le passé : il se place donc AVANT le plus ancien des 7 jours,
-  // dans le sens de lecture du ruban (on remonte le temps vers la gauche).
-  const ribbon = `<button class="date-chip date-more" id="date-more" aria-label="Historique complet">
-        <span class="d-more">+</span>
-      </button>` + days7.map(chipFor).join('');
+  const ribbon = days7.map(chipFor).join('');
 
   container.innerHTML = '';
   container.appendChild(el(`
@@ -1805,19 +1726,30 @@ export function render(container, opts = {}) {
   });
 
   container.querySelector('#date-ribbon').addEventListener('click', (e) => {
-    if (e.target.closest('#date-more')) { openNutritionCalendar(rerender); return; }
     const chip = e.target.closest('.date-chip');
     if (!chip || !chip.dataset.date) return;
     const prev = selectedDate;
     const old = container.querySelector('#meal-list');
     const ghost = old ? old.cloneNode(true) : null;
-    selectedDate = chip.dataset.date;
+    setViewDate(chip.dataset.date);
     rerender();
     if (prev !== selectedDate) crossfadeMeals(container, ghost, selectedDate > prev ? 1 : -1);
   });
   const active = container.querySelector('.date-chip.active');
   if (active && active.scrollIntoView) active.scrollIntoView({ inline: 'center', block: 'nearest' });
 
+  // En-tête de date commun : point vert si l'écart du jour tient dans ±100 kcal
+  const nByDate = store.userData.nutrition.byDate;
+  // Dans l'en-tête collant : le jour consulté reste visible en faisant défiler
+  container.querySelector('.nutrition-header').prepend(dateBar({
+    title: 'Nutrition',
+    mark: (d) => {
+      const dd = nByDate[d];
+      if (!dd || !dd.meals || !dd.meals.length) return '';
+      return Math.abs(store.dayTotals(d).kcal - macroGoalsFor(d).kcalGoal) <= 100 ? 'ok' : 'bad';
+    },
+    onChange: rerender,
+  }));
   container.querySelector('#btn-macro-goals').addEventListener('click', () => openMacroGoalsSheet(rerender));
   const smoothBtn = container.querySelector('#btn-smooth');
   if (smoothBtn) smoothBtn.addEventListener('click', () => openSmoothingSheet(rerender, selectedDate, remaining));

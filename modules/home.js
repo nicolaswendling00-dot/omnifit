@@ -1,11 +1,11 @@
 // OmniFit — PAGE 0 : Accueil (stats d'abord, poids ensuite, graphique en modal)
 import { store, todayISO } from '../utils/storage.js';
 import { calculateSMA } from '../utils/math.js';
-import { el, icons, openModal, toast, ringSVG, haptic, makeChart, fmtDateFull, attachSwipeToDelete } from '../utils/ui.js';
+import { el, icons, openModal, toast, ringSVG, haptic, makeChart, fmtDateFull, attachSwipeToDelete, dateBar } from '../utils/ui.js';
 import { flipCard, channel } from '../utils/gestures.js';
 import { lineChartOptions, lineDataset } from '../utils/charts.js';
-import { goToPage, PAGE_NUTRITION, PAGE_ACTIVITY } from '../utils/nav.js';
-import { macroGoals, renderCoachCard } from './nutrition.js';
+import { goToPage, PAGE_NUTRITION, PAGE_ACTIVITY, getViewDate, isViewingToday } from '../utils/nav.js';
+import { macroGoals, macroGoalsFor, renderCoachCard } from './nutrition.js';
 import { computeGlobalRank } from '../utils/globalRank.js';
 import { rankBadge, rankFromLP, lpLabel } from '../utils/ranks.js';
 
@@ -16,13 +16,13 @@ let caloriesVisible = false;
 // Réglage de l'eau : consommation du jour et objectif, au même endroit que
 // l'affichage. Évite d'aller chercher le curseur dans les réglages.
 function openWaterModal(rerender) {
-  const today = todayISO();
+  const today = getViewDate();
   const s = store.userData.settings;
   const cur = store.userData.water.byDate[today] || 0;
   const form = el(`<div>
     <div class="wtr-now">
       <span class="num wtr-val" id="wtr-val">${cur.toFixed(2).replace(/0$/, '')}</span>
-      <span class="wtr-unit">L bus aujourd'hui</span>
+      <span class="wtr-unit">L bus ${isViewingToday() ? "aujourd'hui" : 'ce jour là'}</span>
     </div>
     <div class="wtr-quick" id="wtr-quick">
       ${[0.25, 0.5, 0.75, 1].map((v) => `<button class="btn btn-secondary btn-sm" data-add="${v}">+${v} L</button>`).join('')}
@@ -94,7 +94,7 @@ export function openGoalModal(rerender) {
 function openLogWeightModal(rerender, prefill = null) {
   const form = el(`<div class="field-stack">
     <label class="field"><span>Poids (kg)</span><input id="w-value" type="number" step="0.1" inputmode="decimal" placeholder="75.2" value="${prefill ? prefill.value : ''}" autofocus></label>
-    <label class="field"><span>Date</span><input id="w-date" type="date" value="${prefill ? prefill.date : todayISO()}"></label>
+    <label class="field"><span>Date</span><input id="w-date" type="date" value="${prefill ? prefill.date : getViewDate()}"></label>
   </div>`);
   openModal({
     title: prefill ? 'Modifier le poids' : 'Log poids',
@@ -466,24 +466,23 @@ function stepsTrack(ratio) {
 export function render(container) {
   const rerender = () => render(container);
   const { profile, goal, settings } = store.userData;
-  const today = todayISO();
+  const today = getViewDate(); // jour consulté, commun à tous les onglets
   const totals = store.dayTotals(today);
-  const mg = macroGoals();
+  const mg = macroGoalsFor(today);
   const steps = store.userData.steps.byDate[today] || 0;
   const stepsGoal = settings.stepsGoal || 10000;
   const water = store.userData.water.byDate[today] || 0;
-  const currentW = store.userData.weights.length
-    ? store.userData.weights[store.userData.weights.length - 1].value
-    : profile.weight;
+  // Poids du jour consulté : la dernière pesée faite ce jour là ou avant.
+  const wUpTo = store.userData.weights.filter((w) => w.date <= today);
+  const currentW = wUpTo.length ? wUpTo[wUpTo.length - 1].value : profile.weight;
 
   container.innerHTML = '';
-  const gr = computeGlobalRank(store.userData, today, { liveMacroGoal: mg });
+  const gr = computeGlobalRank(store.userData, todayISO(), { liveMacroGoal: macroGoals() });
   const grRankLabel = gr.rank.division ? `${gr.rank.name} ${gr.rank.division}` : gr.rank.name;
   const grProgress = gr.rank.lpNeeded ? gr.rank.lp / gr.rank.lpNeeded : 1;
 
   container.appendChild(el(`
     <div class="home-fit">
-      <div class="page-title"><h1>Accueil</h1></div>
 
       <div class="card stat-card home-kcal" id="home-kcal">
         <div class="hk-main">
@@ -538,6 +537,12 @@ export function render(container) {
       </div>
     </div>`));
 
+  const nByDate = store.userData.nutrition.byDate;
+  container.querySelector('.home-fit').prepend(dateBar({
+    title: 'Accueil',
+    mark: (d) => (nByDate[d] && nByDate[d].meals && nByDate[d].meals.length ? 'on' : ''),
+    onChange: rerender,
+  }));
   container.querySelector('#gr-card').addEventListener('click', () => openGlobalRankModal(gr));
   container.querySelector('#btn-add-water').addEventListener('click', (e) => {
     e.stopPropagation(); // le +0.25 reste un raccourci, il n'ouvre pas la fenêtre

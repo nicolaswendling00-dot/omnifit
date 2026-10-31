@@ -1,5 +1,6 @@
 // OmniFit — Helpers UI partagés (modals, sheets, toasts, icônes SVG)
 import { channel } from './gestures.js';
+import { getViewDate, isViewingToday, setViewDate } from './nav.js';
 
 const reducedMotion = () => !window.matchMedia || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -560,4 +561,111 @@ export function fmtDateLong(iso) {
   const [y, m, d] = iso.split('-').map(Number);
   const dt = new Date(y, m - 1, d);
   return dt.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+}
+
+// ---------- Jour consulté : en-tête de date et calendrier, communs aux onglets ----------
+const isoLocal = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+const CARET = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+const ARROW_L = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>';
+
+export function dayLabel(iso) {
+  const t = new Date();
+  if (iso === isoLocal(t)) return 'Aujourd\'hui';
+  t.setDate(t.getDate() - 1);
+  if (iso === isoLocal(t)) return 'Hier';
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  const opts = { weekday: 'short', day: 'numeric', month: 'short' };
+  if (y !== new Date().getFullYear()) opts.year = 'numeric';
+  return cap(dt.toLocaleDateString('fr-FR', opts));
+}
+
+// En-tête d'onglet : le jour consulté (touche → calendrier) et, sur un autre
+// jour, un bouton pour revenir à aujourd'hui. Le h1 reste pour les lecteurs
+// d'écran. mark(iso) → '' | 'on' | 'ok' | 'bad' : point sous le jour dans le
+// calendrier, propre à chaque onglet (repas saisis, séance, objectif de pas).
+export function dateBar({ title, mark = null, onChange }) {
+  const iso = getViewDate();
+  const bar = el(`<div class="date-bar">
+    <h1 class="sr-only">${esc(title)}</h1>
+    <button type="button" class="date-pick" aria-haspopup="dialog" aria-expanded="false">
+      <span>${dayLabel(iso)}</span>${CARET}
+    </button>
+    ${isViewingToday() ? '' : `<button type="button" class="btn btn-secondary btn-sm date-back">${ARROW_L} Aujourd'hui</button>`}
+  </div>`);
+  const pick = bar.querySelector('.date-pick');
+  const change = (d) => { if (setViewDate(d)) { haptic(); onChange(); } };
+  pick.addEventListener('click', () => openDayPicker(pick, { mark, onPick: change }));
+  const back = bar.querySelector('.date-back');
+  if (back) back.addEventListener('click', () => change(null));
+  return bar;
+}
+
+export function openDayPicker(anchor, { mark = null, onPick }) {
+  const today = isoLocal(new Date());
+  const sel = getViewDate();
+  let [y, m] = sel.split('-').map(Number); m -= 1;
+  const [ty, tm] = today.split('-').map(Number);
+
+  document.body.classList.add('overlay-open');
+  const scrim = el(`<div class="scrim day-scrim">
+    <div class="day-pop" role="dialog" aria-modal="true" aria-label="Choisir un jour">
+      <div class="dp-head">
+        <span class="dp-title" aria-live="polite"></span>
+        <button type="button" class="icon-btn dp-prev" aria-label="Mois précédent">${ARROW_L}</button>
+        <button type="button" class="icon-btn dp-next" aria-label="Mois suivant">${icons.chevron}</button>
+      </div>
+      <div class="dp-wd" aria-hidden="true">${['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((d) => `<span>${d}</span>`).join('')}</div>
+      <div class="dp-grid"></div>
+    </div>
+  </div>`);
+  const pop = scrim.querySelector('.day-pop');
+  const grid = scrim.querySelector('.dp-grid');
+  const r = anchor.getBoundingClientRect();
+  pop.style.top = `${Math.round(r.bottom + 8)}px`;
+
+  const draw = () => {
+    const first = new Date(y, m, 1);
+    scrim.querySelector('.dp-title').textContent = cap(first.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }));
+    scrim.querySelector('.dp-next').disabled = y > ty || (y === ty && m >= tm - 1);
+    const offset = (first.getDay() + 6) % 7; // semaine commençant lundi
+    const n = new Date(y, m + 1, 0).getDate();
+    let html = '<span></span>'.repeat(offset);
+    for (let d = 1; d <= n; d++) {
+      const iso = isoLocal(new Date(y, m, d));
+      const k = mark && iso <= today ? mark(iso) : '';
+      const cls = `dp-day${iso === sel ? ' sel' : ''}${iso === today ? ' today' : ''}`;
+      html += `<button type="button" class="${cls}" data-date="${iso}" ${iso > today ? 'disabled' : ''}
+        aria-label="${fmtDateLong(iso)}" ${iso === sel ? 'aria-current="date"' : ''}>${d}${k ? `<i class="dp-mark ${k}"></i>` : ''}</button>`;
+    }
+    grid.innerHTML = html;
+  };
+  draw();
+
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    anchor.setAttribute('aria-expanded', 'false');
+    scrim.classList.remove('visible');
+    setTimeout(() => { scrim.remove(); releaseOverlayLock(); anchor.focus({ preventScroll: true }); }, 200);
+  };
+  scrim._close = close; // touche Échap
+  scrim.addEventListener('click', (e) => {
+    if (e.target === scrim) { close(); return; }
+    if (e.target.closest('.dp-prev')) { m--; if (m < 0) { m = 11; y--; } draw(); return; }
+    if (e.target.closest('.dp-next')) { m++; if (m > 11) { m = 0; y++; } draw(); return; }
+    const b = e.target.closest('.dp-day');
+    if (!b || b.disabled) return;
+    close();
+    onPick(b.dataset.date);
+  });
+  document.body.appendChild(scrim);
+  anchor.setAttribute('aria-expanded', 'true');
+  requestAnimationFrame(() => {
+    scrim.classList.add('visible');
+    (grid.querySelector('.dp-day.sel') || grid.querySelector('.dp-day')).focus({ preventScroll: true });
+  });
+  return { close };
 }

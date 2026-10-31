@@ -197,9 +197,56 @@ canvas { max-width: 100%; }
 /* Pas de grand titre de page : l'onglet actif de la barre du bas nomme déjà
    l'écran. Le h1 reste pour les lecteurs d'écran. */
 .page-title { display: contents; }
-.page-title h1 {
+.page-title h1, .sr-only {
   position: absolute; width: 1px; height: 1px; overflow: hidden;
   clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+}
+
+/* En-tête de date, commun à tous les onglets : le jour consulté ouvre le
+   calendrier ; sur un autre jour, « Aujourd'hui » ramène au jour même. */
+.date-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; margin-bottom: 8px; }
+.date-pick {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0;
+  background: none; border: 0; color: var(--text); font: inherit;
+  font-size: 1.6rem; font-weight: 700; font-stretch: var(--wide); line-height: 1.1; cursor: pointer;
+}
+.date-pick svg { width: 18px; height: 18px; color: var(--text-2); transition: transform var(--dur-fast) var(--ease); }
+.date-pick[aria-expanded="true"] svg { transform: rotate(180deg); }
+.date-back { flex: none; gap: 4px; color: var(--accent); }
+.date-back svg { width: 16px; height: 16px; }
+.home-fit > .date-bar { margin-bottom: 0; }
+
+/* Calendrier du jour consulté : un mois, flèches pour changer, jour choisi plein */
+.day-scrim { align-items: flex-start; justify-content: flex-start; padding: 0; background: rgba(0, 0, 0, 0.55); }
+.day-pop {
+  position: absolute; left: var(--space); right: var(--space); max-width: 400px;
+  background: var(--surface-2); border-radius: var(--r-modal); padding: 16px 14px 12px;
+  transform-origin: top left; transform: translateY(-6px) scale(0.97); opacity: 0;
+  transition: transform 240ms var(--ease), opacity 200ms var(--ease-std);
+}
+.day-scrim.visible .day-pop { transform: none; opacity: 1; }
+.dp-head { display: flex; align-items: center; gap: 4px; padding: 0 4px 10px; }
+.dp-title { flex: 1; font-size: 1.1rem; font-weight: 700; font-stretch: var(--wide); color: var(--text); }
+.dp-head .icon-btn { width: 44px; height: 44px; color: var(--text); }
+.dp-head .icon-btn:disabled { color: var(--text-3); }
+.dp-head .icon-btn svg { width: 22px; height: 22px; }
+.dp-wd, .dp-grid { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; }
+.dp-wd span { font-size: 0.8rem; font-weight: 600; color: var(--text-2); padding-bottom: 6px; }
+.dp-day {
+  position: relative; justify-self: center; width: 44px; height: 44px; margin: 1px 0; border-radius: 50%;
+  background: none; border: 0; color: var(--text); font: inherit; font-size: 1.15rem; font-weight: 500;
+  font-variant-numeric: tabular-nums; cursor: pointer; transition: background var(--dur-fast) var(--ease-std);
+}
+.dp-day:disabled { color: var(--text-3); cursor: default; }
+.dp-day.today { color: var(--accent); font-weight: 700; }
+.dp-day.sel { background: var(--accent); color: var(--on-accent); font-weight: 700; }
+.dp-mark { position: absolute; left: 50%; bottom: 5px; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: var(--text-2); }
+.dp-mark.ok { background: var(--success); }
+.dp-mark.bad { background: var(--danger); }
+.dp-mark.on { background: var(--accent); }
+.dp-day.sel .dp-mark { background: var(--on-accent); }
+@media (prefers-reduced-motion: reduce) {
+  .day-pop, .date-pick svg { transition: none; }
 }
 
 
@@ -767,8 +814,6 @@ body > .picker-overlay {
 .date-chip .d-diff.empty { color: var(--text-3); }
 .date-chip .d-smoothed { display: inline-block; width: 4px; height: 4px; border-radius: 50%; background: var(--accent); margin-left: 3px; vertical-align: middle; }
 /* Puce « + » : ouvre l'historique complet */
-.date-chip.date-more { display: flex; align-items: center; justify-content: center; flex: 0 0 38px; color: var(--text-2); }
-.date-chip.date-more .d-more { font-size: 1.3rem; font-weight: 600; line-height: 1; }
 
 /* Repas */
 .meal-group { margin-bottom: 4px; }
@@ -927,13 +972,6 @@ body[data-page="3"] #fab-page-3 { display: flex; }
 #fab-nutrition { transition: transform 260ms var(--ease); }
 .fab-wrap.fab-open #fab-nutrition { transform: rotate(45deg); }
 
-/* Calendrier de nutrition (historique complet) */
-.cal-overlay .picker-topbar { margin-bottom: 12px; }
-.cal-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: calc(24px + var(--safe-b)); }
-/* Des centaines de silhouettes dans l'historique complet : le navigateur ne
-   dessine que les mois à l'écran (les autres gardent juste leur place). */
-.cal-month { margin-bottom: 22px; content-visibility: auto; contain-intrinsic-size: auto 470px; }
-.cal-month-title { font-weight: 600; font-size: 0.86rem; margin-bottom: 8px; color: var(--text-2); }
 
 /* ============================================================
    ENTRAÎNEMENT
@@ -950,6 +988,7 @@ body[data-page="3"] #fab-page-3 { display: flex; }
 .cal-day.dim { opacity: 0.3; }
 .cal-day.has-session { color: var(--text); border-color: var(--line-2); background: var(--surface-2); cursor: pointer; }
 .cal-day.is-today { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.cal-day.is-sel { background: rgba(var(--accent-rgb), 0.16); }
 .cal-dnum { line-height: 1; }
 /* Jour de séance : les deux silhouettes occupent la case, le numéro du jour
    se pose par-dessus, comme sur un calendrier de compétition. */
@@ -962,10 +1001,6 @@ body[data-page="3"] #fab-page-3 { display: flex; }
 }
 .cal-day:not(.has-session) .cal-dnum { margin: auto 0; font-size: 0.95rem; }
 .cal-mus { font-size: 0.54rem; font-weight: 600; color: var(--accent); line-height: 1.05; text-align: center; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: auto; }
-.cal-imp { font-size: 0.54rem; font-weight: 600; line-height: 1; }
-.cal-imp.up { color: var(--success); }
-.cal-imp.down { color: var(--danger); }
-.cal-empty { min-height: 76px; }
 
 .routine-exos { list-style: none; counter-reset: rexo; margin: 8px 0 12px; padding: 0; }
 .routine-exos li { counter-increment: rexo; font-size: 0.86rem; color: var(--text-2); padding: 4px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1433,10 +1468,6 @@ button.wd-exo { display: block; width: 100%; text-align: left; border: none; col
 .rk-back .grd-stats { margin-top: auto; }
 .rk-hint { font-size: 0.86rem; font-weight: 600; color: var(--text-3); }
 
-/* Historique : démarre en bas (mois en cours) ; l'espaceur garde les mois
-   en haut quand ils ne remplissent pas l'écran. */
-.cal-scroll-rev { display: flex; flex-direction: column-reverse; }
-.cal-scroll-rev::before { content: ""; flex: 1 0 0; }
 
 /* Reflet holographique du recto (HoloCard) : le canvas recouvre la face HTML
    une fois l'image prête. */
@@ -1497,7 +1528,6 @@ body > .picker-overlay { animation: pickerUp 420ms var(--sheet-in); }
 .sheet.tall .sheet-body { display: flex; flex-direction: column; overflow: hidden; padding-bottom: calc(12px + var(--safe-b)); }
 .sheet.tall .sheet-body > .picker-overlay { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .sheet.tall .picker-list { flex: 1; min-height: 0; overflow-y: auto; }
-.sheet.tall .cal-scroll { flex: 1; min-height: 0; overflow-y: auto; }
 /* Titres et boutons importants : la police d'affichage de l'app (large, grasse) */
 .btn-primary, .btn-block, .sheet-header h3 { font-stretch: var(--wide); font-weight: 700; }
 .btn-primary.btn-block { font-size: 0.98rem; }

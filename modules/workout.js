@@ -5,11 +5,11 @@ import { store, todayISO } from '../utils/storage.js';
 import { EXERCISES, MUSCLES, muscleLabel, AKA, EQUIPMENT, equipLabel } from '../data/exercises.js';
 import { reorderList, rollingCounter } from '../utils/gestures.js';
 import { formatTime, workoutMuscleVolume, weeklySetsByMuscle, muscleAttenuation } from '../utils/math.js';
-import { el, esc, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, fmtDateFull, celebrateLP, makeChart, normalizeStr, closeAllOverlays, attachSwipeToDelete, slideAway, pageFab } from '../utils/ui.js';
+import { el, esc, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, fmtDateFull, celebrateLP, makeChart, normalizeStr, closeAllOverlays, attachSwipeToDelete, slideAway, pageFab, dateBar } from '../utils/ui.js';
 import { lineChartOptions, lineDataset } from '../utils/charts.js';
 import { bodyMapSVG } from '../utils/bodyMap.js';
 import { computeExerciseLP, computeExerciseLPDetailed, rankFromLP, rankBadge, getStandards, lpLabel } from '../utils/ranks.js';
-import { PAGE_WORKOUT } from '../utils/nav.js';
+import { PAGE_WORKOUT, getViewDate } from '../utils/nav.js';
 
 let volumeChart = null;
 let impChart = null;
@@ -1848,22 +1848,12 @@ function isoOf(d) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(
 function parseISO(iso) { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d); }
 function mondayOf(d) { const x = new Date(d); const off = (x.getDay() + 6) % 7; x.setDate(x.getDate() - off); return x; }
 
-function earliestDataDate() {
-  const dates = [];
-  store.userData.workouts.forEach((w) => dates.push(w.date));
-  store.userData.weights.forEach((w) => dates.push(w.date));
-  Object.keys(store.userData.nutrition.byDate).forEach((d) => dates.push(d));
-  Object.keys(store.userData.steps.byDate).forEach((d) => dates.push(d));
-  if (!dates.length) return todayISO();
-  return dates.sort()[0];
-}
-
-function dayCell(iso, byDate, todayIso, dim) {
+function dayCell(iso, byDate, todayIso, dim, sel) {
   const ws = byDate[iso];
   const has = ws && ws.length;
   // Plusieurs séances le même jour : on cumule leurs muscles.
   const body = has ? bodyMapSVG(normalizeLoad(muscleLoad(ws.flatMap((w) => w.exercises))), { size: 64, gap: 4, cls: 'bm-cal' }) : '';
-  return el(`<button class="cal-day${has ? ' has-session' : ''}${iso === todayIso ? ' is-today' : ''}${dim ? ' dim' : ''}" ${has ? '' : 'disabled'} data-date="${iso}">
+  return el(`<button class="cal-day${has ? ' has-session' : ''}${iso === todayIso ? ' is-today' : ''}${sel ? ' is-sel' : ''}${dim ? ' dim' : ''}" ${has ? '' : 'disabled'} data-date="${iso}">
     ${body}
     <span class="cal-dnum">${Number(iso.slice(8))}</span>
   </button>`);
@@ -1871,15 +1861,15 @@ function dayCell(iso, byDate, todayIso, dim) {
 
 function renderTwoWeekCalendar(host) {
   const byDate = workoutsByDate();
-  const t = new Date();
-  const todayIso = isoOf(t);
-  const start = mondayOf(t);
+  const todayIso = isoOf(new Date());
+  const viewIso = getViewDate();
+  // Les deux semaines se terminent sur la semaine du jour consulté
+  const start = mondayOf(parseISO(viewIso));
   start.setDate(start.getDate() - 7); // lundi il y a deux semaines
 
   const card = el(`<div class="card card-glow">
     <div class="card-row" style="margin-bottom:8px">
       <h3 style="margin:0">Calendrier</h3>
-      <button class="btn btn-ghost btn-sm" id="cal-more">${icons.calendar} Voir plus</button>
     </div>
     <div class="cal-wd">${WD.map((d) => `<span>${d}</span>`).join('')}</div>
     <div class="cal-grid" id="cal-grid"></div>
@@ -1888,75 +1878,14 @@ function renderTwoWeekCalendar(host) {
   for (let i = 0; i < 14; i++) {
     const d = new Date(start); d.setDate(start.getDate() + i);
     const iso = isoOf(d);
-    grid.appendChild(dayCell(iso, byDate, todayIso, iso > todayIso));
+    grid.appendChild(dayCell(iso, byDate, todayIso, iso > todayIso, iso === viewIso && viewIso !== todayIso));
   }
   grid.addEventListener('click', (e) => {
     const b = e.target.closest('.cal-day'); if (!b || b.disabled) return;
     const ws = byDate[b.dataset.date]; if (!ws) return;
     openWorkoutDetail(ws[ws.length - 1]);
   });
-  card.querySelector('#cal-more').addEventListener('click', () => openFullCalendar());
   host.appendChild(card);
-}
-
-function monthGrid(year, month, byDate, todayIso) {
-  const first = new Date(year, month, 1);
-  const monthName = first.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
-  const offset = (first.getDay() + 6) % 7;
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const wrap = el(`<div class="cal-month">
-    <div class="cal-month-title">${monthName}</div>
-    <div class="cal-wd">${WD.map((d) => `<span>${d}</span>`).join('')}</div>
-    <div class="cal-grid"></div>
-  </div>`);
-  const grid = wrap.querySelector('.cal-grid');
-  for (let i = 0; i < offset; i++) grid.appendChild(el('<span class="cal-empty"></span>'));
-  for (let day = 1; day <= daysInMonth; day++) {
-    const iso = `${year}-${pad2(month + 1)}-${pad2(day)}`;
-    grid.appendChild(dayCell(iso, byDate, todayIso, iso > todayIso));
-  }
-  return wrap;
-}
-
-function openFullCalendar() {
-  const byDate = workoutsByDate();
-  const todayIso = todayISO();
-  const overlay = el(`<div class="picker-overlay cal-overlay">
-    <div class="cal-scroll" id="cal-scroll"></div>
-  </div>`);
-  openSheet({ title: 'Historique complet', content: overlay, variant: 'tall' });
-
-  const scroll = overlay.querySelector('#cal-scroll');
-  const start = parseISO(earliestDataDate());
-  const end = new Date();
-  const months = [];
-  let y = start.getFullYear(); let m = start.getMonth();
-  while (y < end.getFullYear() || (y === end.getFullYear() && m <= end.getMonth())) {
-    months.push([y, m]);
-    m++; if (m > 11) { m = 0; y++; }
-  }
-  // Les trois derniers mois tout de suite (l'écran s'ouvre sans attendre),
-  // les plus anciens ensuite, un par un, ajoutés au-dessus en gardant la
-  // position de lecture : chaque mois porte des dizaines de silhouettes.
-  // Liste en column-reverse : le défilement part naturellement du bas (mois
-  // en cours), sans scrollTop à régler. Les mois sont ajoutés du plus récent
-  // au plus ancien ; les anciens s'empilent au-dessus sans bouger la vue.
-  scroll.classList.add('cal-scroll-rev');
-  months.reverse();
-  months.splice(0, 3).forEach(([yy, mm]) => scroll.appendChild(monthGrid(yy, mm, byDate, todayIso)));
-  const more = () => {
-    if (!overlay.isConnected || !months.length) return;
-    const [yy, mm] = months.shift();
-    scroll.appendChild(monthGrid(yy, mm, byDate, todayIso));
-    setTimeout(more, 0);
-  };
-  setTimeout(more, 60);
-
-  scroll.addEventListener('click', (e) => {
-    const b = e.target.closest('.cal-day'); if (!b || b.disabled) return;
-    const ws = byDate[b.dataset.date]; if (!ws) return;
-    openWorkoutDetail(ws[ws.length - 1]);
-  });
 }
 
 function renderVolumeDashboard(host, rerender) {
@@ -2231,7 +2160,6 @@ export function render(container) {
 
   container.innerHTML = '';
   const root = el(`<div>
-    <div class="page-title"><h1>Entraînement</h1></div>
     <div id="calendar-host"></div>
     <div class="card">
       <div class="card-row collapse-head" id="routine-toggle" style="margin-bottom:8px;cursor:pointer">
@@ -2279,6 +2207,8 @@ export function render(container) {
 
   renderVolumeDashboard(root.querySelector('#volume-host'), rerender);
   renderTwoWeekCalendar(root.querySelector('#calendar-host'));
+  const wDates = new Set(store.userData.workouts.map((w) => w.date));
+  root.prepend(dateBar({ title: 'Entraînement', mark: (d) => (wDates.has(d) ? 'on' : ''), onChange: rerender }));
   root.querySelector('#btn-exo-browser').addEventListener('click', openExerciseBrowser);
 }
 

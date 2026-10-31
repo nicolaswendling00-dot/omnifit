@@ -5,7 +5,7 @@ import { render as renderWorkout, resumeActiveSession, refreshActiveSession } fr
 import { render as renderActivity } from './modules/activity.js';
 import { render as renderSettings, applyTheme } from './modules/settings.js';
 import { setStandards } from './utils/ranks.js';
-import { setNavigator } from './utils/nav.js';
+import { setNavigator, setDateListener } from './utils/nav.js';
 import { store, parseStepsPayload } from './utils/storage.js';
 
 const PAGES = [
@@ -82,6 +82,9 @@ function goTo(index) {
 // Les pages peuvent demander un changement d'onglet (ex. la carte Calories de
 // l'accueil ouvre Nutrition) sans connaître cet orchestrateur.
 setNavigator(goTo);
+// Un autre jour choisi dans un onglet vaut pour tous : les autres onglets
+// seront redessinés sur ce jour à leur prochain affichage.
+setDateListener(markAllStale);
 
 document.querySelectorAll('.nav-btn').forEach((btn, i) => {
   btn.addEventListener('click', () => { if (i !== currentPage) goTo(i); });
