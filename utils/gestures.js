@@ -8,6 +8,8 @@
 // l'app. Avec « réduire les animations » (ou sans matchMedia, cas des tests),
 // les gestes s'appliquent sans animation.
 
+import { createHolo } from './holo.js';
+
 const reduced = () => !window.matchMedia || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const now = () => performance.now();
@@ -565,16 +567,19 @@ export function reorderList(host, labels, { dragIcon = '' } = {}) {
 }
 
 // ============================================================
-// CARTE À RETOURNER (FlipCard)
+// CARTE À RETOURNER (FlipCard) + REFLET HOLOGRAPHIQUE (HoloCard)
 // ============================================================
 // Carte en 3D : un tap la retourne (ressort raideur 170, amortissement 20),
 // on peut aussi la faire tourner au doigt et la lancer, la vitesse décide de
-// la face qui reste. À la souris, elle s'incline vers le pointeur avec un
-// reflet qui suit. Son ombre s'affine quand la carte est de profil.
+// la face qui reste. Au repos, elle oscille doucement (comme HoloCard) pour
+// faire vivre le reflet ; à la souris, elle s'incline vers le pointeur. Son
+// ombre s'affine quand la carte est de profil. Pas d'agrandissement au toucher.
 //
 //   front, back : HTML des deux faces
+//   holo        : { art(w, h) -> Promise<canvas> } : le recto est redessiné
+//                 dans un canvas, sur lequel le shader pose le motif holographique
 // Renvoie l'élément .flip-card (à insérer), avec .flip() pour la retourner.
-export function flipCard({ front, back, label = 'Carte', width = 280, height = 400 } = {}) {
+export function flipCard({ front, back, label = 'Carte', width = 280, holo = null } = {}) {
   const card = document.createElement('div');
   card.className = 'flip-card';
   card.tabIndex = 0;
@@ -582,10 +587,9 @@ export function flipCard({ front, back, label = 'Carte', width = 280, height = 4
   card.setAttribute('aria-pressed', 'false');
   card.setAttribute('aria-label', `${label}. Toucher pour retourner`);
   card.style.setProperty('--fc-w', `${width}px`);
-  card.style.setProperty('--fc-h', `${height}px`);
   card.innerHTML = `<span class="flip-card__shadow" aria-hidden="true"></span>
     <div class="flip-card__rotor">
-      <div class="flip-card__face flip-card__face--front">${front}<span class="flip-card__glare" aria-hidden="true"></span></div>
+      <div class="flip-card__face flip-card__face--front">${front}${holo ? '<canvas class="flip-card__holo" aria-hidden="true"></canvas>' : ''}<span class="flip-card__glare" aria-hidden="true"></span></div>
       <div class="flip-card__face flip-card__face--back" aria-hidden="true">${back}<span class="flip-card__glare" aria-hidden="true"></span></div>
     </div>`;
   const rotor = card.querySelector('.flip-card__rotor');
@@ -594,21 +598,22 @@ export function flipCard({ front, back, label = 'Carte', width = 280, height = 4
   const snap = (deg) => Math.round(deg / 180) * 180;
   const isBack = (deg) => Math.abs(Math.round(deg / 180)) % 2 === 1;
   let shown = false;
-  let target = 0;
+  // Oscillation au repos (amplitude 0..1) et lumière du reflet
+  const drift = { x: 0, y: 0, amp: 0, clock: Math.random() * 40 };
+  const light = { x: 0.36, y: 0.26, tx: 0.36, ty: 0.26 };
+  let hovering = false;
   const paint = () => {
-    rotor.style.transform = `perspective(1100px) scale(${lift.x}) rotateX(${tx.x}deg) rotateY(${turn.x + ty.x}deg)`;
+    rotor.style.transform = `perspective(1100px) rotateX(${tx.x + drift.x}deg) rotateY(${turn.x + ty.x + drift.y}deg)`;
     const f = Math.abs(Math.cos((turn.x * Math.PI) / 180));
-    shadow.style.transform = `scaleX(${0.08 + 0.92 * f})`;
+    shadow.style.transform = `translate(${-(ty.x + drift.y) * 0.7}px, ${(tx.x + drift.x) * 0.7}px) scaleX(${0.08 + 0.92 * f})`;
     shadow.style.opacity = String(0.1 + 0.9 * f * f);
     rotor.style.setProperty('--fc-sheen', String(sheen.x));
   };
-  const turn = channel(paint); const tx = channel(paint); const ty = channel(paint);
-  const lift = channel(paint, 1); const sheen = channel(paint);
+  const turn = channel(paint); const tx = channel(paint); const ty = channel(paint); const sheen = channel(paint);
   const TILT = { stiffness: 400, damping: 40 };
   const LIFT = { stiffness: 320, damping: 26 };
 
   const settle = (to, velocity = 0) => {
-    target = to;
     turn.to(to, { stiffness: 170, damping: 20, velocity });
     const next = isBack(to);
     if (next === shown) return;
@@ -618,18 +623,25 @@ export function flipCard({ front, back, label = 'Carte', width = 280, height = 4
     faces[1].setAttribute('aria-hidden', String(!shown));
   };
   card.flip = () => { const base = snap(turn.x); settle(isBack(base) ? base - 180 : base + 180); };
-  const rest = () => { tx.to(0, TILT); ty.to(0, TILT); sheen.to(0, LIFT); lift.to(1, LIFT); };
+  const rest = () => { tx.to(0, TILT); ty.to(0, TILT); sheen.to(0, LIFT); };
+  const aimLight = (e) => {
+    const r = card.getBoundingClientRect();
+    light.tx = clamp((e.clientX - r.left) / r.width, 0, 1);
+    light.ty = clamp((e.clientY - r.top) / r.height, 0, 1);
+    return light;
+  };
 
   let g = null;
   card.addEventListener('pointerdown', (e) => {
     if (e.button !== 0 || g) return;
     try { card.setPointerCapture(e.pointerId); } catch (_) { /* noop */ }
     turn.stop();
+    aimLight(e);
     g = { id: e.pointerId, x: e.clientX, base: turn.x, moved: false, slop: e.pointerType === 'touch' ? 8 : 4, hist: [] };
-    lift.to(1.03, LIFT);
   });
   card.addEventListener('pointermove', (e) => {
     if (g && g.id === e.pointerId) {
+      aimLight(e); // le reflet suit le doigt
       const d = e.clientX - g.x;
       if (!g.moved) {
         if (Math.abs(d) < g.slop || reduced()) return;
@@ -646,12 +658,11 @@ export function flipCard({ front, back, label = 'Carte', width = 280, height = 4
     }
     // Inclinaison vers le pointeur (souris seulement, comme l'original)
     if (e.pointerType === 'touch' || reduced()) return;
-    const r = card.getBoundingClientRect();
-    const px = clamp((e.clientX - r.left) / r.width, 0, 1);
-    const py = clamp((e.clientY - r.top) / r.height, 0, 1);
-    tx.to((0.5 - py) * 24, TILT); ty.to((px - 0.5) * 24, TILT);
-    rotor.style.setProperty('--fc-gx', `${px * 100}%`);
-    rotor.style.setProperty('--fc-gy', `${py * 100}%`);
+    hovering = true;
+    const p = aimLight(e);
+    tx.to((0.5 - p.ty) * 24, TILT); ty.to((p.tx - 0.5) * 24, TILT);
+    rotor.style.setProperty('--fc-gx', `${p.tx * 100}%`);
+    rotor.style.setProperty('--fc-gy', `${p.ty * 100}%`);
     sheen.to(1, LIFT);
   });
   const release = (e, cancelled) => {
@@ -659,7 +670,7 @@ export function flipCard({ front, back, label = 'Carte', width = 280, height = 4
     const cur = g;
     g = null;
     delete card.dataset.dragging;
-    if (e.pointerType === 'touch' || !card.matches(':hover')) rest(); else lift.to(1.03, LIFT);
+    if (e.pointerType === 'touch' || !card.matches(':hover')) { hovering = false; rest(); }
     if (!cur.moved) { if (!cancelled) card.flip(); return; }
     const here = turn.x;
     let v = 0;
@@ -669,12 +680,170 @@ export function flipCard({ front, back, label = 'Carte', width = 280, height = 4
   };
   card.addEventListener('pointerup', (e) => release(e, false));
   card.addEventListener('pointercancel', (e) => release(e, true));
-  card.addEventListener('pointerleave', () => { if (!g) rest(); });
+  card.addEventListener('pointerleave', () => { if (!g) { hovering = false; rest(); } });
   card.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' && e.key !== ' ') return;
     e.preventDefault();
     if (!e.repeat) card.flip();
   });
   paint();
+
+  // Boucle de vie de la carte : oscillation au repos et reflet holographique.
+  // Elle tourne tant que la carte est affichée, et s'arrête quand on la retire.
+  let gl = null; let artPending = false; let seen = false; let last = now();
+  const live = (t) => {
+    if (!card.isConnected) { if (seen || t - last > 3000) return; window.requestAnimationFrame(live); return; }
+    seen = true;
+    const dt = Math.min(0.05, (t - last) / 1000) || 0.016;
+    last = t;
+    const calm = !g && !hovering && !reduced();
+    drift.amp += ((calm ? 1 : 0) - drift.amp) * Math.min(1, dt * 3);
+    drift.clock += dt * (calm ? 1 : 0);
+    drift.x = Math.sin(drift.clock * 0.7) * 14 * 0.28 * drift.amp;
+    drift.y = Math.sin(drift.clock * 0.53 + 1.2) * 14 * 0.4 * drift.amp;
+    if (calm) {
+      light.tx = 0.5 + Math.sin(drift.clock * 0.41) * 0.42;
+      light.ty = 0.38 + Math.sin(drift.clock * 0.33 + 0.6) * 0.3;
+    }
+    light.x += (light.tx - light.x) * Math.min(1, dt * 8);
+    light.y += (light.ty - light.y) * Math.min(1, dt * 8);
+    paint();
+    if (holo) {
+      const cv = faces[0].querySelector('.flip-card__holo');
+      if (!gl && !artPending && cv.clientWidth) {
+        artPending = true;
+        gl = createHolo(cv);
+        if (gl) {
+          holo.art(cv.clientWidth, cv.clientHeight).then((art) => { gl.setArt(art); card.dataset.holo = 'ready'; }).catch(() => {});
+        }
+      }
+      // Face visible seulement (inutile de dessiner le recto quand il est de dos)
+      if (gl && Math.cos(((turn.x + ty.x + drift.y) * Math.PI) / 180) > -0.05) {
+        gl.draw({ tiltX: tx.x + drift.x, tiltY: turn.x + ty.x + drift.y, lightX: light.x, lightY: light.y });
+      }
+    }
+    window.requestAnimationFrame(live);
+  };
+  window.requestAnimationFrame(live);
   return card;
+}
+
+// ============================================================
+// COMPTEUR À ROULEAUX (Counter)
+// ============================================================
+// Chaque chiffre est une bande 0..9 qui défile verticalement par ressort
+// (durée 0,7 s, rebond 0,2), les unités d'abord puis les dizaines 40 ms plus
+// tard. Les bords du rouleau s'estompent (masque). Pour une durée « mm:ss »,
+// le chiffre des dizaines de secondes ne compte que jusqu'à 5 : il passe de 5
+// à 0 sans dérouler 6, 7, 8, 9.
+//   host : élément qui contenait le texte ; renvoie { set(texte) }
+export function rollingCounter(host) {
+  host.classList.add('roll');
+  host.textContent = '';
+  const sr = document.createElement('span');
+  sr.className = 'roll-sr';
+  const row = document.createElement('span');
+  row.className = 'roll-row';
+  row.setAttribute('aria-hidden', 'true');
+  host.append(sr, row);
+  let shape = '';
+  let slots = [];
+  let value = null;
+  const wrap = (off, base) => (((off + base / 2) % base) + base) % base - base / 2;
+
+  const build = (text) => {
+    row.textContent = '';
+    const time = /^\d+:\d\d$/.test(text);
+    slots = [...text].map((ch, i) => {
+      const el = document.createElement('span');
+      if (!/\d/.test(ch)) { el.className = 'roll-sym'; el.textContent = ch; row.appendChild(el); return null; }
+      const base = time && text[i - 1] === ':' ? 6 : 10;
+      el.className = 'roll-digit';
+      el.innerHTML = `<span class="roll-sizer">0</span><span class="roll-window">${Array.from({ length: base }, (_, n) => `<span class="roll-num">${n}</span>`).join('')}</span>`;
+      row.appendChild(el);
+      const nums = [...el.querySelectorAll('.roll-num')];
+      const s = { base, digit: +ch };
+      s.pos = channel((p) => { nums.forEach((nEl, n) => { nEl.style.transform = `translateY(${(wrap(n - p, base) * 100).toFixed(2)}%)`; }); }, +ch);
+      s.pos.jump(+ch);
+      return s;
+    });
+  };
+  return {
+    set(text) {
+      text = String(text);
+      sr.textContent = text;
+      const nextShape = text.replace(/\d/g, '0');
+      const num = parseInt(text.replace(/\D/g, ''), 10) || 0;
+      if (nextShape !== shape) { shape = nextShape; value = num; build(text); return; }
+      const up = num >= value;
+      value = num;
+      // Des unités vers les chiffres de gauche, avec un léger décalage
+      let order = 0;
+      for (let i = text.length - 1; i >= 0; i--) {
+        const s = slots[i];
+        if (!s) continue;
+        const d = +text[i];
+        if (d === s.digit) continue;
+        const raw = (((d - s.digit) % s.base) + s.base) % s.base;
+        const step = up ? raw : raw - s.base;
+        s.digit = d;
+        const target = s.pos.target + step;
+        setTimeout(() => s.pos.to(target, { duration: 0.7, bounce: 0.2 }), order++ * 40);
+      }
+    },
+  };
+}
+
+// ============================================================
+// LISTES ANIMÉES (AnimatedList)
+// ============================================================
+// Les lignes des listes apparaissent en « pop » (petit agrandissement depuis
+// 80 %, montée de 12 px, ressort), en cascade de 50 ms. Une ligne qui sort à
+// moitié de la zone visible en défilant se rétracte vers le haut ou le bas,
+// et ressurgit en revenant. Appliqué automatiquement aux lignes connues de
+// l'app ; les propriétés `translate` / `scale` sont utilisées pour ne pas
+// toucher au `transform` des lignes glissables.
+const LIST_ITEMS = '.meal-row, .hist-item, .exo-swipe-row, .exo-search-item, .swipe-row, .wd-exo, .ed-hist-item, .ns-item, .recap-row, .mus-exo-row, .ladder-row, .routine-exos > li';
+let listIO = null;
+let popBatch = 0;
+function popState(el, state) {
+  if (el.dataset.al === state) return;
+  el.dataset.al = state;
+}
+function watchListItem(el) {
+  if (el._al || !listIO) return;
+  // Une ligne dans une autre ligne déjà animée (bouton dans une ligne glissable) : on laisse le parent.
+  if (el.parentElement && el.parentElement.closest(LIST_ITEMS)) return;
+  el._al = true;
+  el.dataset.al = 'below';
+  listIO.observe(el);
+}
+if (typeof window !== 'undefined' && window.IntersectionObserver && document.body && !reduced()) {
+  listIO = new window.IntersectionObserver((entries) => {
+    const batch = ++popBatch;
+    let order = 0;
+    for (const e of entries) {
+      const el = e.target;
+      if (!el.isConnected) { listIO.unobserve(el); continue; }
+      const r = e.boundingClientRect;
+      // Hors champ sur le côté (onglet voisin du carrousel) : on ne touche à rien.
+      if (!e.isIntersecting && (r.right <= 0 || r.left >= window.innerWidth)) continue;
+      if (e.isIntersecting) {
+        el.style.transitionDelay = `${Math.min(order++, 10) * 50}ms`;
+        popState(el, 'in');
+        setTimeout(() => { if (popBatch === batch || el.dataset.al === 'in') el.style.transitionDelay = ''; }, 700);
+      } else {
+        el.style.transitionDelay = '';
+        popState(el, r.top + r.height / 2 < window.innerHeight / 2 ? 'above' : 'below');
+      }
+    }
+  }, { threshold: 0.5 });
+  const scan = (root) => {
+    if (root.nodeType !== 1) return;
+    if (root.matches(LIST_ITEMS)) watchListItem(root);
+    root.querySelectorAll(LIST_ITEMS).forEach(watchListItem);
+  };
+  scan(document.body);
+  new window.MutationObserver((muts) => { for (const m of muts) m.addedNodes.forEach(scan); })
+    .observe(document.body, { childList: true, subtree: true });
 }

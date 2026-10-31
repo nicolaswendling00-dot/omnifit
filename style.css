@@ -1416,7 +1416,7 @@ button.wd-exo { display: block; width: 100%; text-align: left; border: none; col
 .rk-scrim { flex-direction: column; gap: 18px; }
 .rk-stage { will-change: transform, opacity; }
 .flip-card {
-  position: relative; display: block; width: min(var(--fc-w), 78vw); aspect-ratio: 7 / 10; max-height: 70vh;
+  position: relative; display: block; width: min(var(--fc-w), 78vw, 46vh); aspect-ratio: 63 / 88;
   border-radius: 22px; outline: none; cursor: pointer; touch-action: pan-y;
   user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
 }
@@ -1449,3 +1449,43 @@ button.wd-exo { display: block; width: 100%; text-align: left; border: none; col
 .rk-next { font-size: 0.76rem; color: var(--text-2); margin-bottom: 8px; }
 .rk-back .grd-stats { margin-top: auto; }
 .rk-hint { font-size: 0.7rem; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.08em; }
+
+/* Historique : démarre en bas (mois en cours) ; l'espaceur garde les mois
+   en haut quand ils ne remplissent pas l'écran. */
+.cal-scroll-rev { display: flex; flex-direction: column-reverse; }
+.cal-scroll-rev::before { content: ""; flex: 1 0 0; }
+
+/* Reflet holographique du recto (HoloCard) : le canvas recouvre la face HTML
+   une fois l'image prête. */
+.flip-card__holo { position: absolute; inset: 0; width: 100%; height: 100%; display: block; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
+.flip-card[data-holo="ready"] .flip-card__holo { opacity: 1; }
+.flip-card { aspect-ratio: 63 / 88; }
+
+/* Compteur à rouleaux (Counter) */
+.roll { display: inline-flex; align-items: baseline; position: relative; font-variant-numeric: tabular-nums; }
+.roll-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.roll-row { display: inline-flex; align-items: baseline; }
+.roll-digit { position: relative; display: inline-block; text-align: center; }
+.roll-sizer { visibility: hidden; }
+.roll-window {
+  position: absolute; inset: -0.3em 0; overflow: hidden; pointer-events: none;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 0.3em, #000 calc(100% - 0.3em), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 0.3em, #000 calc(100% - 0.3em), transparent 100%);
+}
+.roll-num { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; will-change: transform; }
+.roll-sym { display: inline-block; }
+
+/* Listes animées (AnimatedList) : apparition en pop, ressort */
+[data-al] {
+  transition: translate 620ms cubic-bezier(0.34, 1.4, 0.64, 1), scale 620ms cubic-bezier(0.34, 1.4, 0.64, 1), opacity 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@supports (transition-timing-function: linear(0, 1)) {
+  [data-al] {
+    transition: translate 620ms linear(0, 0.0603, 0.2033, 0.3821, 0.5633, 0.7258, 0.8584, 0.9574, 1.0242, 1.0634, 1.0809, 1.0828, 1.0747, 1.0613, 1.046, 1.0313, 1.0186, 1.0085, 1.0012, 0.9965, 0.994, 0.9931, 0.9933, 0.9941, 0.9953, 0.9966, 0.9978, 0.9988, 1),
+      scale 620ms linear(0, 0.0603, 0.2033, 0.3821, 0.5633, 0.7258, 0.8584, 0.9574, 1.0242, 1.0634, 1.0809, 1.0828, 1.0747, 1.0613, 1.046, 1.0313, 1.0186, 1.0085, 1.0012, 0.9965, 0.994, 0.9931, 0.9933, 0.9941, 0.9953, 0.9966, 0.9978, 0.9988, 1),
+      opacity 300ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+[data-al="below"] { translate: 0 12px; scale: 0.8; opacity: 0; }
+[data-al="above"] { translate: 0 -12px; scale: 0.8; opacity: 0; }
+@media (prefers-reduced-motion: reduce) { [data-al] { transition: none; translate: none; scale: none; opacity: 1; } }

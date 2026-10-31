@@ -163,6 +163,36 @@ assert(mealSheet && mealSheet.querySelectorAll('#m-cat button').length === 4, 'A
 assert(mealSheet.querySelector('#m-fiber'), 'Ajout repas : champ fibres optionnel');
 clearOverlays();
 
+console.log('== v6.12 : compteur a rouleaux, carte holographique, calendrier en bas ==');
+{
+  const gs = await import('./utils/gestures.js');
+  const host = document.createElement('span');
+  host.textContent = '00:00';
+  document.body.appendChild(host);
+  const c = gs.rollingCounter(host);
+  c.set('00:59');
+  assert(host.querySelector('.roll-sr').textContent === '00:59' && host.querySelectorAll('.roll-digit').length === 4, 'Compteur : 4 rouleaux, valeur lisible');
+  const tens = host.querySelectorAll('.roll-digit')[2];
+  assert(tens.querySelectorAll('.roll-num').length === 6, 'Compteur : dizaines de secondes de 0 a 5');
+  c.set('01:00');
+  assert(host.querySelector('.roll-sr').textContent === '01:00', 'Compteur : passage a la minute');
+  c.set('1:00:00');
+  assert(host.querySelectorAll('.roll-digit').length === 5, 'Compteur : nouveau format reconstruit');
+  host.remove();
+  const wsrc = fs.readFileSync(new URL('./modules/workout.js', import.meta.url), 'utf8');
+  assert(/rollingCounter\(overlay\.querySelector\('#s-chrono'\)\)/.test(wsrc), 'Seance : chrono en compteur a rouleaux');
+  assert(/cal-scroll-rev/.test(wsrc) && !/scroll\.scrollTop = scroll\.scrollHeight/.test(wsrc), 'Calendrier : ouvert en bas sans defilement force');
+  home.render(pages.home);
+  pages.home.querySelector('#gr-card').click();
+  const fc = document.querySelector('.rk-scrim .flip-card');
+  assert(fc.querySelector('canvas.flip-card__holo'), 'Rang : couche holographique');
+  fc.dispatchEvent(new window.PointerEvent('pointerdown', { pointerId: 3, button: 0, bubbles: true, clientX: 10, clientY: 10 }));
+  assert(!/scale\(/.test(fc.querySelector('.flip-card__rotor').style.transform), 'Rang : la carte ne grandit plus au toucher');
+  fc.dispatchEvent(new window.PointerEvent('pointercancel', { pointerId: 3, bubbles: true }));
+  document.querySelector('.rk-scrim')._close();
+  await new Promise((r) => setTimeout(r, 300));
+}
+
 console.log('== v6.11 : navigation elastique, carte de rang, calendrier rapide ==');
 {
   const nav = document.getElementById('bottom-nav');

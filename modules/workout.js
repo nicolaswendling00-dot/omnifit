@@ -3,7 +3,7 @@
 // détail exo (muscles, historique, repos perso), coefficients d'amélioration.
 import { store, todayISO } from '../utils/storage.js';
 import { EXERCISES, MUSCLES, muscleLabel, AKA, EQUIPMENT, equipLabel } from '../data/exercises.js';
-import { reorderList } from '../utils/gestures.js';
+import { reorderList, rollingCounter } from '../utils/gestures.js';
 import { formatTime, workoutMuscleVolume, weeklySetsByMuscle, muscleAttenuation } from '../utils/math.js';
 import { el, esc, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, fmtDateFull, celebrateLP, makeChart, normalizeStr, closeAllOverlays, attachSwipeToDelete } from '../utils/ui.js';
 import { lineChartOptions, lineDataset } from '../utils/charts.js';
@@ -748,8 +748,10 @@ function startRestTimer(exerciseId) {
 
   bar.classList.add('active');
   bar.classList.remove('pulse');
+  const rtEl = bar.querySelector('.rt-time');
+  const rtCounter = rtEl._roll || (rtEl._roll = rollingCounter(rtEl));
   const render = () => {
-    bar.querySelector('.rt-time').textContent = formatTime(restRemaining);
+    rtCounter.set(formatTime(restRemaining));
     bar.querySelector('.progress-bar > div').style.width = `${Math.max(0, (restRemaining / total) * 100)}%`;
   };
   render();
@@ -1304,11 +1306,12 @@ function openSession(rerenderPage, fromRoutine = null, editWorkout = null, resum
   document.body.appendChild(overlay);
   document.body.classList.add('overlay-open');
 
-  const chronoEl = overlay.querySelector('#s-chrono');
+  // Chrono en compteur à rouleaux : chaque seconde, le chiffre défile.
+  const chrono = rollingCounter(overlay.querySelector('#s-chrono'));
   const tick = () => {
     if (!session) return;
     const secs = elapsedSeconds();
-    chronoEl.textContent = formatTime(secs);
+    chrono.set(formatTime(secs));
     const msTime = document.getElementById('ms-time');
     if (msTime) msTime.textContent = formatTime(secs);
     const msRest = document.getElementById('ms-rest');
@@ -1952,15 +1955,16 @@ function openFullCalendar() {
   // Les trois derniers mois tout de suite (l'écran s'ouvre sans attendre),
   // les plus anciens ensuite, un par un, ajoutés au-dessus en gardant la
   // position de lecture : chaque mois porte des dizaines de silhouettes.
-  const recent = months.splice(-3);
-  recent.forEach(([yy, mm]) => scroll.appendChild(monthGrid(yy, mm, byDate, todayIso)));
-  scroll.scrollTop = scroll.scrollHeight;
+  // Liste en column-reverse : le défilement part naturellement du bas (mois
+  // en cours), sans scrollTop à régler. Les mois sont ajoutés du plus récent
+  // au plus ancien ; les anciens s'empilent au-dessus sans bouger la vue.
+  scroll.classList.add('cal-scroll-rev');
+  months.reverse();
+  months.splice(0, 3).forEach(([yy, mm]) => scroll.appendChild(monthGrid(yy, mm, byDate, todayIso)));
   const more = () => {
     if (!overlay.isConnected || !months.length) return;
-    const [yy, mm] = months.pop();
-    const h = scroll.scrollHeight;
-    scroll.prepend(monthGrid(yy, mm, byDate, todayIso));
-    scroll.scrollTop += scroll.scrollHeight - h;
+    const [yy, mm] = months.shift();
+    scroll.appendChild(monthGrid(yy, mm, byDate, todayIso));
     setTimeout(more, 0);
   };
   setTimeout(more, 60);

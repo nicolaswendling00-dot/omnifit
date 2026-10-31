@@ -254,6 +254,42 @@ function renderWeightChart(canvas) {
   weightChart = makeChart(canvas, { type: 'line', data: { labels, datasets }, options }, weightChart);
 }
 
+// Recto de la carte de rang redessiné dans un canvas : c'est l'image sur
+// laquelle le shader holographique pose son motif. Mêmes éléments que la face
+// HTML (fond, lueur et liseré à la couleur du rang, badge, nom, LP).
+async function rankCardArt(rank, label, w, h) {
+  const k = Math.min(window.devicePixelRatio || 1, 2);
+  const cv = document.createElement('canvas');
+  cv.width = Math.round(w * k); cv.height = Math.round(h * k);
+  const ctx = cv.getContext('2d');
+  ctx.scale(k, k);
+  const css = getComputedStyle(document.body);
+  ctx.fillStyle = css.getPropertyValue('--surface').trim() || '#0C0E13';
+  ctx.fillRect(0, 0, w, h);
+  const glow = ctx.createRadialGradient(w / 2, 0, 0, w / 2, 0, h * 0.7);
+  glow.addColorStop(0, rank.color + '38');
+  glow.addColorStop(1, rank.color + '00');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = rank.color;
+  ctx.fillRect(22, 0, w - 44, 3);
+  const img = new Image();
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(rankBadge(rank.id, 400));
+  await img.decode();
+  const b = Math.min(200, w * 0.62);
+  ctx.drawImage(img, (w - b) / 2, h * 0.47 - b * 0.62, b, b);
+  try { await document.fonts.load('800 20px Archivo'); } catch (_) { /* police système */ }
+  ctx.textAlign = 'center';
+  if ('fontStretch' in ctx) ctx.fontStretch = 'semi-expanded';
+  ctx.fillStyle = rank.color;
+  ctx.font = `800 ${Math.round(w * 0.1)}px Archivo, sans-serif`;
+  ctx.fillText(label.toUpperCase(), w / 2, h * 0.47 + b * 0.5);
+  ctx.fillStyle = css.getPropertyValue('--text').trim() || '#F4F6FA';
+  ctx.font = `800 ${Math.round(w * 0.066)}px Archivo, sans-serif`;
+  ctx.fillText(lpLabel(rank), w / 2, h * 0.47 + b * 0.5 + w * 0.1);
+  return cv;
+}
+
 // Rang global : une carte au format carte à jouer, posée au centre de
 // l'écran. Recto : le badge, le nom du rang et les LP. Verso : le détail.
 // Toucher la carte la retourne ; toucher à côté (ou Échap) la referme.
@@ -262,6 +298,7 @@ function openGlobalRankModal(gr) {
   const pct = gr.rank.lpNeeded ? Math.round((gr.rank.lp / gr.rank.lpNeeded) * 100) : 100;
   const card = flipCard({
     label: `Rang global ${label}`,
+    holo: { art: (w, h) => rankCardArt(gr.rank, label, w, h) },
     front: `<div class="rk-face" style="--rk:${gr.rank.color}">
       <div class="rk-badge">${rankBadge(gr.rank.id, 200)}</div>
       <div class="rk-name">${label}</div>
