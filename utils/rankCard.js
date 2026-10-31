@@ -53,7 +53,7 @@ async function rankCardArt(rank, label, title, w, h) {
   if (title) {
     ctx.fillStyle = text;
     ctx.font = `700 ${Math.round(w * 0.066)}px Archivo, sans-serif`;
-    ctx.fillText(title, w / 2, top - 10, w - 40);
+    ctx.fillText(title, w / 2, top - 14, w - 40);
   }
   ctx.fillStyle = rank.color;
   ctx.font = `800 ${Math.round(w * 0.1)}px Archivo, sans-serif`;
@@ -68,7 +68,7 @@ async function rankCardArt(rank, label, title, w, h) {
 // holo : effet holographique au recto. back : HTML du verso.
 export function openRankCard({ rank, label, title = '', ariaLabel = label, holo = false, back = brandBack() }) {
   const color = rank ? rank.color : 'var(--text-3)';
-  const front = `<div class="rk-face" style="--rk:${color}">
+  const front = `<div class="rk-face${title ? ' rk-face--titled' : ''}" style="--rk:${color}">
     ${logoMark('rk-logo')}
     ${title ? `<div class="rk-title">${esc(title)}</div>` : ''}
     ${rank ? `<div class="rk-badge">${rankBadge(rank.id, 200)}</div>

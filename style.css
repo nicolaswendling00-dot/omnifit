@@ -1469,6 +1469,9 @@ button.wd-exo { display: block; width: 100%; text-align: left; border: none; col
 .rk-hint { font-size: 0.86rem; font-weight: 600; color: var(--text-3); }
 .rk-face { position: relative; }
 .rk-logo { position: absolute; top: 18px; left: 50%; width: 36px; height: auto; margin-left: -18px; color: var(--text); }
+/* Carte d'exercice : la zone du logo reste libre, le nom de l'exercice passe dessous */
+.rk-face--titled { padding-top: 62px; }
+.rk-face--titled .rk-badge svg { width: min(160px, 42vw); }
 .rk-title { font-size: 1.05rem; font-weight: 700; font-stretch: var(--wide); color: var(--text); line-height: 1.2; max-width: 100%; }
 /* Dos de carte : le logo au centre, reflets bleu et violet (direction artistique du logo) */
 .rk-brand {
