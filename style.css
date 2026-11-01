@@ -1533,7 +1533,10 @@ button.wd-exo { display: block; width: 100%; text-align: left; border: none; col
 @media (prefers-reduced-motion: reduce) { [data-al] { transition: none; translate: none; scale: none; opacity: 1; } }
 
 /* v7.1 : section repliée, l'en-tête reste centré (plus de marge du bas) */
-.card.collapsed > .collapse-head { margin-bottom: 0 !important; }
+/* L'écart sous le titre vit DANS la partie repliable : il disparaît avec elle,
+   au lieu de sauter d'un coup et de faire remonter le contenu */
+.collapse-head { margin-bottom: 0; }
+.collapse-body::before { content: ""; display: block; height: 8px; }
 /* Flèche et nom du type de repas sur le même axe */
 .meal-cat-head > span:first-child { display: inline-flex; align-items: center; gap: 6px; }
 /* Anneaux : remplissage animé en 0,6 s */

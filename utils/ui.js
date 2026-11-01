@@ -669,3 +669,19 @@ export function openDayPicker(anchor, { mark = null, onPick }) {
   });
   return { close };
 }
+
+// Ouvre ou ferme une section repliable (.card > .collapse-body) en animant sa
+// vraie hauteur : partir d'un plafond de 1600 px laissait l'animation à l'arrêt
+// pendant un moment, puis la refermait d'un coup.
+export function setCollapsed(card, collapsed) {
+  const body = card.querySelector('.collapse-body');
+  if (!body || reducedMotion()) { card.classList.toggle('collapsed', collapsed); return; }
+  body.style.maxHeight = `${body.offsetHeight}px`; // hauteur visible de départ
+  void body.offsetHeight;
+  card.classList.toggle('collapsed', collapsed);
+  body.style.maxHeight = collapsed ? '0px' : `${body.scrollHeight}px`;
+  body.addEventListener('transitionend', () => {
+    // Ouverte : on rend la main au CSS, le contenu peut encore changer de taille
+    if (!card.classList.contains('collapsed')) body.style.maxHeight = '';
+  }, { once: true });
+}

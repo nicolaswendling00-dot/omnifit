@@ -5,7 +5,7 @@ import { store, todayISO } from '../utils/storage.js';
 import { EXERCISES, MUSCLES, muscleLabel, AKA, EQUIPMENT, equipLabel } from '../data/exercises.js';
 import { reorderList, rollingCounter } from '../utils/gestures.js';
 import { formatTime, workoutMuscleVolume, weeklySetsByMuscle, muscleAttenuation } from '../utils/math.js';
-import { el, esc, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, fmtDateFull, celebrateLP, makeChart, normalizeStr, closeAllOverlays, attachSwipeToDelete, slideAway, pageFab, dateBar } from '../utils/ui.js';
+import { el, esc, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, fmtDateFull, celebrateLP, makeChart, normalizeStr, closeAllOverlays, attachSwipeToDelete, slideAway, pageFab, dateBar, setCollapsed } from '../utils/ui.js';
 import { lineChartOptions, lineDataset } from '../utils/charts.js';
 import { bodyMapSVG } from '../utils/bodyMap.js';
 import { computeExerciseLP, computeExerciseLPDetailed, rankFromLP, rankBadge, getStandards } from '../utils/ranks.js';
@@ -1898,7 +1898,7 @@ function renderVolumeDashboard(host, rerender) {
   for (const r of rows) if (r.goal) progress[r.m.id] = Math.min(1, r.done / r.goal);
 
   const card = el(`<div class="card${volumeOpen ? '' : ' collapsed'}">
-    <div class="card-row collapse-head" id="vol-toggle" style="margin-bottom:6px;cursor:pointer">
+    <div class="card-row collapse-head" id="vol-toggle" style="cursor:pointer">
       <h3 style="margin:0;display:flex;align-items:center;gap:6px"><span class="collapse-caret">${icons.chevron}</span> Volume hebdo</h3>
       <button class="btn btn-secondary btn-sm" id="vol-goals-btn">${icons.edit} Objectifs</button>
     </div>
@@ -1932,7 +1932,7 @@ function renderVolumeDashboard(host, rerender) {
     const current = store.userData.settings.volumeSectionOpen !== false;
     const next = !current;
     store.saveUserData({ settings: { volumeSectionOpen: next } });
-    card.classList.toggle('collapsed', !next);
+    setCollapsed(card, !next);
   });
 
   card.querySelector('#vol-table').addEventListener('click', (e) => {
@@ -2160,7 +2160,7 @@ export function render(container) {
   const root = el(`<div>
     <div id="calendar-host"></div>
     <div class="card">
-      <div class="card-row collapse-head" id="routine-toggle" style="margin-bottom:8px;cursor:pointer">
+      <div class="card-row collapse-head" id="routine-toggle" style="cursor:pointer">
         <h3 style="margin:0;display:flex;align-items:center;gap:6px"><span class="collapse-caret">${icons.chevron}</span> Routines <span class="muted num">${routines.length}</span></h3>
         <button class="btn btn-secondary btn-sm" id="btn-new-routine">${icons.plus}</button>
       </div>
@@ -2200,7 +2200,7 @@ export function render(container) {
   root.querySelector('#routine-toggle').addEventListener('click', (e) => {
     if (e.target.closest('#btn-new-routine')) return;
     routinesOpen = !routinesOpen;
-    rtCard.classList.toggle('collapsed', !routinesOpen);
+    setCollapsed(rtCard, !routinesOpen);
   });
 
   renderVolumeDashboard(root.querySelector('#volume-host'), rerender);

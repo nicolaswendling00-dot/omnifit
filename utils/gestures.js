@@ -435,22 +435,19 @@ export function attachSwipeToDelete(list, { rowSelector, contentSelector, width 
     }
   }, { passive: false });
 
-  // Correspondance doigt -> position, avec élastique avant 0, après le tiroir
-  // et un palier de résistance jusqu'au seuil de suppression.
+  // Correspondance doigt -> position : la ligne suit le doigt jusqu'au seuil
+  // de suppression (60 % de la largeur), puis devient élastique. Plus de palier
+  // de résistance : il fallait glisser sur ~90 % de la ligne pour supprimer.
   function map(raw, Wd, C) {
     const c = 0.55;
     if (raw < 0) return rubber(raw, Wd, c);
-    if (raw <= D) return raw;
-    const knee = D + (C - D) / c;
-    return raw <= knee ? D + c * (raw - D) : C + rubber(raw - knee, Wd, c);
+    return raw <= C ? raw : C + rubber(raw - C, Wd, c);
   }
   function inv(ex, Wd, C) {
     const c = 0.55;
     const un = (y) => (y * Wd) / (c * Math.max(1, Wd - Math.abs(y)));
     if (ex < 0) return un(ex);
-    if (ex <= D) return ex;
-    const knee = D + (C - D) / c;
-    return ex <= C ? D + (ex - D) / c : knee + un(ex - C);
+    return ex <= C ? ex : C + un(ex - C);
   }
 
   const end = () => {
