@@ -1480,7 +1480,7 @@ export function renderCoachCard(rerender) {
   const card = el(`<div class="card coach-card coach-${tone}">
     <div class="coach-head">
       <span class="coach-title">Coach</span>
-      <span class="coach-rate">${rateStr}</span>
+      <span class="coach-rate${rate < 0 ? ' coach-down' : rate > 0 ? ' coach-up' : ''}">${rateStr}</span>
     </div>
     <div class="coach-msg">${msg}</div>
     ${maintLine ? `<div class="coach-maint">${maintLine}</div>` : ''}

@@ -520,7 +520,7 @@ function coachDays() {
     const tone = full ? ['good', 'warn'].find((t) => full.classList.contains(`coach-${t}`)) || 'neutral' : 'neutral';
     const row = el(`<button type="button" class="card stat-card coach-card coach-row coach-${tone}" aria-label="Ouvrir le coach">
       <span class="coach-title">Coach</span>
-      <span class="coach-rate">${full ? full.querySelector('.coach-rate').textContent : `<b class="num">${coachDays()}</b> / 5 jours de pesée`}</span>
+      ${full ? full.querySelector('.coach-rate').outerHTML : `<span class="coach-rate"><b class="num">${coachDays()}</b> / 5 jours de pesée</span>`}
       ${full && full.querySelector('.coach-btn') ? '<i class="coach-dot" aria-label="Conseil à appliquer"></i>' : ''}
       ${icons.chevron}
     </button>`);

@@ -176,7 +176,7 @@ console.log('== v7.2 : suppression de repas, coach, panneaux ==');
   assert(pages.nutrition.querySelector('[data-tw="n-kcal"]').textContent !== kcalBefore, 'Repas : calories mises a jour tout de suite');
   assert(!pages.nutrition.querySelector('.meal-group') && /Aucun repas/.test(pages.nutrition.querySelector('#meal-list').textContent), 'Repas : groupe retire et « Aucun repas » revient');
   const css = fs.readFileSync(new URL('./style.css', import.meta.url), 'utf8');
-  assert(!/\.coach-card::after \{/.test(css) && !/coach-good \{ background: linear-gradient/.test(css) && /\.coach-good \.coach-rate \{ color: var\(--success\)/.test(css), 'Coach : ni trait ni dégradé, le ton se lit sur le rythme');
+  assert(!/\.coach-card::after \{/.test(css) && !/coach-good \{ background: linear-gradient/.test(css) && /\.coach-rate\.coach-down \{ color: var\(--accent\)/.test(css) && /\.coach-rate\.coach-up \{ color: var\(--violet-text\)/.test(css), 'Coach : ni trait ni dégradé, rythme bleu clair en baisse, violet en hausse');
   const hsrc = fs.readFileSync(new URL('./modules/home.js', import.meta.url), 'utf8');
   assert(/title: 'Eau', content: form, actions: \[\]/.test(hsrc), 'Eau : plus de bouton Fermer');
 }

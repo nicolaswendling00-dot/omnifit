@@ -653,8 +653,9 @@ body > .picker-overlay {
 .coach-title { font-size: 1rem; font-weight: 600; font-stretch: 106%; color: var(--text); }
 .coach-rate { font-size: 0.9rem; font-weight: 600; font-stretch: var(--wide); color: var(--text-2); font-variant-numeric: tabular-nums; }
 .coach-rate b { color: var(--text); font-weight: 700; }
-.coach-good .coach-rate { color: var(--success); }
-.coach-warn .coach-rate { color: var(--danger); }
+/* Rythme du poids aux couleurs de l'appli : bleu clair quand il descend, violet quand il monte */
+.coach-rate.coach-down { color: var(--accent); }
+.coach-rate.coach-up { color: var(--violet-text); }
 .coach-msg { font-size: 0.9rem; line-height: 1.45; color: var(--text); }
 .coach-maint { font-size: 0.75rem; line-height: 1.4; color: var(--text-2); margin-top: 8px; }
 .coach-maint b { color: var(--accent); font-variant-numeric: tabular-nums; }
