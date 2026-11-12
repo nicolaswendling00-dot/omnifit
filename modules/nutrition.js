@@ -1,7 +1,7 @@
 // OmniFit — PAGE 1 : Nutrition (macros couleur, fibres, modes grammes/auto/%, repas typés, recettes)
 import { store, todayISO } from '../utils/storage.js';
 import { calcKcal, fiberGoalFromKcal, metabolicInsight } from '../utils/math.js';
-import { el, esc, icons, openSheet, openModal, toast, ringSVG, confirmModal, fmtDateShort, haptic, celebrateLP, normalizeStr, attachSwipeToDelete, tweenValues, dateBar } from '../utils/ui.js';
+import { el, esc, icons, openSheet, openModal, toast, ringSVG, confirmModal, fmtDateShort, haptic, celebrateLP, normalizeStr, attachSwipeToDelete, tweenValues, dateBar, dayLabel } from '../utils/ui.js';
 import { startCameraStream, captureFrame, decodeBarcodeFromFile } from '../utils/barcode.js';
 import { fetchProductByBarcode } from '../utils/openfoodfacts.js';
 import { FOODS, FOOD_CATEGORIES } from '../data/foods.js';
@@ -1557,31 +1557,18 @@ export function render(container, opts = {}) {
   const fadeEmpty = !meals.length && lastShown.date === selectedDate && lastShown.n > 0;
   if (!keptList) lastShown = { date: selectedDate, n: meals.length };
 
-  // Ruban : les 7 derniers jours. Les jours plus anciens se choisissent dans le
-  // calendrier de l'en-tête, le même pour tous les onglets.
-  const chipFor = (d) => {
-    const dDay = store.userData.nutrition.byDate[d];
-    let diffHtml = '<span class="d-diff empty"></span>';
-    if (dDay && dDay.meals && dDay.meals.length) {
-      const dTot = store.dayTotals(d);
-      const dGoal = macroGoalsFor(d);
-      const diff = Math.round(dTot.kcal - dGoal.kcalGoal); // + = au-dessus de l'objectif
-      const ok = Math.abs(diff) <= 100;
-      diffHtml = `<span class="d-diff ${ok ? 'ok' : 'bad'}">${diff > 0 ? '+' : ''}${diff}${dDay.smoothed ? '<i class="d-smoothed"></i>' : ''}</span>`;
-    }
-    return `<button class="date-chip ${d === selectedDate ? 'active' : ''} ${d === todayISO() ? 'today' : ''}" data-date="${d}">
-      ${fmtDateShort(d).split(' ')[0]}<span class="d-num">${d.slice(8)}</span>${diffHtml}
-    </button>`;
-  };
-  const days7 = [...Array(7)].map((_, i) => todayISO(i - 6));
-  // Le jour consulté peut être hors de la semaine : on l'ajoute pour qu'il
-  // reste visible et sélectionné dans le ruban.
-  if (!days7.includes(selectedDate)) days7.unshift(selectedDate);
-  const ribbon = days7.map(chipFor).join('');
-
   container.innerHTML = '';
   container.appendChild(el(`
     <div>
+      <div class="nut-mini" aria-hidden="true">
+        <span class="nut-mini-date">${dayLabel(selectedDate)}</span>
+        <span class="nut-mini-kcal">${ringSVG({ size: 46, stroke: 5, progress: totals.kcal / mg.kcalGoal, label: `${consumed}` })}</span>
+        <span class="nut-mini-macros">
+          ${ringSVG({ size: 24, stroke: 4, progress: totals.prot / mg.protG, color: C_PROT })}
+          ${ringSVG({ size: 24, stroke: 4, progress: totals.carbs / mg.carbsG, color: C_CARB })}
+          ${ringSVG({ size: 24, stroke: 4, progress: totals.fat / mg.fatG, color: C_FAT })}
+        </span>
+      </div>
       <div class="nutrition-header">
         <div class="kcal-total">
           <span class="num kcal-consumed" data-tw="n-kcal">${consumed}</span>
@@ -1615,7 +1602,6 @@ export function render(container, opts = {}) {
           <button class="btn btn-secondary btn-sm" id="btn-macro-goals">${icons.edit} Objectifs</button>
           ${Math.abs(remaining) > 100 ? `<button class="btn btn-secondary btn-sm" id="btn-smooth">${icons.swap} Lisser l'écart</button>` : ''}
         </div>
-        <div class="date-ribbon no-swipe" id="date-ribbon">${ribbon}</div>
       </div>
 
       <div class="card card-glow">
@@ -1725,19 +1711,6 @@ export function render(container, opts = {}) {
     },
   });
 
-  container.querySelector('#date-ribbon').addEventListener('click', (e) => {
-    const chip = e.target.closest('.date-chip');
-    if (!chip || !chip.dataset.date) return;
-    const prev = selectedDate;
-    const old = container.querySelector('#meal-list');
-    const ghost = old ? old.cloneNode(true) : null;
-    setViewDate(chip.dataset.date);
-    rerender();
-    if (prev !== selectedDate) crossfadeMeals(container, ghost, selectedDate > prev ? 1 : -1);
-  });
-  const active = container.querySelector('.date-chip.active');
-  if (active && active.scrollIntoView) active.scrollIntoView({ inline: 'center', block: 'nearest' });
-
   // En-tête de date commun : point vert si l'écart du jour tient dans ±100 kcal
   const nByDate = store.userData.nutrition.byDate;
   // Dans l'en-tête collant : le jour consulté reste visible en faisant défiler
@@ -1765,6 +1738,23 @@ export function render(container, opts = {}) {
   }
   container.querySelector('#btn-recipes').addEventListener('click', () => openRecipesSheet(rerender));
   if (keptList) container.querySelector('#meal-list').replaceWith(keptList);
+  // En défilant, l'en-tête s'efface et rétrécit pendant que la version
+  // compacte (jour, calories, trois macros) le remplace en haut.
+  if (!container._nutScroll) {
+    container._nutScroll = true;
+    container.addEventListener('scroll', () => {
+      const head = container.querySelector('.nutrition-header');
+      const mini = container.querySelector('.nut-mini');
+      if (!head || !mini) return;
+      const p = Math.max(0, Math.min(1, container.scrollTop / 140)); // 140 px de défilement pour passer en compact
+      head.style.opacity = String(1 - p);
+      head.style.transform = p ? `scale(${1 - p * 0.08})` : '';
+      mini.style.opacity = String(p);
+      mini.style.transform = `translateY(${(1 - p) * -12}px)`;
+      mini.classList.toggle('on', p >= 1);
+    }, { passive: true });
+  }
+  container.dispatchEvent(new window.Event('scroll'));
   tweenValues(container);
   ensureFab();
 }

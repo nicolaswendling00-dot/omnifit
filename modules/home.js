@@ -404,7 +404,20 @@ function coachDays() {
     </button>`);
     row.addEventListener('click', () => {
       // Pas assez de pesées : seul le choix de phase a du sens
-      if (!full) { openGoalModal(rerender); return; }
+      if (!full) {
+        const n = coachDays();
+        const body = el(`<div class="coach-sheet">
+          <div class="coach-wait"><span class="num">${n}</span><small>/5</small></div>
+          <p class="coach-msg">Le coach analyse ton poids sur 5 jours avant de conseiller un ajustement de calories. Pèse-toi chaque matin, il s'active tout seul.</p>
+        </div>`);
+        const add = el(`<button class="btn btn-primary btn-block">${icons.plus} Ajouter une pesée</button>`);
+        const phase = el(`<button class="btn btn-secondary btn-block">${icons.edit} Changer de phase</button>`);
+        body.append(add, phase);
+        const sh = openSheet({ title: 'Coach', content: body });
+        add.addEventListener('click', () => { sh.close(); openLogWeightModal(rerender); });
+        phase.addEventListener('click', () => { sh.close(); openGoalModal(rerender); });
+        return;
+      }
       let sheet = null;
       const after = () => { if (sheet) sheet.close(); rerender(); };
       const body = el('<div class="coach-sheet"></div>');

@@ -840,7 +840,7 @@ function openExerciseDetailSheet(exerciseId) {
 function buildExerciseDetail(exerciseId) {
   const def = exerciseLookup(exerciseId);
   const entries = exoEntries(exerciseId);
-  const history = entries.slice(-12).reverse();
+  const history = [...entries].sort((a, b) => b.workout.date.localeCompare(a.workout.date));
 
   // Meilleur 1RM estimé (Epley : poids × (1 + reps/30)) sur cet historique
   let best1rm = null;

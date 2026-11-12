@@ -83,10 +83,9 @@ nutrition.render(pages.nutrition);
 assert(pages.nutrition.querySelector('.nutrition-header'), 'Nutrition : header sticky');
 assert(pages.nutrition.querySelectorAll('.macro-rings .ring-item').length === 4, 'Nutrition : 4 anneaux macros (prot/gluc/lip + fibres)');
 // Ruban : 7 derniers jours ; le passé plus ancien passe par le calendrier commun
-assert(pages.nutrition.querySelectorAll('.date-chip').length === 7, 'Nutrition : ruban 7 jours');
+assert(!pages.nutrition.querySelector('.date-ribbon') && pages.nutrition.querySelectorAll('.week-strip .wk-day').length === 7, 'Nutrition : plus de ruban sous les macros, bandeau de la semaine en haut');
+assert(pages.nutrition.querySelectorAll('.nut-mini .ring').length === 4, 'Nutrition : en-tete compact (calories + 3 macros)');
 assert(!pages.nutrition.querySelector('#date-more'), 'Nutrition : plus de puce « + », le calendrier est dans l\'en-tete');
-assert(pages.nutrition.querySelector('.nutrition-header .date-ribbon'), 'Nutrition : ruban dans l\'en-tête collant');
-assert(pages.nutrition.querySelector('.date-ribbon.no-swipe'), 'Nutrition : ruban en no-swipe');
 assert(document.getElementById('fab-nutrition-wrap')?.parentElement === document.body, 'Nutrition : FAB global dans body');
 assert(pages.nutrition.querySelector('#btn-recipes'), 'Nutrition : bouton Recettes');
 // v3 : kcal total en haut + fibres
@@ -663,10 +662,8 @@ const nh = pages.nutrition;
 store.addNutritionLog(todayISO(), { name: 'X (500 g)', baseName: 'X', meal: 'Snack', prot: 50, carbs: 300, fat: 120, fiber: 0, kcal: 2480, per100: { prot: 10, carbs: 60, fat: 24 }, weight: 500 });
 nutrition.render(nh);
 assert(!nh.querySelector('#nut-cal'), 'Nutrition : carte calendrier retiree');
-assert(nh.querySelectorAll('.date-chip').length === 7, 'Nutrition : ruban de dates conserve (7 jours)');
-const chipT = [...nh.querySelectorAll('.date-chip')].find((c) => c.dataset.date === todayISO());
-assert(chipT && chipT.querySelector('.d-diff'), 'Nutrition : ecart calorique affiche dans le ruban');
-assert(chipT.querySelector('.d-diff.bad'), 'Nutrition : gros ecart en rouge');
+const chipT = [...nh.querySelectorAll('.wk-day')].find((c) => c.dataset.date === todayISO());
+assert(chipT && chipT.querySelector('.dp-mark.bad'), 'Nutrition : gros ecart marque en rouge dans le bandeau');
 assert(nh.querySelector('#btn-macro-goals'), 'Nutrition : bouton Objectifs macros toujours present');
 assert(nh.querySelector('.macro-actions'), 'Nutrition : conteneur macro-actions (deux boutons cote a cote)');
 
@@ -682,8 +679,9 @@ assert(/--spring:/.test(cssTx), 'Transitions : courbe spring definie');
 assert(/prefers-reduced-motion/.test(cssTx), 'Transitions : respect de prefers-reduced-motion');
 
 // Accueil sans scroll : overflow hidden
-assert(/#page-home \{[^}]*overflow-y: auto/.test(cssTx), 'Accueil : défile si le contenu dépasse, ne coupe jamais');
-assert(/\.home-fit \{[^}]*min-height: calc/.test(cssTx), 'Accueil : au moins un écran, réparti entre les cartes');
+assert(/#page-home \{[^}]*overflow: hidden/.test(cssTx), 'Accueil : ne defile pas');
+assert(/\.home-fit \{[^}]*flex: 1 1 auto; min-height: 0/.test(cssTx), 'Accueil : les cartes se partagent la hauteur de l ecran');
+assert(/overscroll-behavior-y: none/.test(cssTx), 'Pages : pas de rebond en tirant au-dela du bord');
 
 // Historique : désormais un onglet de la loupe. Clic sur une entrée -> éditeur pré-rempli.
 store.addNutritionLog('2020-05-01', { name: 'Boulgour (250 g)', baseName: 'Boulgour', meal: 'Déjeuner', prot: 6.5, carbs: 70, fat: 0.8, fiber: 1, kcal: 313, per100: { prot: 2.6, carbs: 28, fat: 0.3, fiber: 0.4 }, weight: 250 });
@@ -1026,7 +1024,7 @@ console.log('== v5.6 : accueil, ruban, series persistantes, coefficient ==');
   assert(!legend.includes('%'), 'Accueil : plus de pourcentages dans l\'anneau');
 
   nutrition.render(pages.nutrition);
-  const chips = [...pages.nutrition.querySelectorAll('.date-chip')];
+  const chips = [...pages.nutrition.querySelectorAll('.wk-day')];
   assert(chips.length === 7 && chips[6].dataset.date === todayISO(), 'Nutrition : 7 jours, aujourd\'hui a droite');
 
   // ---- Progression : on compare la MEILLEURE SERIE d'une seance a la precedente
