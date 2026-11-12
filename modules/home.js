@@ -195,7 +195,6 @@ function openGlobalRankModal(gr) {
     rank: gr.rank,
     label,
     ariaLabel: `Rang global ${label}`,
-    holo: true,
     back: `<div class="rk-face rk-back" style="--rk:${gr.rank.color}">
       <div class="rk-back-title">Rang global</div>
       <div class="rk-back-name">${label}</div>
@@ -277,6 +276,25 @@ function stepsTrack(ratio) {
   </div>`;
 }
 
+// Série : jours consécutifs avec au moins un repas ou une séance saisis.
+// Aujourd'hui compte s'il est renseigné ; sinon la série court jusqu'à hier.
+function entryStreak() {
+  const meals = store.userData.nutrition.byDate;
+  const sessions = new Set(store.userData.workouts.map((w) => w.date));
+  const has = (d) => sessions.has(d) || !!(meals[d] && meals[d].meals && meals[d].meals.length);
+  let n = 0;
+  for (let i = has(todayISO()) ? 0 : -1; has(todayISO(i)); i--) n++;
+  return n;
+}
+// Flamme : bleu de l'appli au départ, violet à mi-chemin, rose à un an.
+function flameColor(days) {
+  const stops = [[0, 217, 255], [167, 139, 250], [244, 114, 182]];
+  const t = Math.min(1, days / 365) * 2;
+  const a = stops[Math.min(1, Math.floor(t))]; const b = stops[Math.min(1, Math.floor(t)) + 1];
+  const k = t - Math.min(1, Math.floor(t));
+  return `rgb(${a.map((c, i) => Math.round(c + (b[i] - c) * k)).join(',')})`;
+}
+
 export function render(container) {
   const rerender = () => render(container);
   const { profile, goal, settings } = store.userData;
@@ -297,6 +315,7 @@ export function render(container) {
   const currentW = wUpTo.length ? wUpTo[wUpTo.length - 1].value : profile.weight;
 
   container.innerHTML = '';
+  const streak = entryStreak();
   const gr = computeGlobalRank(store.userData, todayISO(), { liveMacroGoal: macroGoals() });
   const grRankLabel = gr.rank.division ? `${gr.rank.name} ${gr.rank.division}` : gr.rank.name;
   const grProgress = gr.rank.lpNeeded ? gr.rank.lp / gr.rank.lpNeeded : 1;
@@ -321,7 +340,7 @@ export function render(container) {
           <div class="tile-val"><span class="num">${steps.toLocaleString('fr-FR')}</span><small>/ ${stepsGoal.toLocaleString('fr-FR')}</small></div>
         </div>
         <div class="card stat-card home-volume" id="home-volume">
-          <div class="tile-top"><span class="stat-head">Volume</span>${ringSVG({ size: 56, stroke: 8, progress: volDone / volGoal, color: 'var(--on-accent)' })}</div>
+          <div class="tile-top"><span class="stat-head">Volume</span>${ringSVG({ size: 56, stroke: 8, progress: volDone / volGoal })}</div>
           <div class="tile-val"><span class="num">${volDone}</span><small>/ ${volGoal} séries sur 7 j</small></div>
         </div>
       </div>
@@ -334,18 +353,19 @@ export function render(container) {
         <div class="hw-curve">${weightSparkline(store.userData.weights)}</div>
       </div>
 
-      <div id="coach-host"></div>
-
-      <div class="card gr-card" id="gr-card">
-        <div class="gr-badge">${rankBadge(gr.rank.id, 40)}</div>
-        <div class="gr-info">
-          <div class="gr-line">
+      <div class="home-pair">
+        <div class="card stat-card gr-card" id="gr-card">
+          <div class="tile-top"><span class="stat-head">Rang</span><span class="gr-badge">${rankBadge(gr.rank.id, 56)}</span></div>
+          <div class="tile-val">
             <span class="gr-rank-name" style="color:${gr.rank.color}">${grRankLabel}</span>
-            <span class="gr-lp">${lpLabel(gr.rank)}</span>
+            <small class="gr-lp">${lpLabel(gr.rank)}</small>
+            <div class="gr-progress"><i style="width:${Math.round(grProgress * 100)}%;background:${gr.rank.color}"></i></div>
           </div>
-          <div class="gr-progress"><i style="width:${Math.round(grProgress * 100)}%;background:${gr.rank.color}"></i></div>
         </div>
-        <div class="gr-streak" title="Jours consécutifs">${gr.streak > 0 ? `${icons.flame}<span>${gr.streak}</span>` : ''}</div>
+        <div class="card stat-card home-streak" id="home-streak" style="--flame:${flameColor(streak)}">
+          <div class="tile-top"><span class="stat-head">Série</span><span class="streak-flame">${icons.flame}</span></div>
+          <div class="tile-val"><span class="num">${streak}</span><small>jour${streak > 1 ? 's' : ''} de suite</small></div>
+        </div>
       </div>
     </div>`));
 
@@ -373,17 +393,14 @@ function coachDays() {
 }
 
 // Coach métabolique : il vit sur l'accueil (et non plus dans Nutrition).
-  const coachHost = container.querySelector('#coach-host');
-  if (coachHost) {
+  {
     // Sur l'accueil, le coach tient sur une ligne (rythme + point s'il a un
     // conseil à appliquer) ; le toucher ouvre le conseil complet.
     const full = renderCoachCard(rerender);
     const tone = full ? ['good', 'warn'].find((t) => full.classList.contains(`coach-${t}`)) || 'neutral' : 'neutral';
-    const row = el(`<button type="button" class="card stat-card coach-card coach-row coach-${tone}" aria-label="Ouvrir le coach">
-      <span class="coach-title">Coach</span>
-      ${full ? full.querySelector('.coach-rate').outerHTML : `<span class="coach-rate"><b class="num">${coachDays()}</b> / 5 jours de pesée</span>`}
-      ${full && full.querySelector('.coach-btn') ? '<i class="coach-dot" aria-label="Conseil à appliquer"></i>' : ''}
-      ${icons.chevron}
+    const row = el(`<button type="button" class="coach-card coach-mini coach-${tone}" aria-label="Coach${full && full.querySelector('.coach-btn') ? ', un conseil à appliquer' : ''}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></svg>
+      ${full && full.querySelector('.coach-btn') ? '<i class="coach-dot"></i>' : ''}
     </button>`);
     row.addEventListener('click', () => {
       // Pas assez de pesées : seul le choix de phase a du sens
@@ -397,7 +414,8 @@ function coachDays() {
       body.appendChild(phase);
       sheet = openSheet({ title: 'Coach', content: body });
     });
-    coachHost.replaceWith(row);
+    const bar = container.querySelector('.date-bar');
+    bar.insertBefore(row, bar.querySelector('.week-strip'));
   }
 
 }

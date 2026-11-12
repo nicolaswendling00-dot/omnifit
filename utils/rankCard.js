@@ -17,59 +17,9 @@ const STARS = [[0.0,106.7,0.81,0.73],[18.8,83.7,0.98,0.50],[26.5,88.0,0.25,0.89]
 const starSky = `<svg class="rk-brand-sky" viewBox="0 0 100 140" preserveAspectRatio="xMidYMid slice" aria-hidden="true">${STARS.map(([x, y, r, o]) => `<circle cx="${x}" cy="${y}" r="${r}" opacity="${o}"/>`).join('')}</svg>`;
 export const brandBack = () => `<div class="rk-brand">${starSky}${logoMark('rk-brand-mark')}<div class="rk-brand-name">OmniFit</div></div>`;
 
-const loadSVG = async (svg) => {
-  const img = new Image();
-  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
-  await img.decode();
-  return img;
-};
-
-// Recto redessiné dans un canvas : c'est l'image sur laquelle le shader
-// holographique pose son motif. Mêmes éléments que la face HTML.
-async function rankCardArt(rank, label, title, w, h) {
-  const k = Math.min(window.devicePixelRatio || 1, 2);
-  const cv = document.createElement('canvas');
-  cv.width = Math.round(w * k); cv.height = Math.round(h * k);
-  const ctx = cv.getContext('2d');
-  ctx.scale(k, k);
-  const css = getComputedStyle(document.body);
-  ctx.fillStyle = css.getPropertyValue('--surface').trim() || '#0C0E13';
-  ctx.fillRect(0, 0, w, h);
-  const glow = ctx.createRadialGradient(w / 2, 0, 0, w / 2, 0, h * 0.7);
-  glow.addColorStop(0, rank.color + '38');
-  glow.addColorStop(1, rank.color + '00');
-  ctx.fillStyle = glow;
-  ctx.fillRect(0, 0, w, h);
-  ctx.fillStyle = rank.color;
-  ctx.fillRect(22, 0, w - 44, 3);
-  const text = css.getPropertyValue('--text').trim() || '#F4F6FA';
-  const logo = await loadSVG(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${MARK_VB}">${markPaths(text)}</svg>`);
-  const lw = w * 0.13;
-  ctx.drawImage(logo, (w - lw) / 2, 18, lw, lw * (66 / 90));
-  const img = await loadSVG(rankBadge(rank.id, 400));
-  const b = Math.min(200, w * (title ? 0.54 : 0.62));
-  const top = h * (title ? 0.52 : 0.47) - b * 0.62;
-  ctx.drawImage(img, (w - b) / 2, top, b, b);
-  try { await document.fonts.load('800 20px Archivo'); } catch (_) { /* police système */ }
-  ctx.textAlign = 'center';
-  if ('fontStretch' in ctx) ctx.fontStretch = 'semi-expanded';
-  if (title) {
-    ctx.fillStyle = text;
-    ctx.font = `700 ${Math.round(w * 0.066)}px Archivo, sans-serif`;
-    ctx.fillText(title, w / 2, top - 14, w - 40);
-  }
-  ctx.fillStyle = rank.color;
-  ctx.font = `800 ${Math.round(w * 0.1)}px Archivo, sans-serif`;
-  ctx.fillText(label.toUpperCase(), w / 2, top + b * 1.12);
-  ctx.fillStyle = text;
-  ctx.font = `800 ${Math.round(w * 0.066)}px Archivo, sans-serif`;
-  ctx.fillText(lpLabel(rank), w / 2, top + b * 1.12 + w * 0.1);
-  return cv;
-}
-
 // rank : objet de rang (id, couleur, LP) ou null pour « Non classé ».
-// holo : effet holographique au recto. back : HTML du verso.
-export function openRankCard({ rank, label, title = '', ariaLabel = label, holo = false, back = brandBack() }) {
+// back : HTML du verso.
+export function openRankCard({ rank, label, title = '', ariaLabel = label, back = brandBack() }) {
   const color = rank ? rank.color : 'var(--text-3)';
   const front = `<div class="rk-face${title ? ' rk-face--titled' : ''}" style="--rk:${color}">
     ${logoMark('rk-logo')}
@@ -80,7 +30,6 @@ export function openRankCard({ rank, label, title = '', ariaLabel = label, holo 
   </div>`;
   const card = flipCard({
     label: ariaLabel,
-    holo: holo && rank ? { art: (w, h) => rankCardArt(rank, label, title, w, h) } : null,
     front,
     back,
   });

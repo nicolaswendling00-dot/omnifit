@@ -853,7 +853,7 @@ function buildExerciseDetail(exerciseId) {
   }
 
   // Les muscles de l'exercice ; les toucher ouvre la carte de rang de
-  // l'exercice, la même que celle du rang global (holo au rang Onyx seulement).
+  // l'exercice, la même que celle du rang global.
   const rk = exerciseRank(exerciseId);
   const rankName = rk ? (rk.division ? `${rk.name} ${rk.division}` : rk.name) : '';
   const rankBlock = `<button type="button" class="ed-body" id="ed-rank" aria-label="Muscles sollicités. Toucher pour voir la carte de rang">
@@ -887,7 +887,6 @@ function buildExerciseDetail(exerciseId) {
     label: rankName,
     title: def.name,
     ariaLabel: `${def.name}, ${rk ? rankName : 'non classé'}`,
-    holo: !!rk && rk.id === 'onyx',
   }));
 
   const hostH = form.querySelector('#ed-history');

@@ -56,7 +56,18 @@ home.render(pages.home);
 assert(pages.home.querySelector('.home-weight'), 'Accueil : carte poids');
 // Récap complet de la journée : calories, poids, activité, eau
 // Récap : calories, coach, poids, activité, eau
-assert(pages.home.querySelectorAll('.stat-card').length === 5, 'Accueil : 5 cartes récap');
+assert(pages.home.querySelectorAll('.stat-card').length === 6 && pages.home.querySelector('.home-streak .num') && pages.home.querySelector('.date-bar .coach-mini'), 'Accueil : 6 tuiles, série, coach en petit bouton');
+{
+  // Série : repas hier et avant-hier, séance aujourd'hui = 3 jours ; un trou la coupe
+  const keepN = store.userData.nutrition.byDate; const keepW = store.userData.workouts;
+  store.userData.nutrition.byDate = { [todayISO(-1)]: { meals: [{ kcal: 1 }] }, [todayISO(-2)]: { meals: [{ kcal: 1 }] }, [todayISO(-4)]: { meals: [{ kcal: 1 }] } };
+  store.userData.workouts = [{ id: 's', date: todayISO(), exercises: [] }];
+  home.render(pages.home);
+  assert(pages.home.querySelector('.home-streak .num').textContent === '3', 'Série : repas ou séance, jours consécutifs');
+  assert(/rgb\(/.test(pages.home.querySelector('.home-streak').style.getPropertyValue('--flame')), 'Série : couleur de flamme calculée');
+  store.userData.nutrition.byDate = keepN; store.userData.workouts = keepW;
+  home.render(pages.home);
+}
 assert(pages.home.querySelector('.home-volume') && !pages.home.querySelector('.home-water') && !/Eau/.test(pages.home.textContent), 'Accueil : volume de la semaine, plus d eau');
 assert(pages.home.querySelectorAll('.week-strip .wk-day').length === 7 && pages.home.querySelector('.wk-day.sel'), 'En-tete : bandeau des 7 jours');
 assert(pages.home.querySelector('.home-kcal') && pages.home.querySelector('.home-activity'), 'Accueil : cartes calories et activité');
@@ -267,7 +278,7 @@ console.log('== v6.12 : compteur a rouleaux, carte holographique, calendrier en 
   home.render(pages.home);
   pages.home.querySelector('#gr-card').click();
   const fc = document.querySelector('.rk-scrim .flip-card');
-  assert(fc.querySelector('canvas.flip-card__holo'), 'Rang : couche holographique');
+  assert(!fc.querySelector('canvas'), 'Rang : plus d effet holographique');
   fc.dispatchEvent(new window.PointerEvent('pointerdown', { pointerId: 3, button: 0, bubbles: true, clientX: 10, clientY: 10 }));
   assert(!/scale\(/.test(fc.querySelector('.flip-card__rotor').style.transform), 'Rang : la carte ne grandit plus au toucher');
   fc.dispatchEvent(new window.PointerEvent('pointercancel', { pointerId: 3, bubbles: true }));

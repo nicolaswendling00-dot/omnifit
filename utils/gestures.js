@@ -8,8 +8,6 @@
 // l'app. Avec « réduire les animations » (ou sans matchMedia, cas des tests),
 // les gestes s'appliquent sans animation.
 
-import { createHolo } from './holo.js';
-
 const reduced = () => !window.matchMedia || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const now = () => performance.now();
@@ -599,7 +597,7 @@ export function reorderList(host, labels, { dragIcon = '' } = {}) {
 //   holo        : { art(w, h) -> Promise<canvas> } : le recto est redessiné
 //                 dans un canvas, sur lequel le shader pose le motif holographique
 // Renvoie l'élément .flip-card (à insérer), avec .flip() pour la retourner.
-export function flipCard({ front, back, label = 'Carte', width = 280, holo = null } = {}) {
+export function flipCard({ front, back, label = 'Carte', width = 280 } = {}) {
   const card = document.createElement('div');
   card.className = 'flip-card';
   card.tabIndex = 0;
@@ -609,7 +607,7 @@ export function flipCard({ front, back, label = 'Carte', width = 280, holo = nul
   card.style.setProperty('--fc-w', `${width}px`);
   card.innerHTML = `<span class="flip-card__shadow" aria-hidden="true"></span>
     <div class="flip-card__rotor">
-      <div class="flip-card__face flip-card__face--front">${front}${holo ? '<canvas class="flip-card__holo" aria-hidden="true"></canvas>' : ''}<span class="flip-card__glare" aria-hidden="true"></span></div>
+      <div class="flip-card__face flip-card__face--front">${front}<span class="flip-card__glare" aria-hidden="true"></span></div>
       <div class="flip-card__face flip-card__face--back" aria-hidden="true">${back}<span class="flip-card__glare" aria-hidden="true"></span></div>
     </div>`;
   const rotor = card.querySelector('.flip-card__rotor');
@@ -718,7 +716,7 @@ export function flipCard({ front, back, label = 'Carte', width = 280, holo = nul
 
   // Boucle de vie de la carte : oscillation au repos et reflet holographique.
   // Elle tourne tant que la carte est affichée, et s'arrête quand on la retire.
-  let gl = null; let artPending = false; let seen = false; let last = now();
+  let seen = false; let last = now();
   const live = (t) => {
     if (!card.isConnected) { if (seen || t - last > 3000) return; window.requestAnimationFrame(live); return; }
     seen = true;
@@ -736,20 +734,6 @@ export function flipCard({ front, back, label = 'Carte', width = 280, holo = nul
     light.x += (light.tx - light.x) * Math.min(1, dt * 8);
     light.y += (light.ty - light.y) * Math.min(1, dt * 8);
     paint();
-    if (holo) {
-      const cv = faces[0].querySelector('.flip-card__holo');
-      if (!gl && !artPending && cv.clientWidth) {
-        artPending = true;
-        gl = createHolo(cv);
-        if (gl) {
-          holo.art(cv.clientWidth, cv.clientHeight).then((art) => { gl.setArt(art); card.dataset.holo = 'ready'; }).catch(() => {});
-        }
-      }
-      // Face visible seulement (inutile de dessiner le recto quand il est de dos)
-      if (gl && Math.cos(((turn.x + ty.x + drift.y) * Math.PI) / 180) > -0.05) {
-        gl.draw({ tiltX: tx.x + drift.x, tiltY: turn.x + ty.x + drift.y, lightX: light.x, lightY: light.y });
-      }
-    }
     window.requestAnimationFrame(live);
   };
   window.requestAnimationFrame(live);
