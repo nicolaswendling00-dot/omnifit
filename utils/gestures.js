@@ -326,7 +326,8 @@ export function attachSwipeToDelete(list, { rowSelector, contentSelector, width 
   const D = width;
   const contentOf = (r) => r.querySelector(contentSelector);
   const delOf = (r) => r.querySelector('[data-del]');
-  const commitPoint = (r) => Math.max(0.6 * r.offsetWidth, D + D / 2);
+  // Seuil de suppression : 40 % de la largeur (jamais avant le bouton rouge et demi)
+  const commitPoint = (r) => Math.max(0.4 * r.offsetWidth, D + D / 2);
 
   // Position « exposée » (px révélés) de chaque ligne, animée par ressort.
   const state = (r) => {
@@ -436,7 +437,7 @@ export function attachSwipeToDelete(list, { rowSelector, contentSelector, width 
   }, { passive: false });
 
   // Correspondance doigt -> position : la ligne suit le doigt jusqu'au seuil
-  // de suppression (60 % de la largeur), puis devient élastique. Plus de palier
+  // de suppression (40 % de la largeur), puis devient élastique. Plus de palier
   // de résistance : il fallait glisser sur ~90 % de la ligne pour supprimer.
   function map(raw, Wd, C) {
     const c = 0.55;
@@ -509,6 +510,7 @@ export function reorderList(host, labels, { dragIcon = '' } = {}) {
     });
   };
   const paint = (d) => () => {
+    if (!list.isConnected) { d.ghost.remove(); return; }
     d.ghost.style.transform = `translate(${d.gx.x}px, ${d.gy.x}px) rotate(${d.tilt}deg) scale(${d.lift})`;
   };
 
@@ -516,7 +518,10 @@ export function reorderList(host, labels, { dragIcon = '' } = {}) {
     const row = e.target.closest('.reorder-row');
     if (!row || e.button !== 0 || drag) return;
     e.preventDefault();
-    try { row.setPointerCapture(e.pointerId); } catch (_) { /* noop */ }
+    // Capture sur la LISTE, pas sur la ligne : la ligne est déplacée dans le DOM
+    // pendant le geste, ce qui lui faisait perdre le doigt sur iPhone (plus de
+    // pointermove ni de pointerup, la copie restait figée à l'écran).
+    try { list.setPointerCapture(e.pointerId); } catch (_) { /* noop */ }
     const b = row.getBoundingClientRect();
     const ghost = row.cloneNode(true);
     ghost.classList.add('reorder-ghost', 'dragging');
@@ -565,6 +570,7 @@ export function reorderList(host, labels, { dragIcon = '' } = {}) {
   };
   list.addEventListener('pointerup', up);
   list.addEventListener('pointercancel', up);
+  list.addEventListener('lostpointercapture', up);
   // Clavier : Alt + flèches déplacent la ligne.
   list.addEventListener('keydown', (e) => {
     const row = e.target.closest('.reorder-row');
@@ -576,7 +582,8 @@ export function reorderList(host, labels, { dragIcon = '' } = {}) {
     row.focus();
   });
 
-  return { order: () => [...list.querySelectorAll('.reorder-row')].map((row) => +row.dataset.i) };
+  // Lu à la validation : on retire au passage une copie encore en vol.
+  return { order: () => { if (drag) { drag.ghost.remove(); drag = null; } return [...list.querySelectorAll('.reorder-row')].map((row) => +row.dataset.i); } };
 }
 
 // ============================================================

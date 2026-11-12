@@ -7,7 +7,7 @@ import { RANK_ORDER, RANK_META, DIV_LP, ONYX_LP, rankBadge, liftPercentile, LEVE
 import { openExercisePicker, customRefMap, exerciseLookup } from './workout.js';
 import { backfillNutritionGoals, freezePastGoals } from './nutrition.js';
 
-const VERSION = '7.2';
+const VERSION = '10.0';
 
 // Familles de matériel (filtre de la base d'exercices), en français.
 const EQUIP_FAMILY_FR = {
@@ -189,7 +189,6 @@ export function render(container) {
     inp.addEventListener('input', () => { root.querySelector(valId).textContent = fmt(inp.value); });
     inp.addEventListener('change', () => { store.saveUserData({ settings: { [key]: parse(inp.value) } }); });
   };
-  // L'objectif d'eau se règle depuis la carte Eau de l'accueil, là où on le lit.
   bindRange('#set-rest', '#rest-val', 'restTimerDefault', (v) => `${v}s`, (v) => parseInt(v, 10));
 
   root.querySelector('#seg-palette').addEventListener('click', (e) => {
@@ -348,7 +347,7 @@ function openHealthSyncModal() {
 function openClearHistoryModal(rerender) {
   const cats = [
     { key: 'workouts', label: 'Entraînement', sub: 'Séances enregistrées' },
-    { key: 'nutrition', label: 'Nutrition', sub: 'Repas, eau et objectifs figés' },
+    { key: 'nutrition', label: 'Nutrition', sub: 'Repas et objectifs figés' },
     { key: 'weights', label: 'Poids', sub: 'Historique de pesée' },
     { key: 'steps', label: 'Pas', sub: 'Compteur de pas quotidien' },
   ];

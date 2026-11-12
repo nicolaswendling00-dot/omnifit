@@ -1563,3 +1563,73 @@ body > .picker-overlay { animation: pickerUp 420ms var(--sheet-in); }
 /* Titres et boutons importants : la police d'affichage de l'app (large, grasse) */
 .btn-primary, .btn-block, .sheet-header h3 { font-stretch: var(--wide); font-weight: 700; }
 .btn-primary.btn-block { font-size: 0.98rem; }
+
+/* ============================================================
+   v10 : accueil en tableau de bord, bandeau de la semaine, fond d'ambiance
+   ============================================================ */
+/* Fond : deux lueurs fixes aux couleurs de la marque derrière tout l'écran.
+   Dégradés radiaux statiques, sans flou : rien à recalculer au défilement. */
+body::before {
+  content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(90% 55% at 100% 0%, rgba(var(--accent-rgb), 0.20), transparent 70%),
+    radial-gradient(80% 50% at 0% 100%, rgba(var(--violet-rgb), 0.22), transparent 70%);
+}
+body.palette-light::before { opacity: 0.45; }
+/* Cartes : voile clair sur le fond d'ambiance, arête haute éclairée */
+body:not(.palette-light) .card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.035));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+:root { --r-card: 24px; }
+#bottom-nav { background: transparent; border-top: 0; }
+body:not(.palette-light) #bottom-nav { background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.85) 45%); }
+
+/* Bandeau des 7 jours, sous le jour consulté */
+.date-bar { flex-wrap: wrap; }
+.date-pick svg { width: 20px; height: 20px; }
+.date-pick[aria-expanded="true"] svg { transform: none; }
+.week-strip { flex: 1 0 100%; display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.wk-day {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  min-height: 56px; padding: 6px 0; border: 0; border-radius: 14px; cursor: pointer;
+  background: rgba(255, 255, 255, 0.06); color: var(--text-2); font: inherit;
+  transition: transform var(--dur-fast) var(--spring), background var(--dur-fast) var(--ease-std);
+}
+body.palette-light .wk-day { background: var(--surface); }
+.wk-day:active { transform: scale3d(0.94, 0.94, 1); }
+.wk-day b { font-size: 1.15rem; line-height: 1; color: var(--text); }
+.wk-day span { font-size: 0.72rem; font-weight: 600; }
+.wk-day.sel { background: var(--accent); color: var(--on-accent); }
+.wk-day.sel b { color: var(--on-accent); }
+.wk-day .dp-mark { position: absolute; bottom: 4px; }
+.wk-day.sel .dp-mark { background: var(--on-accent); }
+
+/* Calories : mangées à gauche, anneau au centre, restantes à droite, macros dessous */
+.home-kcal { display: block; }
+.hk-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
+.hk-side { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.hk-right { align-items: flex-end; text-align: right; }
+.hk-big { font-size: clamp(1.6rem, 8vw, 2.2rem); line-height: 1; }
+.hk-lbl { font-size: 0.82rem; font-weight: 600; color: var(--text-2); }
+.hk-ring svg { display: block; width: clamp(88px, 27vw, 112px); height: auto; }
+.hk-macros { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 14px; }
+.hk-macro span { display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-2); white-space: nowrap; }
+.hk-macro span b { color: var(--text); }
+.hk-macro i { display: block; height: 5px; margin-top: 6px; border-radius: 4px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
+body.palette-light .hk-macro i { background: var(--surface-3); }
+.hk-macro u { display: block; height: 100%; border-radius: 4px; transition: width var(--dur-med) var(--ease); }
+
+/* Pas et volume : deux tuiles ; le volume est la tuile pleine, en accent */
+.home-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.home-pair .card { margin: 0; display: flex; flex-direction: column; justify-content: space-between; gap: 12px; min-height: 132px; }
+.tile-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.tile-top .stat-head { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
+.tile-top .stat-head svg { width: 18px; height: 18px; color: var(--accent); }
+.tile-top > svg { flex: none; }
+.tile-val { display: flex; flex-direction: column; gap: 2px; }
+.tile-val .num { font-size: clamp(1.7rem, 8.5vw, 2.3rem); line-height: 1; }
+.tile-val small { font-size: 0.8rem; font-weight: 600; color: var(--text-2); }
+body .card.home-volume { background: var(--accent); box-shadow: none; color: var(--on-accent); }
+.home-volume .stat-head, .home-volume .num, .home-volume small { color: var(--on-accent); }
+.home-volume .ring circle:first-of-type { stroke: rgba(0, 18, 26, 0.18); }

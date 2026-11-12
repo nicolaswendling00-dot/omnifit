@@ -4,7 +4,9 @@ import { calculateSMA } from '../utils/math.js';
 import { el, icons, openModal, openSheet, toast, ringSVG, haptic, makeChart, fmtDateFull, attachSwipeToDelete, dateBar } from '../utils/ui.js';
 import { openRankCard } from '../utils/rankCard.js';
 import { lineChartOptions, lineDataset } from '../utils/charts.js';
-import { goToPage, PAGE_NUTRITION, PAGE_ACTIVITY, getViewDate, isViewingToday } from '../utils/nav.js';
+import { goToPage, PAGE_NUTRITION, PAGE_ACTIVITY, PAGE_WORKOUT, getViewDate, isViewingToday } from '../utils/nav.js';
+import { weeklySetsByMuscle } from '../utils/math.js';
+import { exerciseLookup } from './workout.js';
 import { macroGoals, macroGoalsFor, renderCoachCard } from './nutrition.js';
 import { computeGlobalRank } from '../utils/globalRank.js';
 import { rankBadge, rankFromLP, lpLabel } from '../utils/ranks.js';
@@ -13,83 +15,6 @@ let weightChart = null;
 let smaVisible = true;
 let caloriesVisible = false;
 
-// Réglage de l'eau : consommation du jour et objectif, au même endroit que
-// l'affichage. Évite d'aller chercher le curseur dans les réglages.
-function openWaterModal(rerender) {
-  const today = getViewDate();
-  const s = store.userData.settings;
-  const cur = store.userData.water.byDate[today] || 0;
-  const form = el(`<div>
-    <div class="wtr-now">
-      <span class="num wtr-val" id="wtr-val">${cur.toFixed(2).replace(/0$/, '')}</span>
-      <span class="wtr-unit">L bus ${isViewingToday() ? "aujourd'hui" : 'ce jour là'}</span>
-    </div>
-    <div class="wtr-quick" id="wtr-quick">
-      ${[0.25, 0.5, 0.75, 1].map((v) => `<button class="btn btn-secondary btn-sm" data-add="${v}">+${v} L</button>`).join('')}
-    </div>
-    <button class="btn btn-ghost btn-sm btn-block" id="wtr-undo" style="margin-top:8px">${icons.swap} Retirer 0.25 L</button>
-    <div class="card-row" style="margin-top:18px">
-      <span class="row-label">Objectif quotidien</span>
-      <span class="num" id="wtr-goal-val" style="color:var(--accent)">${s.waterGoal} L</span>
-    </div>
-    <input id="wtr-goal" type="range" min="1" max="5" step="0.25" value="${s.waterGoal}">
-  </div>`);
-
-  const m = openModal({ title: 'Eau', content: form, actions: [], onClose: () => rerender && rerender() });
-
-  const refresh = () => {
-    const v = store.userData.water.byDate[today] || 0;
-    form.querySelector('#wtr-val').textContent = v.toFixed(2).replace(/0$/, '');
-  };
-  form.querySelector('#wtr-quick').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-add]'); if (!b) return;
-    store.addWater(today, parseFloat(b.dataset.add));
-    haptic();
-    refresh();
-  });
-  form.querySelector('#wtr-undo').addEventListener('click', () => {
-    const v = store.userData.water.byDate[today] || 0;
-    store.addWater(today, -Math.min(0.25, v)); // jamais de total négatif
-    haptic();
-    refresh();
-  });
-  const goal = form.querySelector('#wtr-goal');
-  goal.addEventListener('input', () => { form.querySelector('#wtr-goal-val').textContent = `${goal.value} L`; });
-  goal.addEventListener('change', () => { store.saveUserData({ settings: { waterGoal: parseFloat(goal.value) } }); });
-  return m;
-}
-
-// Choix de la phase en cours. Il n'y a volontairement PAS de poids cible :
-// on s'arrête quand on est satisfait de son physique, pas à un chiffre.
-// C'est cette phase qui pilote le coach (sens attendu de la variation de poids).
-export function openGoalModal(rerender) {
-  const { goal } = store.userData;
-  const CHOIX = [
-    { v: 'Perte de poids', t: 'Sèche', d: 'Perdre du gras, poids en baisse régulière' },
-    { v: 'Recomposition', t: 'Maintenance', d: 'Poids stable, recomposition corporelle' },
-    { v: 'Prise de muscle', t: 'Prise de masse', d: 'Construire du muscle, poids en hausse' },
-  ];
-  const form = el(`<div class="goal-choices">
-    ${CHOIX.map((c) => `<button class="goal-choice${c.v === goal.type ? ' active' : ''}" data-v="${c.v}">
-      <span class="goal-choice-t">${c.t}</span>
-      <span class="goal-choice-d">${c.d}</span>
-    </button>`).join('')}
-  </div>`);
-  const m = openModal({ title: 'Mon objectif', content: form, actions: [] });
-  form.addEventListener('click', (e) => {
-    const b = e.target.closest('.goal-choice');
-    if (!b) return;
-    // saveUserData fusionne en profondeur : on retire explicitement les restes
-    // de l'ancien objectif chiffré, qui n'a plus cours.
-    store.saveUserData({ goal: { type: b.dataset.v } });
-    delete store.userData.goal.targetWeight;
-    delete store.userData.goal.targetDate;
-    store.persist();
-    haptic();
-    m.close();
-    if (rerender) rerender();
-  });
-}
 
 function openLogWeightModal(rerender, prefill = null) {
   const form = el(`<div class="field-stack">
@@ -290,61 +215,6 @@ const C_PROT = 'var(--mac-p)';
 const C_CARB = 'var(--mac-g)';
 const C_FAT = 'var(--mac-l)';
 
-// Répartition des macros en anneau : chaque part correspond à la CONTRIBUTION
-// CALORIQUE du macronutriment (prot ×4, gluc ×4, lip ×9), pas à sa masse — un
-// gramme de lipide pèse deux fois plus dans l'assiette énergétique.
-// Dessiné en arcs SVG dans le style de l'app (anneau fin, couleurs macros).
-function macroDonut(prot, carbs, fat, goals = {}, size = 92) {
-  const kP = (prot || 0) * 4;
-  const kC = (carbs || 0) * 4;
-  const kF = (fat || 0) * 9;
-  const total = kP + kC + kF;
-  const stroke = 11;
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const cx = size / 2;
-
-  const parts = [
-    { k: kP, color: C_PROT, label: 'P' },
-    { k: kC, color: C_CARB, label: 'G' },
-    { k: kF, color: C_FAT, label: 'L' },
-  ];
-
-  // Légende toujours présente (0 g si rien n'est consommé) : la carte garde
-  // ainsi la même taille tout au long de la journée. On affiche les GRAMMES
-  // consommés — l'anneau montre déjà la répartition en proportion, le chiffre
-  // utile au quotidien est la quantité restante à couvrir.
-  const row = (color, name, v, g) => `<span><b style="color:${color}">${name}</b> ${Math.round(v || 0)}${g ? ` / ${g}` : ''} g</span>`;
-  const legend = `<div class="hk-donut-legend">
-      ${row(C_PROT, 'Prot', prot, goals.protG)}
-      ${row(C_CARB, 'Gluc', carbs, goals.carbsG)}
-      ${row(C_FAT, 'Lip', fat, goals.fatG)}
-    </div>`;
-
-  // Rien de consommé : anneau creux, pas de camembert trompeur.
-  if (!total) {
-    return `<div class="hk-donut">
-      <svg viewBox="0 0 ${size} ${size}" role="img" aria-label="Répartition des macros">
-        <circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="rgba(var(--accent-rgb),0.14)" stroke-width="${stroke}"/>
-      </svg>${legend}</div>`;
-  }
-
-  let offset = 0;
-  const arcs = parts.filter((p) => p.k > 0).map((p) => {
-    const len = (p.k / total) * c;
-    const seg = `<circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="${p.color}"
-      stroke-width="${stroke}" stroke-dasharray="${len.toFixed(2)} ${(c - len).toFixed(2)}"
-      stroke-dashoffset="${(-offset).toFixed(2)}" transform="rotate(-90 ${cx} ${cx})"/>`;
-    offset += len;
-    return seg;
-  }).join('');
-
-  return `<div class="hk-donut">
-    <svg viewBox="0 0 ${size} ${size}" role="img" aria-label="Répartition calorique des macros">
-      <circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="rgba(var(--accent-rgb),0.10)" stroke-width="${stroke}"/>
-      ${arcs}
-    </svg>${legend}</div>`;
-}
 
 // Chemin lissé passant par une série de points (spline de Catmull-Rom convertie
 // en courbes de Bézier). Donne un tracé fluide, sans les angles d'une polyline.
@@ -415,7 +285,13 @@ export function render(container) {
   const mg = macroGoalsFor(today);
   const steps = store.userData.steps.byDate[today] || 0;
   const stepsGoal = settings.stepsGoal || 10000;
-  const water = store.userData.water.byDate[today] || 0;
+  // Volume de la semaine : séries faites sur 7 jours, sur la somme des objectifs par muscle
+  const wkStart = new Date(today + 'T12:00:00'); wkStart.setDate(wkStart.getDate() - 6);
+  const wkSets = weeklySetsByMuscle(store.userData.workouts, exerciseLookup, wkStart.toISOString().slice(0, 10), today, settings.secondaryRatio);
+  const volDone = Math.round(Object.values(wkSets).reduce((a, b) => a + b, 0));
+  const volGoal = Object.values(settings.volumeGoals || {}).reduce((a, b) => a + b, 0) || 1;
+  const left = mg.kcalGoal - totals.kcal;
+  const macro = (k, v, g, c) => `<div class="hk-macro"><span>${k} <b class="num">${Math.round(v)}</b>/${g} g</span><i><u style="width:${Math.min(100, Math.round((v / (g || 1)) * 100))}%;background:var(${c})"></u></i></div>`;
   // Poids du jour consulté : la dernière pesée faite ce jour là ou avant.
   const wUpTo = store.userData.weights.filter((w) => w.date <= today);
   const currentW = wUpTo.length ? wUpTo[wUpTo.length - 1].value : profile.weight;
@@ -429,23 +305,25 @@ export function render(container) {
     <div class="home-fit">
 
       <div class="card stat-card home-kcal" id="home-kcal">
-        <div class="hk-main">
-          <div class="stat-head">Calories</div>
-          <div class="hk-numbers">
-            <span class="num hk-big">${Math.round(totals.kcal)}</span>
-            <span class="hk-goal">/ ${mg.kcalGoal} kcal</span>
-          </div>
+        <div class="hk-row">
+          <div class="hk-side"><span class="num hk-big">${Math.round(totals.kcal)}</span><span class="hk-lbl">kcal mangées</span></div>
+          <div class="hk-ring">${ringSVG({ size: 104, stroke: 12, progress: totals.kcal / mg.kcalGoal })}</div>
+          <div class="hk-side hk-right"><span class="num hk-big">${Math.abs(Math.round(left))}</span><span class="hk-lbl">${left >= 0 ? 'kcal restantes' : 'kcal en trop'}</span></div>
         </div>
-        ${macroDonut(totals.prot, totals.carbs, totals.fat, mg)}
+        <div class="hk-macros">
+          ${macro('P', totals.prot, mg.protG, '--mac-p')}${macro('G', totals.carbs, mg.carbsG, '--mac-g')}${macro('L', totals.fat, mg.fatG, '--mac-l')}
+        </div>
       </div>
 
-      <div class="card stat-card home-activity" id="home-activity">
-        <div class="stat-head">Pas</div>
-        <div class="hk-numbers">
-          <span class="num ha-big">${steps.toLocaleString('fr-FR')}</span>
-          <span class="hk-goal">/ ${stepsGoal.toLocaleString('fr-FR')}</span>
+      <div class="home-pair">
+        <div class="card stat-card home-activity" id="home-activity">
+          <div class="tile-top"><span class="stat-head">${icons.steps} Pas</span>${ringSVG({ size: 56, stroke: 8, progress: steps / stepsGoal })}</div>
+          <div class="tile-val"><span class="num">${steps.toLocaleString('fr-FR')}</span><small>/ ${stepsGoal.toLocaleString('fr-FR')}</small></div>
         </div>
-        <div class="ha-track">${stepsTrack(steps / stepsGoal)}</div>
+        <div class="card stat-card home-volume" id="home-volume">
+          <div class="tile-top"><span class="stat-head">Volume</span>${ringSVG({ size: 56, stroke: 8, progress: volDone / volGoal, color: 'var(--on-accent)' })}</div>
+          <div class="tile-val"><span class="num">${volDone}</span><small>/ ${volGoal} séries sur 7 j</small></div>
+        </div>
       </div>
 
       <div class="card stat-card home-weight" id="home-weight">
@@ -457,16 +335,6 @@ export function render(container) {
       </div>
 
       <div id="coach-host"></div>
-
-      <div class="card stat-card home-water" id="home-water">
-        <div class="stat-head">Eau</div>
-        <div class="hk-numbers">
-          <span class="num hwa-val">${water.toFixed(2).replace(/0$/, '')}</span>
-          <span class="hk-goal">/ ${settings.waterGoal} L</span>
-        </div>
-        <div class="hwa-bar"><i style="width:${Math.min(100, Math.round((water / settings.waterGoal) * 100))}%"></i></div>
-        <button class="btn btn-secondary btn-sm" id="btn-add-water" aria-label="Ajouter 0.25 L">+0.25</button>
-      </div>
 
       <div class="card gr-card" id="gr-card">
         <div class="gr-badge">${rankBadge(gr.rank.id, 40)}</div>
@@ -488,20 +356,13 @@ export function render(container) {
     onChange: rerender,
   }));
   container.querySelector('#gr-card').addEventListener('click', () => openGlobalRankModal(gr));
-  container.querySelector('#btn-add-water').addEventListener('click', (e) => {
-    e.stopPropagation(); // le +0.25 reste un raccourci, il n'ouvre pas la fenêtre
-    store.addWater(today, 0.25);
-    haptic();
-    rerender();
-  });
-  // Toucher la carte Eau ouvre le détail et le réglage de l'objectif.
-  container.querySelector('#home-water').addEventListener('click', () => openWaterModal(rerender));
   // La carte Poids ouvre la fenêtre qui contient le graphique ET les actions.
   container.querySelector('#home-weight').addEventListener('click', () => openChartModal(rerender));
   // Calories et Activité renvoient vers l'onglet correspondant : l'accueil est
   // un résumé, le détail vit dans sa page.
   container.querySelector('#home-kcal').addEventListener('click', () => goToPage(PAGE_NUTRITION));
   container.querySelector('#home-activity').addEventListener('click', () => goToPage(PAGE_ACTIVITY));
+  container.querySelector('#home-volume').addEventListener('click', () => goToPage(PAGE_WORKOUT));
 
   // Jours de pesée déjà couverts sur les 5 qui déclenchent le coach.
 function coachDays() {

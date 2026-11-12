@@ -414,12 +414,6 @@ class StorageManager {
     return t;
   }
 
-  addWater(date, liters) {
-    const cur = this.userData.water.byDate[date] || 0;
-    this.userData.water.byDate[date] = Math.max(0, Math.round((cur + liters) * 100) / 100);
-    this.persist();
-  }
-
   addStepsLog(date, count) {
     this.userData.steps.byDate[date] = count;
     this.persist();

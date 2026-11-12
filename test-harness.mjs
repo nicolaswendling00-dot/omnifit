@@ -57,11 +57,12 @@ assert(pages.home.querySelector('.home-weight'), 'Accueil : carte poids');
 // Récap complet de la journée : calories, poids, activité, eau
 // Récap : calories, coach, poids, activité, eau
 assert(pages.home.querySelectorAll('.stat-card').length === 5, 'Accueil : 5 cartes récap');
+assert(pages.home.querySelector('.home-volume') && !pages.home.querySelector('.home-water') && !/Eau/.test(pages.home.textContent), 'Accueil : volume de la semaine, plus d eau');
+assert(pages.home.querySelectorAll('.week-strip .wk-day').length === 7 && pages.home.querySelector('.wk-day.sel'), 'En-tete : bandeau des 7 jours');
 assert(pages.home.querySelector('.home-kcal') && pages.home.querySelector('.home-activity'), 'Accueil : cartes calories et activité');
 // Répartition des macros en anneau : 3 arcs + fond
-assert(pages.home.querySelector('.hk-donut'), 'Accueil : répartition des macros en anneau');
-assert(pages.home.querySelectorAll('.hk-donut-legend span').length === 3, 'Accueil : légende P/G/L de l\'anneau');
-assert(!pages.home.querySelector('.hk-macro-bar'), 'Accueil : plus de barres de macro');
+assert(pages.home.querySelector('.hk-ring svg') && pages.home.querySelectorAll('.hk-side').length === 2, 'Accueil : mangées, anneau, restantes');
+assert(pages.home.querySelectorAll('.hk-macro').length === 3, 'Accueil : 3 barres de macros');
 assert(pages.home.querySelector('.coach-card'), 'Accueil : coach déplacé sur l\'accueil');
 // Le graphique s'ouvre en touchant la carte Poids (plus de bouton dédié)
 assert(!pages.home.querySelector('#weight-chart'), 'Accueil : graphique en modal seulement');
@@ -163,6 +164,10 @@ assert(mealSheet && mealSheet.querySelectorAll('#m-cat button').length === 4, 'A
 assert(mealSheet.querySelector('#m-fiber'), 'Ajout repas : champ fibres optionnel');
 clearOverlays();
 
+{
+  const gsrc = fs.readFileSync(new URL('./utils/gestures.js', import.meta.url), 'utf8');
+  assert(/list\.setPointerCapture\(e\.pointerId\)/.test(gsrc) && !/row\.setPointerCapture/.test(gsrc) && /lostpointercapture/.test(gsrc), 'Reorganiser : doigt capture par la liste (plus de ligne figee)');
+}
 console.log('== v7.2 : suppression de repas, coach, panneaux ==');
 {
   const d = todayISO();
@@ -178,7 +183,7 @@ console.log('== v7.2 : suppression de repas, coach, panneaux ==');
   const css = fs.readFileSync(new URL('./style.css', import.meta.url), 'utf8');
   assert(!/\.coach-card::after \{/.test(css) && !/coach-good \{ background: linear-gradient/.test(css) && /\.coach-rate\.coach-down \{ color: var\(--accent\)/.test(css) && /\.coach-rate\.coach-up \{ color: var\(--violet-text\)/.test(css), 'Coach : ni trait ni dégradé, rythme bleu clair en baisse, violet en hausse');
   const hsrc = fs.readFileSync(new URL('./modules/home.js', import.meta.url), 'utf8');
-  assert(/title: 'Eau', content: form, actions: \[\]/.test(hsrc), 'Eau : plus de bouton Fermer');
+  assert(!/water|Eau/.test(hsrc), 'Eau : retiree de l accueil');
 }
 
 console.log('== v7.1 : nutrition animee, historique, graphique vide ==');
@@ -1005,8 +1010,8 @@ console.log('== v5.6 : accueil, ruban, series persistantes, coefficient ==');
     'Animations : les lignes ne se rejouent plus a chaque rendu (plus de clignotement)');
 
   home.render(pages.home);
-  const legend = pages.home.querySelector('.hk-donut-legend').textContent;
-  assert(/Prot \d+ \/ \d+ g/.test(legend) && /Lip \d+ \/ \d+ g/.test(legend), 'Accueil : macros en grammes, avec leur objectif');
+  const legend = pages.home.querySelector('.hk-macros').textContent;
+  assert(/P \d+\/\d+ g/.test(legend) && /L \d+\/\d+ g/.test(legend), 'Accueil : macros en grammes, avec leur objectif');
   assert(!legend.includes('%'), 'Accueil : plus de pourcentages dans l\'anneau');
 
   nutrition.render(pages.nutrition);
@@ -1297,7 +1302,7 @@ console.log('== v6.0 : iPhone, percentile, progression, fluidite ==');
   assert(/prerenderOthers/.test(appSrc), 'Navigation : onglets voisins prepares a l\'avance');
   assert(/el\.scrollTop = y/.test(appSrc), 'Navigation : position de defilement conservee au rendu');
   const v0 = store.version;
-  store.addWater(todayISO(), 0.25);
+  store.addStepsLog(todayISO(-40), 1);
   assert(store.version === v0 + 1, 'Stockage : chaque ecriture incremente la version');
   const cssF = fs.readFileSync(new URL('./style.css', import.meta.url), 'utf8');
   assert(!/backdrop-filter/.test(cssF), 'Fluidite : plus aucun flou d\'arriere-plan (couteux sur iPhone)');

@@ -585,20 +585,44 @@ export function dayLabel(iso) {
 // jour, un bouton pour revenir à aujourd'hui. Le h1 reste pour les lecteurs
 // d'écran. mark(iso) → '' | 'on' | 'ok' | 'bad' : point sous le jour dans le
 // calendrier, propre à chaque onglet (repas saisis, séance, objectif de pas).
+// Sept jours autour du jour consulté (jamais dans le futur) : le jour choisi
+// est plein, un point marque les jours renseignés.
+function weekStrip(sel, mark) {
+  const today = isoLocal(new Date());
+  const end = new Date(sel + 'T12:00:00');
+  end.setDate(end.getDate() + 3);
+  const last = isoLocal(end) > today ? new Date(today + 'T12:00:00') : end;
+  let html = '';
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(last); d.setDate(last.getDate() - i);
+    const iso = isoLocal(d);
+    const k = mark ? mark(iso) : '';
+    html += `<button type="button" class="wk-day${iso === sel ? ' sel' : ''}" data-date="${iso}" aria-label="${fmtDateLong(iso)}" ${iso === sel ? 'aria-current="date"' : ''}>
+      <b class="num">${d.getDate()}</b><span>${d.toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '')}</span>${k ? `<i class="dp-mark ${k}"></i>` : ''}
+    </button>`;
+  }
+  return html;
+}
+
 export function dateBar({ title, mark = null, onChange }) {
   const iso = getViewDate();
   const bar = el(`<div class="date-bar">
     <h1 class="sr-only">${esc(title)}</h1>
     <button type="button" class="date-pick" aria-haspopup="dialog" aria-expanded="false">
-      <span>${dayLabel(iso)}</span>${CARET}
+      <span>${dayLabel(iso)}</span>${icons.calendar}
     </button>
     ${isViewingToday() ? '' : `<button type="button" class="btn btn-secondary btn-sm date-back">${ARROW_L} Aujourd'hui</button>`}
+    <div class="week-strip no-swipe">${weekStrip(iso, mark)}</div>
   </div>`);
   const pick = bar.querySelector('.date-pick');
   const change = (d) => { if (setViewDate(d)) { haptic(); onChange(); } };
   pick.addEventListener('click', () => openDayPicker(pick, { mark, onPick: change }));
   const back = bar.querySelector('.date-back');
   if (back) back.addEventListener('click', () => change(null));
+  bar.querySelector('.week-strip').addEventListener('click', (e) => {
+    const b = e.target.closest('.wk-day');
+    if (b) change(b.dataset.date);
+  });
   return bar;
 }
 
