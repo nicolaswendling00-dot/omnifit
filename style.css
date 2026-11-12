@@ -1685,7 +1685,7 @@ body:not(.palette-light) .modal-actions { background: transparent; }
 
 /* v10.3 : page Entraînement sans défilement. Calendrier, puis le volume de la
    semaine à gauche sur toute la hauteur, routines et exercices à droite. */
-#page-workout { overflow: hidden; display: flex; flex-direction: column; padding-bottom: 92px; }
+#page-workout { overflow: hidden; display: flex; flex-direction: column; padding-bottom: 12px; }
 .wk-page { flex: 1 1 auto; min-height: 0; width: 100%; display: flex; flex-direction: column; }
 .wk-grid { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 1.15fr 1fr; gap: 8px; }
 .wk-grid .card { margin: 0; border: 0; font: inherit; color: inherit; text-align: left; }
@@ -1721,3 +1721,13 @@ body:not(.palette-light) .modal-actions { background: transparent; }
 .period-head .icon-btn:disabled { opacity: 0.25; }
 .sb-zone { touch-action: pan-y; }
 #view-toggle { width: 100%; }
+/* v10.4 : sur Entraînement, « Nouvelle séance » quitte le bas de l'écran et
+   devient un bouton rond en haut à droite, comme le coach sur l'accueil.
+   Les tuiles récupèrent toute la hauteur. */
+#fab-page-2 { top: calc(var(--safe-t) + 18px); right: var(--space); bottom: auto; }
+#fab-page-2 .fab { width: 44px; height: 44px; border-radius: 50%; }
+#fab-page-2 .fab svg { width: 22px; height: 22px; }
+#page-workout .date-back { margin-right: 52px; }
+/* Le calendrier et l'en-tête gardent leur taille ; seules les tuiles s'adaptent */
+.wk-page > :not(.wk-grid) { flex-shrink: 0; }
+.wk-grid { margin-top: 0; }
