@@ -1876,33 +1876,14 @@ function volumeRows() {
   return { rows, progress };
 }
 
-// Amélioration : on veut seulement savoir si c'est en hausse ou en baisse,
-// donc une pastille verte ou rouge par séance plutôt qu'une courbe.
-function impStrip(pts) {
-  if (!pts.length) return '<div class="empty-state">Pas encore de séance à comparer</div>';
-  const cls = (v) => (v > 0 ? 'up' : v < 0 ? 'down' : 'flat');
-  const n = (c) => pts.filter((p) => cls(p.v) === c).length;
-  return `<div class="imp-sum"><b class="up">${n('up')} en hausse</b><b class="down">${n('down')} en baisse</b>${n('flat') ? `<b class="flat">${n('flat')} stable${n('flat') > 1 ? 's' : ''}</b>` : ''}</div>
-    <div class="imp-strip">${pts.map((p) => `<div class="imp-pill ${cls(p.v)}"><b class="num">${p.v > 0 ? '+' : ''}${p.v} %</b><span>${fmtDateShort(p.date)}</span></div>`).join('')}</div>`;
-}
-
-// Amélioration dans la durée : une barre par séance (semaine, mois), par
-// semaine (6 mois) ou par mois (année), vers le haut en vert si l'on a
-// progressé, vers le bas en rouge sinon. Même navigation que les autres
-// graphiques : flèches ou glisser pour changer de période.
-let impKind = 'month';
-let impOffset = 0;
-function improvementBuckets(kind, offset) {
+// byDate : { 'AAAA-MM-JJ': [variations en %] } ; chaque graphique garde sa
+// propre période (state).
+function improvementBuckets(kind, offset, byDate) {
   const R = periodRange(kind, offset);
-  const byDate = {};
-  for (const w of store.userData.workouts) {
-    if (w.date < R.start || w.date > R.end) continue;
-    const si = sessionImprovement(w);
-    if (si != null) (byDate[w.date] = byDate[w.date] || []).push(si);
-  }
+  const inR = (d) => d >= R.start && d <= R.end;
   const avg = (a) => (a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : null);
   const buckets = [];
-  const add = (days, label) => buckets.push({ v: avg(days.flatMap((d) => byDate[d] || [])), label, first: days[0] });
+  const add = (days, label) => buckets.push({ v: avg(days.flatMap((d) => byDate[d] || [])), label });
   if (kind === 'week') R.days.forEach((d) => add([d], 'DLMMJVS'[new Date(d + 'T12:00:00').getDay()]));
   else if (kind === 'month') R.days.forEach((d) => { const n = +d.slice(8); add([d], n === 1 || n % 7 === 1 ? String(n) : ''); });
   else if (kind === '6m') {
@@ -1912,17 +1893,15 @@ function improvementBuckets(kind, offset) {
       add(wk, m.getDate() <= 7 ? m.toLocaleDateString('fr-FR', { month: 'narrow' }) : '');
     }
   } else {
-    for (let m = 1; m <= 12; m++) {
-      add(R.days.filter((d) => +d.slice(5, 7) === m), new Date(2000, m - 1, 1).toLocaleDateString('fr-FR', { month: 'narrow' }));
-    }
+    for (let m = 1; m <= 12; m++) add(R.days.filter((d) => +d.slice(5, 7) === m), new Date(2000, m - 1, 1).toLocaleDateString('fr-FR', { month: 'narrow' }));
   }
-  const all = Object.values(byDate).flat();
+  const all = Object.keys(byDate).filter(inR).flatMap((d) => byDate[d]);
   return { R, buckets, mean: avg(all), up: all.filter((v) => v > 0).length, down: all.filter((v) => v < 0).length, n: all.length };
 }
-function improvementChartHTML() {
-  const { R, buckets, mean, up, down, n } = improvementBuckets(impKind, impOffset);
+function improvementChartHTML(state, byDate) {
+  const { R, buckets, mean, up, down, n } = improvementBuckets(state.kind, state.offset, byDate);
   const max = Math.max(10, ...buckets.map((b) => Math.abs(b.v || 0)));
-  return `${periodHead(R, `<span class="per-avg">${mean == null ? 'Aucune séance comparée' : `<b class="num ${mean > 0 ? 'up' : mean < 0 ? 'down' : ''}">${mean > 0 ? '+' : ''}${mean} %</b> en moyenne`}</span>`, impOffset)}
+  return `${periodHead(R, `<span class="per-avg">${mean == null ? 'Aucune séance comparée' : `<b class="num ${mean > 0 ? 'up' : mean < 0 ? 'down' : ''}">${mean > 0 ? '+' : ''}${mean} %</b> en moyenne`}</span>`, state.offset)}
     <div class="impc-zone">
       <div class="impc-plot">${buckets.map((b) => `<div class="impc-col" title="${b.v == null ? '' : `${b.v > 0 ? '+' : ''}${b.v} %`}">
         <span class="impc-up">${b.v > 0 ? `<i style="height:${((b.v / max) * 100).toFixed(1)}%"></i>` : ''}</span>
@@ -1932,24 +1911,43 @@ function improvementChartHTML() {
     </div>
     <div class="imp-sum"><b class="up">${up} en hausse</b><b class="down">${down} en baisse</b>${n - up - down ? `<b class="flat">${n - up - down} stable${n - up - down > 1 ? 's' : ''}</b>` : ''}</div>`;
 }
-function mountImprovementChart(box) {
+// Bloc complet : choix de la période (S, M, 6 M, A) et graphique navigable.
+function improvementSection(byDate, state = { kind: 'month', offset: 0 }) {
+  const sec = el(`<div class="imp-section">
+    <div class="segment imp-kind">
+      <button data-k="week">S</button><button data-k="month">M</button><button data-k="6m">6 M</button><button data-k="year">A</button>
+    </div>
+    <div class="imp-box"></div>
+  </div>`);
+  const box = sec.querySelector('.imp-box');
+  const seg = sec.querySelector('.imp-kind');
   const draw = (dir = 0) => {
-    box.innerHTML = improvementChartHTML();
+    box.innerHTML = improvementChartHTML(state, byDate);
     box.querySelector('.per-prev').addEventListener('click', () => go(1));
     box.querySelector('.per-next').addEventListener('click', () => go(-1));
-    box.querySelectorAll('.imp-kind button').forEach((b) => b.classList.toggle('active', b.dataset.k === impKind));
     attachPeriodSwipe(box.querySelector('.impc-zone'), go);
     slideIn(box.querySelector('.impc-plot'), dir);
   };
-  const go = (dir) => { if (impOffset + dir < 0) return; impOffset += dir; haptic(); draw(dir); };
-  box.previousElementSibling.addEventListener('click', (e) => {
+  const go = (dir) => { if (state.offset + dir < 0) return; state.offset += dir; haptic(); draw(dir); };
+  seg.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b.dataset.k === state.kind));
+  seg.addEventListener('click', (e) => {
     const b = e.target.closest('button');
-    if (!b || b.dataset.k === impKind) return;
-    impKind = b.dataset.k; impOffset = 0;
-    box.previousElementSibling.querySelectorAll('button').forEach((x) => x.classList.toggle('active', x === b));
+    if (!b || b.dataset.k === state.kind) return;
+    state.kind = b.dataset.k; state.offset = 0;
+    seg.querySelectorAll('button').forEach((x) => x.classList.toggle('active', x === b));
     draw();
   });
   draw();
+  return sec;
+}
+const sessionImpState = { kind: 'month', offset: 0 };
+function sessionImprovementsByDate() {
+  const out = {};
+  for (const w of store.userData.workouts) {
+    const si = sessionImprovement(w);
+    if (si != null) (out[w.date] = out[w.date] || []).push(si);
+  }
+  return out;
 }
 
 // Volume de la semaine, muscle par muscle : une jauge par muscle jusqu'à son
@@ -1985,12 +1983,8 @@ function openVolumeSheet(rerender) {
       }).join('')}
     </div>
     <h3 style="margin:20px 0 8px">Amélioration des séances</h3>
-    <div class="segment imp-kind">
-      <button data-k="week">S</button><button data-k="month" class="active">M</button><button data-k="6m">6 M</button><button data-k="year">A</button>
-    </div>
     <div id="imp-box"></div>
   </div>`);
-  content.querySelectorAll('.imp-kind button').forEach((b) => b.classList.toggle('active', b.dataset.k === impKind));
   const sh = openSheet({
     title: 'Volume hebdo',
     content,
@@ -2007,7 +2001,7 @@ function openVolumeSheet(rerender) {
     const m = u && (u.getAttribute('href') || '').match(/^#bm-[fb]-(\w+)$/);
     if (m && ids.has(m[1])) openMuscleChart(m[1]);
   });
-  mountImprovementChart(content.querySelector('#imp-box'));
+  content.querySelector('#imp-box').replaceWith(improvementSection(sessionImprovementsByDate(), sessionImpState));
   return sh;
 }
 
@@ -2159,13 +2153,14 @@ function openMuscleChart(muscleId) {
     if (!series[i - 1].v) continue;
     pts.push({ date: series[i].date, v: Math.max(-100, Math.min(100, Math.round(((series[i].v / series[i - 1].v) - 1) * 100))) });
   }
-  pts = pts.slice(-6); // zoom sur les 6 derniers entraînements
+  const muscleByDate = {};
+  for (const p of pts) (muscleByDate[p.date] = muscleByDate[p.date] || []).push(p.v);
 
   const content = el(`<div>
     <h3 style="margin:0 0 4px">Exercices cette semaine</h3>
     <div id="mus-exos">${exoRows.length ? '' : '<div class="empty-state">Aucun exercice cette semaine</div>'}</div>
     <h3 style="margin:16px 0 8px">Amélioration</h3>
-    ${impStrip([...pts].reverse())}
+    <div id="mus-imp"></div>
   </div>`);
   const listHost = content.querySelector('#mus-exos');
   for (const [id, e] of exoRows) {
@@ -2180,6 +2175,7 @@ function openMuscleChart(muscleId) {
     listHost.appendChild(row);
   }
 
+  content.querySelector('#mus-imp').replaceWith(improvementSection(muscleByDate));
   openModal({
     title: `${muscleLabel(muscleId)}`,
     content,

@@ -1426,11 +1426,26 @@ console.log('== v6.1 : anatomie detaillee et carte du corps ==');
   assert(vh.querySelectorAll('.impc-plot .impc-col').length >= 28, 'Amelioration : une barre par jour sur le mois');
   vh.querySelector('.imp-kind [data-k="year"]').click();
   assert(vh.querySelectorAll('.impc-plot .impc-col').length === 12, 'Amelioration : vue annee, une barre par mois');
-  vh.querySelector('#imp-box .per-prev').click();
-  assert(!vh.querySelector('#imp-box .per-next').disabled, 'Amelioration : on remonte dans le temps');
+  vh.querySelector('.imp-box .per-prev').click();
+  assert(!vh.querySelector('.imp-box .per-next').disabled, 'Amelioration : on remonte dans le temps');
   const useLats = vh.querySelector('.bm-week use[href="#bm-b-lats"]');
   useLats.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   assert([...document.querySelectorAll('.sheet')].pop() !== vh, 'Carte du corps : toucher un muscle ouvre son detail');
+  assert([...document.querySelectorAll('.sheet')].pop().querySelector('.imp-section .impc-plot'), 'Muscle : meme graphique d amelioration');
+  clearOverlays();
+  {
+    const d0 = todayISO();
+    store.addNutritionLog(d0, { name: 'Poulet', meal: 'Déjeuner', prot: 50, carbs: 0, fat: 5, fiber: 0, kcal: 245 });
+    nutrition.render(pages.nutrition);
+    pages.nutrition.querySelector('.macro-rings').click();
+    const ns = [...document.querySelectorAll('.sheet')].pop();
+    assert(ns.querySelector('.ns-plot .ns-col.avg') && ns.querySelectorAll('.ns-leg').length === 4, 'Stats nutrition : barres par repas, colonne Moy., legende des 4 repas');
+    ns.querySelector('#ns-tab [data-t="macro"]').click();
+    assert(ns.querySelectorAll('.ns-mrow').length === 4 && /Poulet/.test(ns.textContent), 'Stats nutrition : macros moyennes, objectif et aliments les plus riches');
+    ns.querySelector('#ns-kind [data-k="year"]').click();
+    assert(ns.querySelectorAll('.ns-plot .ns-col').length === 13, 'Stats nutrition : vue annee (12 mois + moyenne)');
+    clearOverlays();
+  }
   clearOverlays();
 }
 
