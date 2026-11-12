@@ -1,0 +1,61 @@
+# Fabrique OmniFit.ipa (non signé) à chaque publication sur main, pour
+# l'installer avec SideStore, qui le signe avec l'Apple ID gratuit.
+# La PWA (GitHub Pages) n'est pas concernée : mêmes fichiers, emballés par Capacitor.
+name: App iOS (SideStore)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ios-build
+  cancel-in-progress: true
+
+jobs:
+  ipa:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: src
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Projet Capacitor
+        run: |
+          mkdir -p app/www
+          rsync -a --exclude '.git' --exclude '.github' --exclude 'node_modules' \
+            --exclude 'test-harness.mjs' --exclude '_*' src/ app/www/
+          cd app
+          npm init -y > /dev/null
+          npm install @capacitor/core @capacitor/cli @capacitor/ios
+          npx cap init OmniFit com.omnifit.app --web-dir www
+          npx cap add ios
+          npx cap sync ios
+
+      - name: Compilation (sans signature)
+        run: |
+          cd app/ios/App
+          if [ -d App.xcworkspace ]; then SRC="-workspace App.xcworkspace"; else SRC="-project App.xcodeproj"; fi
+          xcodebuild $SRC -scheme App -configuration Release -sdk iphoneos \
+            -destination 'generic/platform=iOS' -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+          mkdir Payload
+          cp -R build/Build/Products/Release-iphoneos/App.app Payload/
+          zip -qr "$GITHUB_WORKSPACE/OmniFit.ipa" Payload
+
+      # Adresse fixe : .../releases/download/ios-latest/OmniFit.ipa
+      - name: Publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd src
+          gh release delete ios-latest --yes --cleanup-tag || true
+          gh release create ios-latest "$GITHUB_WORKSPACE/OmniFit.ipa" \
+            --title "OmniFit pour SideStore" --notes "Construit depuis ${GITHUB_SHA::7}" --latest=false
