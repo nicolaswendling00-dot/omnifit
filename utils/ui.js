@@ -604,6 +604,68 @@ function weekStrip(sel, mark) {
   return html;
 }
 
+// ---------- Périodes des graphiques (comme l'app Santé) ----------
+// kind : 'week' (lundi à dimanche), 'month', '6m', 'year' ; offset 0 = période
+// en cours, 1 = la précédente, etc. Renvoie { start, end, days[], label }.
+const MONTH_FMT = { month: 'short' };
+export function periodRange(kind, offset = 0) {
+  const t = new Date(); t.setHours(12, 0, 0, 0);
+  let s; let e;
+  if (kind === 'week') {
+    s = new Date(t); s.setDate(t.getDate() - ((t.getDay() + 6) % 7) - 7 * offset);
+    e = new Date(s); e.setDate(s.getDate() + 6);
+  } else if (kind === 'month') {
+    s = new Date(t.getFullYear(), t.getMonth() - offset, 1, 12);
+    e = new Date(t.getFullYear(), t.getMonth() - offset + 1, 0, 12);
+  } else if (kind === '6m') {
+    s = new Date(t.getFullYear(), t.getMonth() - 5 - 6 * offset, 1, 12);
+    e = new Date(t.getFullYear(), t.getMonth() - 6 * offset + 1, 0, 12);
+  } else {
+    s = new Date(t.getFullYear() - offset, 0, 1, 12);
+    e = new Date(t.getFullYear() - offset, 11, 31, 12);
+  }
+  const days = [];
+  for (const d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) days.push(isoLocal(d));
+  const y = e.getFullYear();
+  const label = kind === 'week'
+    ? `${s.getDate()} ${s.getMonth() !== e.getMonth() ? s.toLocaleDateString('fr-FR', MONTH_FMT) + ' ' : ''}au ${e.getDate()} ${e.toLocaleDateString('fr-FR', MONTH_FMT)} ${y}`
+    : kind === 'month' ? cap(s.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }))
+      : kind === '6m' ? `${cap(s.toLocaleDateString('fr-FR', MONTH_FMT))} à ${e.toLocaleDateString('fr-FR', MONTH_FMT)} ${y}`
+        : String(y);
+  return { start: days[0], end: days[days.length - 1], days, label };
+}
+
+// En-tête d'un graphique : flèches, valeur moyenne de la période, dates.
+export function periodHead(range, avgHtml, offset) {
+  return `<div class="period-head">
+    <button type="button" class="icon-btn per-prev" aria-label="Période précédente">${ARROW_L}</button>
+    <div class="per-mid">${avgHtml}<span class="per-label">${range.label}</span></div>
+    <button type="button" class="icon-btn per-next" aria-label="Période suivante" ${offset > 0 ? '' : 'disabled'}>${icons.chevron}</button>
+  </div>`;
+}
+
+// Glisser horizontalement sur un graphique change de période (vers la droite =
+// période précédente), comme dans l'app Santé. step(+1) = plus ancienne.
+export function attachPeriodSwipe(zone, step) {
+  zone.classList.add('no-swipe');
+  let x0 = null; let y0 = 0;
+  zone.addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; }, { passive: true });
+  zone.addEventListener('touchend', (e) => {
+    if (x0 == null) return;
+    const p = e.changedTouches[0];
+    const dx = p.clientX - x0; const dy = p.clientY - y0;
+    x0 = null;
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5) step(dx > 0 ? 1 : -1);
+  }, { passive: true });
+}
+
+// Arrivée de la nouvelle période du côté d'où elle vient.
+export function slideIn(node, dir) {
+  if (!node || !node.animate || reducedMotion() || !dir) return;
+  node.animate([{ transform: `translateX(${-dir * 40}px)`, opacity: 0 }, { transform: 'none', opacity: 1 }],
+    { duration: 280, easing: 'cubic-bezier(.22,1,.36,1)' });
+}
+
 export function dateBar({ title, mark = null, onChange }) {
   const iso = getViewDate();
   const bar = el(`<div class="date-bar">

@@ -12,10 +12,7 @@ import { computeExerciseLP, computeExerciseLPDetailed, rankFromLP, rankBadge, ge
 import { PAGE_WORKOUT, getViewDate } from '../utils/nav.js';
 import { openRankCard } from '../utils/rankCard.js';
 
-let volumeChart = null;
-let impChart = null;
 let pageRerender = null;
-let routinesOpen = false;
 let session = null; // { elapsed, running, date, notes, exercises:[{exerciseId, sets:[{weight,reps}], ss}] }
 let sessionUI = null; // { overlay, renderExos, close }
 let chronoInterval = null;
@@ -1566,12 +1563,6 @@ function showSummary(exercises, closeSession) {
   const byMuscle = workoutMuscleVolume({ exercises }, exerciseLookup, s.secondaryRatio);
   const atten = muscleAttenuation({ exercises }, exerciseLookup, s.secondaryRatio);
   const breakdown = Object.keys(atten).sort((a, b) => atten[b] - atten[a]);
-  const impVals = exercises.map((x) => exoImprovement(x)).filter((v) => v != null);
-  const sessImp = impVals.length ? Math.round(impVals.reduce((a, b) => a + b, 0) / impVals.length) : null;
-  const progress = exercises
-    .map((x) => ({ name: (exerciseLookup(x.exerciseId) || { name: x.exerciseId }).name, imp: exoImprovement(x) }))
-    .filter((p) => p.imp != null && p.imp > 0)
-    .sort((a, b) => b.imp - a.imp);
 
   // Gains de LP par exercice + changements de rang — simulation sans sauvegarder
   const TEMP_ID = '__pending_summary__';
@@ -1597,7 +1588,6 @@ function showSummary(exercises, closeSession) {
       <div class="card" style="margin:0;text-align:center;padding:10px"><div class="muted">Durée</div><div class="num" style="font-size:1.2rem;color:var(--accent)">${formatTime(elapsedSeconds())}</div></div>
       <div class="card" style="margin:0;text-align:center;padding:10px"><div class="muted">Séries</div><div class="num" style="font-size:1.2rem;color:var(--accent)">${totalSets}</div></div>
     </div>
-    ${sessImp != null ? `<div class="wd-sess-imp ${sessImp >= 0 ? 'up' : 'down'}" style="text-align:center;margin-bottom:12px">Amélioration de la séance : ${sessImp >= 0 ? '+' : ''}${sessImp}%</div>` : ''}
     ${promotions.length ? `<div class="rank-promo-banner">
       ${promotions.map((p) => `<div class="rank-promo-row">
         ${rankBadge(p.afterRank.id, 44)}
@@ -1606,16 +1596,11 @@ function showSummary(exercises, closeSession) {
     </div>` : ''}
     ${lpRows.length ? `<h3 style="margin:2px 0 6px">Gains de LP</h3>
       <div class="recap-list">${lpRows.map((r) => `<div class="recap-row"><span>${esc(r.name)}</span><span class="lp-gain-badge">+${r.gain} LP</span></div>`).join('')}</div>` : ''}
-    ${progress.length ? `<h3 style="margin:14px 0 6px">Tu as progressé sur</h3>
-      <div class="recap-list">${progress.map((p) => `<div class="recap-row"><span>${esc(p.name)}</span>${impBadge(p.imp, false)}</div>`).join('')}</div>` : ''}
     <h3 style="margin:14px 0 6px">Coefficients d'atténuation</h3>
     <table class="volume-table">
-      <thead><tr><th>Muscle</th><th>Atténuation</th><th>Δ</th></tr></thead>
+      <thead><tr><th>Muscle</th><th>Atténuation</th></tr></thead>
       <tbody>${breakdown.map((m) => {
-        const v = byMuscle[m] || 0;
-        const lastV = lastMuscleVolume(m);
-        const imp = lastV ? Math.round(((v / lastV) - 1) * 100) : null;
-        return `<tr><td>${muscleLabel(m)}</td><td class="tnum" style="color:var(--accent)">${atten[m].toFixed(2)}</td><td>${imp != null ? impBadge(imp, false) : ''}</td></tr>`;
+        return `<tr><td>${muscleLabel(m)}</td><td class="tnum" style="color:var(--accent)">${atten[m].toFixed(2)}</td></tr>`;
       }).join('')}</tbody>
     </table>
     <button class="btn btn-secondary btn-block" id="sum-note" style="margin-top:14px">${icons.edit} <span id="sum-note-lbl">${session.notes ? 'Modifier la note' : 'Note de séance'}</span></button>
@@ -1877,108 +1862,93 @@ function renderTwoWeekCalendar(host) {
   host.appendChild(card);
 }
 
-function renderVolumeDashboard(host, rerender) {
+// Avancement de la semaine par muscle (séries faites sur 7 jours / objectif)
+function volumeRows() {
   const s = store.userData.settings;
-  const volumeOpen = s.volumeSectionOpen !== false; // persisté (comme les routines, mais gardé après un rechargement)
-  const end = todayISO();
-  const start = todayISO(-6);
-  const sets = weeklySetsByMuscle(store.userData.workouts, exerciseLookup, start, end, s.secondaryRatio);
-  const goals = s.volumeGoals;
-
+  const sets = weeklySetsByMuscle(store.userData.workouts, exerciseLookup, todayISO(-6), todayISO(), s.secondaryRatio);
   const rows = MUSCLES.map((m) => {
     const done = Math.round((sets[m.id] || 0) * 10) / 10;
-    const goal = goals[m.id] || 0;
-    const pct = goal ? Math.round((done / goal) * 100) : 0;
-    return { m, done, goal, pct };
+    const goal = s.volumeGoals[m.id] || 0;
+    return { m, done, goal, pct: goal ? Math.round((done / goal) * 100) : 0 };
   });
-  // La carte se colore selon l'avancement vers l'objectif de la semaine :
-  // un muscle à 100 % (ou plus) prend la teinte la plus soutenue.
   const progress = {};
   for (const r of rows) if (r.goal) progress[r.m.id] = Math.min(1, r.done / r.goal);
+  return { rows, progress };
+}
 
-  const card = el(`<div class="card${volumeOpen ? '' : ' collapsed'}">
-    <div class="card-row collapse-head" id="vol-toggle" style="cursor:pointer">
-      <h3 style="margin:0;display:flex;align-items:center;gap:6px"><span class="collapse-caret">${icons.chevron}</span> Volume hebdo</h3>
-      <button class="btn btn-secondary btn-sm" id="vol-goals-btn">${icons.edit} Objectifs</button>
-    </div>
+// Amélioration : on veut seulement savoir si c'est en hausse ou en baisse,
+// donc une pastille verte ou rouge par séance plutôt qu'une courbe.
+function impStrip(pts) {
+  if (!pts.length) return '<div class="empty-state">Pas encore de séance à comparer</div>';
+  const cls = (v) => (v > 0 ? 'up' : v < 0 ? 'down' : 'flat');
+  const n = (c) => pts.filter((p) => cls(p.v) === c).length;
+  return `<div class="imp-sum"><b class="up">${n('up')} en hausse</b><b class="down">${n('down')} en baisse</b>${n('flat') ? `<b class="flat">${n('flat')} stable${n('flat') > 1 ? 's' : ''}</b>` : ''}</div>
+    <div class="imp-strip">${pts.map((p) => `<div class="imp-pill ${cls(p.v)}"><b class="num">${p.v > 0 ? '+' : ''}${p.v} %</b><span>${fmtDateShort(p.date)}</span></div>`).join('')}</div>`;
+}
 
-    <div class="collapse-body collapse-body-tall">
-      <div class="bm-card bm-week">${bodyMapSVG(progress, { size: 190, label: 'Avancement des objectifs de la semaine' })}
-        <div class="bm-legend"><span>0 %</span><i></i><span>Objectif atteint</span></div>
-      </div>
-      <table class="volume-table" id="vol-table">
-        <thead><tr><th>Muscle</th><th>Sets</th><th>Obj.</th><th>%</th></tr></thead>
-        <tbody>
-          ${rows.map((r, i) => `${i === 0 || rows[i - 1].m.group !== r.m.group ? `<tr class="vol-group"><td colspan="4">${r.m.group}</td></tr>` : ''}<tr class="vol-row" data-m="${r.m.id}">
-            <td>${r.m.label}</td>
-            <td class="tnum">${r.done}</td>
-            <td class="tnum">${r.goal}</td>
-            <td class="tnum ${r.pct >= 100 ? 'pct-ok' : r.pct >= 50 ? '' : 'pct-warn'}">${r.goal ? r.pct + '%' : ''}</td>
-          </tr>`).join('')}
-        </tbody>
-      </table>
-      <div class="chart-wrap" style="margin-top:14px;height:180px"><canvas id="vol-chart"></canvas></div>
-      <h3 style="margin-top:16px;margin-bottom:2px">Amélioration des séances</h3>
-      <div class="chart-wrap" style="height:170px"><canvas id="imp-chart"></canvas></div>
+function openVolumeSheet(rerender) {
+  const { rows, progress } = volumeRows();
+  const sorted = [...store.userData.workouts].sort((a, b) => b.date.localeCompare(a.date));
+  const imp = [];
+  for (const w of sorted) {
+    if (w.date < todayISO(-13)) break;
+    const si = sessionImprovement(w);
+    if (si != null) imp.push({ date: w.date, v: Math.round(si) });
+  }
+  const content = el(`<div>
+    <div class="bm-card bm-week">${bodyMapSVG(progress, { size: 190, label: 'Avancement des objectifs de la semaine' })}
+      <div class="bm-legend"><span>0 %</span><i></i><span>Objectif atteint</span></div>
     </div>
+    <table class="volume-table" id="vol-table">
+      <thead><tr><th>Muscle</th><th>Sets</th><th>Obj.</th><th>%</th></tr></thead>
+      <tbody>
+        ${rows.map((r, i) => `${i === 0 || rows[i - 1].m.group !== r.m.group ? `<tr class="vol-group"><td colspan="4">${r.m.group}</td></tr>` : ''}<tr class="vol-row" data-m="${r.m.id}">
+          <td>${r.m.label}</td>
+          <td class="tnum">${r.done}</td>
+          <td class="tnum">${r.goal}</td>
+          <td class="tnum ${r.pct >= 100 ? 'pct-ok' : r.pct >= 50 ? '' : 'pct-warn'}">${r.goal ? r.pct + '%' : ''}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    <h3 style="margin:16px 0 8px">Amélioration des séances</h3>
+    ${impStrip(imp)}
   </div>`);
-  host.appendChild(card);
-
-  card.querySelector('#vol-toggle').addEventListener('click', (e) => {
-    if (e.target.closest('#vol-goals-btn')) return;
-    // On relit l'état AU MOMENT DU CLIC : une valeur capturée au rendu resterait
-    // figée et le second appui ne rouvrirait jamais la section.
-    const current = store.userData.settings.volumeSectionOpen !== false;
-    const next = !current;
-    store.saveUserData({ settings: { volumeSectionOpen: next } });
-    setCollapsed(card, !next);
+  const sh = openSheet({
+    title: 'Volume hebdo',
+    content,
+    headerAction: { icon: icons.edit, label: 'Objectifs de volume', onClick: ({ close }) => { close(); openVolumeGoalsModal(rerender); } },
   });
-
-  card.querySelector('#vol-table').addEventListener('click', (e) => {
+  content.querySelector('#vol-table').addEventListener('click', (e) => {
     const tr = e.target.closest('.vol-row');
     if (tr) openMuscleChart(tr.dataset.m);
   });
+  return sh;
+}
 
-  const acc = {};
-  for (const w of store.userData.workouts) {
-    if (w.date < start || w.date > end) continue;
-    const bm = workoutMuscleVolume(w, exerciseLookup, s.secondaryRatio);
-    for (const [m, v] of Object.entries(bm)) acc[m] = (acc[m] || 0) + v;
+function openRoutinesSheet(rerender) {
+  const routines = store.userData.routines;
+  const content = el(`<div>
+    <div id="routine-list">${routines.length ? '' : '<div class="empty-state">Aucune routine</div>'}</div>
+    <button class="btn btn-secondary btn-block" id="btn-new-routine">${icons.plus} Nouvelle routine</button>
+  </div>`);
+  const sh = openSheet({ title: 'Routines', content });
+  const rlist = content.querySelector('#routine-list');
+  for (const r of routines) {
+    const names = r.exercises.map((id) => (exerciseLookup(id) || { name: id }).name);
+    const listHtml = names.length
+      ? `<ol class="routine-exos">${names.map((n) => `<li>${esc(n)}</li>`).join('')}</ol>`
+      : '<div class="muted" style="margin:4px 0 10px">Vide</div>';
+    const card = el(`<div class="card" style="background:var(--surface-2);padding:12px">
+      <div class="card-row"><h3 style="margin:0">${esc(r.name)}</h3>
+        <button class="icon-btn" aria-label="Modifier">${icons.edit}</button></div>
+      ${listHtml}
+      <button class="btn btn-primary btn-sm btn-block">Lancer</button>
+    </div>`);
+    card.querySelector('.icon-btn').addEventListener('click', () => { sh.close(); openRoutineEditor(r, rerender); });
+    card.querySelector('.btn-primary').addEventListener('click', () => { sh.close(); openSession(rerender, r); });
+    rlist.appendChild(card);
   }
-  const chartOpts = {
-    responsive: true, maintainAspectRatio: false,
-    plugins: { legend: { display: false } },
-    scales: {
-      x: { ticks: { color: '#9CA3AF', font: { size: 8, family: 'Archivo' } }, grid: { color: 'rgba(0,217,255,0.06)' } },
-      y: { ticks: { color: '#9CA3AF', font: { size: 9, family: 'Archivo' } }, grid: { color: 'rgba(0,217,255,0.06)' } },
-    },
-  };
-  volumeChart = makeChart(card.querySelector('#vol-chart'), {
-    type: 'bar',
-    data: { labels: MUSCLES.map((m) => m.short), datasets: [{ data: MUSCLES.map((m) => Math.round(acc[m.id] || 0)), backgroundColor: 'rgba(0,217,255,0.55)', borderRadius: 5 }] },
-    options: chartOpts,
-  }, volumeChart);
-
-  // Graphe amélioration des séances — 2 dernières semaines, axe vertical fixé à [-100, 100] %
-  const sorted = [...store.userData.workouts].sort((a, b) => a.date.localeCompare(b.date));
-  const weekStart = todayISO(-13);
-  const impPts = [];
-  for (const w of sorted) {
-    if (w.date < weekStart) continue;
-    const si = sessionImprovement(w);
-    if (si != null) impPts.push({ date: w.date, v: Math.max(-100, Math.min(100, si)) });
-  }
-  impChart = makeChart(card.querySelector('#imp-chart'), {
-    type: 'line',
-    data: {
-      labels: impPts.map((p) => p.date.slice(5)),
-      datasets: [lineDataset('Amélioration', impPts.map((p) => p.v), '#22D3A6')],
-    },
-    options: lineChartOptions({ yMin: -100, yMax: 100, ySuffix: '%', yTicks: 5, xTicks: 4 }),
-  }, impChart);
-
-  const vgBtn = card.querySelector('#vol-goals-btn');
-  if (vgBtn && rerender) vgBtn.addEventListener('click', () => openVolumeGoalsModal(rerender));
+  content.querySelector('#btn-new-routine').addEventListener('click', () => { sh.close(); openRoutineEditor(null, rerender); });
 }
 
 // Navigateur d'exercices : liste + recherche (sans accents) + tri → statistiques
@@ -2108,8 +2078,8 @@ function openMuscleChart(muscleId) {
   const content = el(`<div>
     <h3 style="margin:0 0 4px">Exercices cette semaine</h3>
     <div id="mus-exos">${exoRows.length ? '' : '<div class="empty-state">Aucun exercice cette semaine</div>'}</div>
-    <h3 style="margin:16px 0 6px">Amélioration</h3>
-    <div class="chart-wrap" style="height:170px"><canvas id="mus-chart"></canvas></div>
+    <h3 style="margin:16px 0 8px">Amélioration</h3>
+    ${impStrip([...pts].reverse())}
   </div>`);
   const listHost = content.querySelector('#mus-exos');
   for (const [id, e] of exoRows) {
@@ -2124,25 +2094,10 @@ function openMuscleChart(muscleId) {
     listHost.appendChild(row);
   }
 
-  // Ce graphique était recréé sans jamais être détruit : chaque ouverture
-  // laissait une instance Chart.js vivante. On le détruit à la fermeture.
-  let musChart = null;
   openModal({
     title: `${muscleLabel(muscleId)}`,
     content,
     actions: [{ label: 'Fermer', variant: 'btn-primary' }],
-    onClose: () => {
-      if (musChart) { try { musChart.destroy(); } catch (_) { /* déjà détruit */ } musChart = null; }
-    },
-  });
-  if (!pts.length) return;
-  musChart = makeChart(content.querySelector('#mus-chart'), {
-    type: 'line',
-    data: {
-      labels: pts.map((p) => p.date.slice(5)),
-      datasets: [lineDataset('Amélioration', pts.map((p) => p.v), '#00D9FF')],
-    },
-    options: lineChartOptions({ yMin: -100, yMax: 100, ySuffix: '%', yTicks: 5, xTicks: 4 }),
   });
 }
 
@@ -2156,53 +2111,39 @@ export function render(container) {
   const active = !!session;
 
   container.innerHTML = '';
-  const root = el(`<div>
+  const { rows, progress } = volumeRows();
+  const volDone = Math.round(rows.reduce((a, r) => a + r.done, 0));
+  const volGoal = rows.reduce((a, r) => a + r.goal, 0);
+  const root = el(`<div class="wk-page">
     <div id="calendar-host"></div>
-    <div class="card">
-      <div class="card-row collapse-head" id="routine-toggle" style="cursor:pointer">
-        <h3 style="margin:0;display:flex;align-items:center;gap:6px"><span class="collapse-caret">${icons.chevron}</span> Routines <span class="muted num">${routines.length}</span></h3>
-        <button class="btn btn-secondary btn-sm" id="btn-new-routine">${icons.plus}</button>
+    <div class="wk-grid">
+      <button type="button" class="card stat-card wk-volume" id="btn-volume">
+        <span class="stat-head">Volume hebdo</span>
+        <span class="wk-body">${bodyMapSVG(progress, { size: 190, label: 'Avancement des objectifs de la semaine' })}</span>
+        <small><b class="num">${volDone}</b> / ${volGoal} séries</small>
+      </button>
+      <div class="wk-side">
+        <button type="button" class="card stat-card wk-tile" id="btn-routines">
+          <span class="stat-head">Routines</span>
+          <b class="num">${routines.length}</b>
+          <small>${routines.length ? routines.slice(0, 3).map((r) => esc(r.name)).join(', ') : 'Aucune routine'}</small>
+        </button>
+        <button type="button" class="card stat-card wk-tile" id="btn-exo-browser">
+          <span class="stat-head">Exercices</span>
+          <b class="num">${allExercises().length}</b>
+          <small>et statistiques</small>
+        </button>
       </div>
-      <div id="routine-list" class="collapse-body">${routines.length ? '' : '<div class="empty-state">Aucune routine</div>'}</div>
     </div>
-    <div id="volume-host"></div>
-    <button class="btn btn-secondary btn-block" id="btn-exo-browser" style="margin-top:6px">${icons.book} Exercices & statistiques</button>
   </div>`);
   container.appendChild(root);
-
-  const rlist = root.querySelector('#routine-list');
-  for (const r of routines) {
-    // Exercices listés les uns sous les autres (plus lisible qu'une ligne
-    // à rallonge tronquée quand la routine en compte beaucoup).
-    const names = r.exercises.map((id) => (exerciseLookup(id) || { name: id }).name);
-    const listHtml = names.length
-      ? `<ol class="routine-exos">${names.map((n) => `<li>${esc(n)}</li>`).join('')}</ol>`
-      : '<div class="muted" style="margin:4px 0 10px">Vide</div>';
-    const card = el(`<div class="card" style="background:var(--surface-2);padding:12px">
-      <div class="card-row"><h3 style="margin:0">${esc(r.name)}</h3>
-        <button class="icon-btn" aria-label="Modifier">${icons.edit}</button></div>
-      ${listHtml}
-      <button class="btn btn-primary btn-sm btn-block">Lancer</button>
-    </div>`);
-    card.querySelector('.icon-btn').addEventListener('click', () => openRoutineEditor(r, rerender));
-    card.querySelector('.btn-primary').addEventListener('click', () => openSession(rerender, r));
-    rlist.appendChild(card);
-  }
 
   pageFab(PAGE_WORKOUT, active ? icons.play : icons.plus, active ? 'Reprendre la séance' : 'Nouvelle séance', () => {
     if (session) { openSession(rerender); return; } // reprise : pas de choix à faire
     openStartSessionSheet(rerender);
   });
-  root.querySelector('#btn-new-routine').addEventListener('click', () => openRoutineEditor(null, rerender));
-  const rtCard = root.querySelector('#routine-toggle').closest('.card');
-  rtCard.classList.toggle('collapsed', !routinesOpen);
-  root.querySelector('#routine-toggle').addEventListener('click', (e) => {
-    if (e.target.closest('#btn-new-routine')) return;
-    routinesOpen = !routinesOpen;
-    setCollapsed(rtCard, !routinesOpen);
-  });
-
-  renderVolumeDashboard(root.querySelector('#volume-host'), rerender);
+  root.querySelector('#btn-routines').addEventListener('click', () => openRoutinesSheet(rerender));
+  root.querySelector('#btn-volume').addEventListener('click', () => openVolumeSheet(rerender));
   renderTwoWeekCalendar(root.querySelector('#calendar-host'));
   const wDates = new Set(store.userData.workouts.map((w) => w.date));
   root.prepend(dateBar({ title: 'Entraînement', mark: (d) => (wDates.has(d) ? 'on' : ''), onChange: rerender }));

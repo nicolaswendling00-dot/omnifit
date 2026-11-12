@@ -1,6 +1,6 @@
 // OmniFit — PAGE 3 : Activité (pas)
 import { store, todayISO, parseStepsPayload } from '../utils/storage.js';
-import { el, icons, openModal, openSheet, toast, ringSVG, fmtDateShort, haptic, pageFab, dateBar } from '../utils/ui.js';
+import { el, icons, openModal, openSheet, toast, ringSVG, fmtDateShort, haptic, pageFab, dateBar, periodRange, periodHead, attachPeriodSwipe, slideIn } from '../utils/ui.js';
 import { PAGE_ACTIVITY, getViewDate } from '../utils/nav.js';
 
 // Jour décalé de n jours (dates locales AAAA-MM-JJ)
@@ -10,7 +10,9 @@ const shiftISO = (iso, n) => {
   return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
 };
 
-let viewDays = 7;
+let perKind = 'week'; // 'week' | 'month' | 'year'
+let perOffset = 0;
+let perDir = 0; // sens de la dernière navigation, pour l'animation
 const stepGoal = () => store.userData.settings.stepsGoal || 10000;
 
 // Objectif de pas figé par jour : augmenter l'objectif aujourd'hui ne dévalide pas
@@ -111,136 +113,17 @@ const kSteps = (v) => (v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1).rep
 // Histogramme en HTML (pas de Chart.js) : une barre par jour, ligne
 // pointillée à l'objectif, barre verte quand l'objectif est atteint.
 // Toucher une barre ouvre la saisie de ce jour.
-function barsHTML(days) {
-  const byDate = store.userData.steps.byDate;
-  const vals = days.map((d) => byDate[d] || 0);
-  const goal = stepGoal();
-  const max = Math.max(goal * 1.2, ...vals) || 1;
-  const week = days.length <= 7;
-  return `<div class="sb-plot${week ? ' sb-week' : ''}" style="--goal:${(goal / max).toFixed(3)}">
+// items : [{ date?, label, v, hit, val }] ; une barre par jour, ou par mois en vue année
+function barsHTML(items, goal, showVals) {
+  const max = Math.max(goal * 1.2, ...items.map((x) => x.v)) || 1;
+  return `<div class="sb-plot${showVals ? ' sb-week' : ''}" style="--goal:${(goal / max).toFixed(3)}">
     <div class="sb-goal"></div>
-    ${days.map((d, i) => {
-    const v = vals[i];
-    const hit = v >= stepGoalFor(d);
-    const dt = new Date(d + 'T12:00:00');
-    const lbl = week ? DAY_LETTERS[dt.getDay()] : ((days.length - 1 - i) % 7 === 0 ? String(dt.getDate()) : '');
-    return `<button type="button" class="sb-col${d === getViewDate() ? ' today' : ''}" data-date="${d}" aria-label="${fmtDateShort(d)} : ${v.toLocaleString('fr-FR')} pas">
-        ${week ? `<span class="sb-val">${v ? kSteps(v) : ''}</span>` : ''}
-        <span class="sb-track"><span class="sb-bar${hit ? ' hit' : ''}" style="height:${v ? Math.max(3, (v / max) * 100).toFixed(1) : 0}%"></span></span>
-        <span class="sb-day">${lbl}</span>
-      </button>`;
-  }).join('')}
+    ${items.map((x) => `<button type="button" class="sb-col${x.date && x.date === getViewDate() ? ' today' : ''}" ${x.date ? `data-date="${x.date}"` : ''} aria-label="${x.aria}">
+        ${showVals ? `<span class="sb-val">${x.v ? kSteps(x.v) : ''}</span>` : ''}
+        <span class="sb-track"><span class="sb-bar${x.hit ? ' hit' : ''}" style="height:${x.v ? Math.max(3, (x.v / max) * 100).toFixed(1) : 0}%"></span></span>
+        <span class="sb-day">${x.label}</span>
+      </button>`).join('')}
   </div>`;
-}
-
-// Applique une liste d'entrées de pas et notifie.
-function applyStepsEntries(entries, rerender) {
-  for (const { date, count } of entries) store.addStepsLog(date, count);
-  haptic();
-  const todayEntry = entries.find((e) => e.date === todayISO());
-  toast(
-    entries.length === 1
-      ? `${entries[0].count.toLocaleString('fr-FR')} pas importés`
-      : `${entries.length} jours importés${todayEntry ? `, dont ${todayEntry.count.toLocaleString('fr-FR')} pas aujourd'hui` : ''}`,
-    'success',
-  );
-  rerender();
-}
-
-// Import des pas. On tente d'abord la lecture automatique du presse-papier ; si
-// iOS la bloque (fréquent en PWA), on ouvre un champ où l'utilisateur colle
-// directement — méthode fiable, plutôt que d'afficher un guide.
-async function importStepsFromClipboard(rerender) {
-  let text = '';
-  try {
-    text = await navigator.clipboard.readText();
-  } catch (_) {
-    text = '';
-  }
-  const entries = parseStepsPayload(text);
-  if (entries.length) {
-    applyStepsEntries(entries, rerender);
-    return;
-  }
-  // Lecture auto vide ou refusée → champ de collage manuel (fiable sur iOS).
-  openStepsPasteSheet(rerender);
-}
-
-// Champ de collage : l'utilisateur colle le texte du raccourci (appui long →
-// Coller) puis valide. On tente de pré-remplir automatiquement si possible.
-function openStepsPasteSheet(rerender) {
-  const form = el(`<div>
-    <p class="muted" style="font-size:0.82rem;line-height:1.5;margin-bottom:10px">
-      Touche <b>Coller le presse-papier</b>, ou fais un appui long dans le champ → <b>Coller</b>, puis <b>Importer</b>.
-    </p>
-    <button class="btn btn-secondary btn-block" id="sp-paste" style="margin-bottom:8px">${icons.copy} Coller le presse-papier</button>
-    <textarea id="sp-input" rows="5" placeholder="2026-07-22:8200&#10;2026-07-23:9100&#10;…" class="field-input-solo no-sheet-drag" style="width:100%;font-family:monospace;font-size:0.9rem;line-height:1.5;resize:vertical"></textarea>
-    <button class="btn btn-primary btn-block" id="sp-import" style="margin-top:12px">${icons.download} Importer</button>
-    <button class="btn btn-ghost btn-block btn-sm" id="sp-help" style="margin-top:8px">Comment configurer le raccourci ?</button>
-  </div>`);
-  const sheet = openSheet({ title: 'Importer les pas', content: form });
-  const input = form.querySelector('#sp-input');
-
-  // Bouton « Coller » : un tap est un geste utilisateur direct, ce qu'iOS exige
-  // pour lire le presse-papier. On importe DIRECTEMENT le contenu lu, sans
-  // dépendre du champ texte (qui peut être capricieux en PWA).
-  form.querySelector('#sp-paste').addEventListener('click', async () => {
-    let t = '';
-    try {
-      t = await navigator.clipboard.readText();
-    } catch (_) {
-      toast('Lecture refusée, colle le texte dans le champ', 'error');
-      return;
-    }
-    const entries = parseStepsPayload(t);
-    if (!entries.length) { toast('Presse-papier vide ou non reconnu', 'error'); input.value = t || ''; return; }
-    sheet.close();
-    applyStepsEntries(entries, rerender);
-  });
-
-  // Pré-remplissage best-effort (si le presse-papier est finalement lisible).
-  navigator.clipboard.readText().then((t) => {
-    if (t && !input.value) { input.value = t; }
-  }).catch(() => { /* ignoré : l'utilisateur collera à la main */ });
-
-  form.querySelector('#sp-import').addEventListener('click', () => {
-    const entries = parseStepsPayload(input.value);
-    if (!entries.length) { toast('Rien à importer', 'error'); return; }
-    sheet.close();
-    applyStepsEntries(entries, rerender);
-  });
-  form.querySelector('#sp-help').addEventListener('click', () => { sheet.close(); openStepsGuide(rerender); });
-}
-
-// Guide de configuration du raccourci iOS (affiché si le presse-papier est vide
-// ou inaccessible).
-function openStepsGuide(rerender) {
-  const content = el(`<div class="steps-guide">
-    <p class="muted" style="font-size:0.82rem;line-height:1.5;margin-bottom:12px">
-      iOS interdit à une app web de lire Santé directement. Un petit <b>raccourci</b> copie tes pas ;
-      ce bouton les récupère ensuite depuis le presse-papier.
-    </p>
-    <div class="guide-step"><span class="guide-n">1</span><div>Ouvre l'app <b>Raccourcis</b> → <b>＋</b> pour en créer un.</div></div>
-    <div class="guide-step"><span class="guide-n">2</span><div>Ajoute l'action <b>« Rechercher des échantillons de Santé »</b> : type <b>Pas</b>, période <b>Aujourd'hui</b>, option <b>Calculer la somme</b>.</div></div>
-    <div class="guide-step"><span class="guide-n">3</span><div>Ajoute <b>« Copier dans le presse-papiers »</b> (la somme de l'étape 2).</div></div>
-    <div class="guide-step"><span class="guide-n">4</span><div>Nomme-le p.ex. « Pas → OmniFit ». Lance-le, reviens ici, touche <b>Importer</b>.</div></div>
-    <div class="guide-auto">
-      <b>Rendre ça (presque) automatique</b>
-      <div class="guide-step"><span class="guide-n">A</span><div>Onglet <b>Automatisation</b> → <b>＋</b> → <b>App</b> → choisis <b>OmniFit</b> → <b>Est ouverte</b>.</div></div>
-      <div class="guide-step"><span class="guide-n">B</span><div>Action <b>« Exécuter le raccourci »</b> → ton raccourci. Décoche <b>« Demander avant d'exécuter »</b>.</div></div>
-      <div class="guide-step"><span class="guide-n">C</span><div>Désormais, à chaque ouverture de l'app, tes pas sont copiés : il ne reste qu'à toucher <b>Importer</b>.</div></div>
-    </div>
-    <div class="guide-multi muted" style="font-size:0.76rem;line-height:1.5;margin-top:10px">
-      <b>Astuce 7 jours :</b> pour combler les trous, fais une boucle « Répéter 7 fois » qui ajoute une ligne
-      <code>AAAA-MM-JJ:pas</code> par jour, puis copie le tout. L'import lit toutes les lignes d'un coup.
-    </div>
-    <button class="btn btn-secondary btn-block" id="guide-manual" style="margin-top:14px">${icons.edit} Saisir manuellement</button>
-  </div>`);
-  const m = openModal({ title: 'Importer les pas', content, actions: [{ label: 'Fermer' }] });
-  content.querySelector('#guide-manual').addEventListener('click', () => {
-    if (m && m.close) m.close();
-    openLogStepsModal(rerender);
-  });
 }
 
 export function render(container) {
@@ -249,12 +132,30 @@ export function render(container) {
   const byDate = store.userData.steps.byDate;
   const steps = byDate[today] || 0;
   const goal = stepGoalFor(today);
-  // La période affichée se termine sur le jour consulté
-  const days = [...Array(viewDays)].map((_, i) => shiftISO(today, i - viewDays + 1));
+  const R = periodRange(perKind, perOffset);
+  const days = R.days;
   const logged = days.filter((d) => byDate[d] != null);
   const avg = logged.length ? Math.round(logged.reduce((acc, d) => acc + byDate[d], 0) / logged.length) : 0;
   const hits = days.filter((d) => (byDate[d] || 0) >= stepGoalFor(d)).length;
   const best = Math.max(0, ...days.map((d) => byDate[d] || 0));
+  const goalNow = stepGoal();
+  let items;
+  if (perKind === 'year') {
+    // Une barre par mois : moyenne des jours renseignés du mois
+    items = [...Array(12)].map((_, m) => {
+      const md = days.filter((d) => +d.slice(5, 7) === m + 1 && byDate[d] != null);
+      const v = md.length ? Math.round(md.reduce((a, d) => a + byDate[d], 0) / md.length) : 0;
+      const name = new Date(2000, m, 1).toLocaleDateString('fr-FR', { month: 'narrow' });
+      return { label: name, v, hit: v >= goalNow, aria: `Moyenne ${v} pas` };
+    });
+  } else {
+    items = days.map((d, i) => {
+      const v = byDate[d] || 0;
+      const dt = new Date(d + 'T12:00:00');
+      const label = perKind === 'week' ? DAY_LETTERS[dt.getDay()] : (dt.getDate() === 1 || dt.getDate() % 7 === 1 ? String(dt.getDate()) : '');
+      return { date: d, label, v, hit: v >= stepGoalFor(d), aria: `${fmtDateShort(d)} : ${v.toLocaleString('fr-FR')} pas` };
+    });
+  }
   const streak = goalStreak();
   const left = Math.max(0, goal - steps);
 
@@ -270,21 +171,19 @@ export function render(container) {
         <div class="steps-kpis">
           <div class="steps-kpi"><span class="eyebrow">${left ? 'Restants' : 'Objectif'}</span><b class="num${left ? '' : ' ok'}">${left ? left.toLocaleString('fr-FR') : 'Atteint'}</b></div>
           <div class="steps-kpi"><span class="eyebrow">Série</span><b class="num">${streak}<small> j</small></b></div>
-          <div class="steps-kpi"><span class="eyebrow">Moyenne ${viewDays} j</span><b class="num">${avg.toLocaleString('fr-FR')}</b></div>
         </div>
       </div>
 
       <div class="card steps-bars">
-        <div class="card-row">
-          <h3>${viewDays} jours</h3>
-          <div class="segment" id="view-toggle">
-            <button data-d="7" class="${viewDays === 7 ? 'active' : ''}">7 j</button>
-            <button data-d="30" class="${viewDays === 30 ? 'active' : ''}">30 j</button>
-          </div>
+        <div class="segment" id="view-toggle">
+          <button data-k="week" class="${perKind === 'week' ? 'active' : ''}">Semaine</button>
+          <button data-k="month" class="${perKind === 'month' ? 'active' : ''}">Mois</button>
+          <button data-k="year" class="${perKind === 'year' ? 'active' : ''}">Année</button>
         </div>
-        ${barsHTML(days)}
+        ${periodHead(R, `<span class="per-avg"><b class="num">${avg.toLocaleString('fr-FR')}</b> pas en moyenne</span>`, perOffset)}
+        <div class="sb-zone">${barsHTML(items, goalNow, perKind === 'week')}</div>
         <div class="sb-foot">
-          <span><b class="num">${hits}</b> / ${viewDays} jours à l'objectif</span>
+          <span><b class="num">${hits}</b> jours à l'objectif</span>
           <span>Record <b class="num">${best.toLocaleString('fr-FR')}</b></span>
         </div>
       </div>
@@ -301,10 +200,20 @@ export function render(container) {
   container.querySelector('#btn-import-steps').addEventListener('click', () => importStepsFromClipboard(rerender));
   container.querySelector('#view-toggle').addEventListener('click', (e) => {
     const btn = e.target.closest('button');
-    if (!btn) return;
-    viewDays = +btn.dataset.d;
+    if (!btn || btn.dataset.k === perKind) return;
+    perKind = btn.dataset.k; perOffset = 0; perDir = 0;
     rerender();
   });
+  const go = (dir) => {
+    if (perOffset + dir < 0) return;
+    perOffset += dir; perDir = dir;
+    haptic();
+    rerender();
+  };
+  container.querySelector('.per-prev').addEventListener('click', () => go(1));
+  container.querySelector('.per-next').addEventListener('click', () => go(-1));
+  attachPeriodSwipe(container.querySelector('.sb-zone'), go);
+  if (perDir) { slideIn(container.querySelector('.sb-plot'), perDir); perDir = 0; }
   container.querySelector('.sb-plot').addEventListener('click', (e) => {
     const col = e.target.closest('.sb-col');
     if (!col) return;

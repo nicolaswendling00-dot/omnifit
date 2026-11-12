@@ -1,7 +1,7 @@
 // OmniFit — PAGE 0 : Accueil (stats d'abord, poids ensuite, graphique en modal)
 import { store, todayISO } from '../utils/storage.js';
 import { calculateSMA } from '../utils/math.js';
-import { el, icons, openModal, openSheet, toast, ringSVG, haptic, makeChart, fmtDateFull, attachSwipeToDelete, dateBar } from '../utils/ui.js';
+import { el, icons, openModal, openSheet, toast, ringSVG, haptic, makeChart, fmtDateFull, attachSwipeToDelete, dateBar, periodRange, periodHead, attachPeriodSwipe, slideIn } from '../utils/ui.js';
 import { openRankCard } from '../utils/rankCard.js';
 import { lineChartOptions, lineDataset } from '../utils/charts.js';
 import { goToPage, PAGE_NUTRITION, PAGE_ACTIVITY, PAGE_WORKOUT, getViewDate, isViewingToday } from '../utils/nav.js';
@@ -43,12 +43,13 @@ function openLogWeightModal(rerender, prefill = null) {
 
 function openChartModal(rerender) {
   const recent = [...store.userData.weights].slice(-8).reverse();
-  const RANGES = [[30, '1 mois'], [90, '3 mois'], [365, '1 an'], [0, 'Tout']];
+  const RANGES = [['week', 'S'], ['month', 'M'], ['6m', '6 M'], ['year', 'A']];
   const content = el(`<div>
     <div class="segment" id="w-range" style="margin-bottom:10px">
       ${RANGES.map(([v, lbl]) => `<button data-r="${v}" class="${v === weightRange ? 'active' : ''}">${lbl}</button>`).join('')}
     </div>
-    <div class="chart-wrap" style="height:240px"><canvas id="weight-chart"></canvas></div>
+    <div id="w-head"></div>
+    <div class="chart-wrap" id="w-zone" style="height:240px"><canvas id="weight-chart"></canvas></div>
     <div style="display:flex;gap:8px;margin-top:8px">
       <button class="btn btn-ghost btn-sm" id="btn-toggle-sma" style="flex:1">Tendance : ${smaVisible ? 'ON' : 'OFF'}</button>
       <button class="btn btn-ghost btn-sm" id="btn-toggle-cal" style="flex:1">Calories : ${caloriesVisible ? 'ON' : 'OFF'}</button>
@@ -69,10 +70,24 @@ function openChartModal(rerender) {
       if (weightChart) { try { weightChart.destroy(); } catch (_) { /* déjà détruit */ } weightChart = null; }
     },
   });
-  const draw = () => renderWeightChart(content.querySelector('#weight-chart'));
+  let wOffset = 0;
+  const draw = (dir = 0) => {
+    const R = periodRange(weightRange, wOffset);
+    const ws = store.userData.weights.filter((w) => w.date >= R.start && w.date <= R.end);
+    const avg = ws.length ? (ws.reduce((a, w) => a + w.value, 0) / ws.length).toFixed(1) : null;
+    const head = content.querySelector('#w-head');
+    head.innerHTML = periodHead(R, `<span class="per-avg">${avg ? `<b class="num">${avg}</b> kg en moyenne` : 'Aucune pesée'}</span>`, wOffset);
+    head.querySelector('.per-prev').addEventListener('click', () => go(1));
+    head.querySelector('.per-next').addEventListener('click', () => go(-1));
+    renderWeightChart(content.querySelector('#weight-chart'), R);
+    slideIn(content.querySelector('#w-zone'), dir);
+  };
+  const go = (dir) => { if (wOffset + dir < 0) return; wOffset += dir; haptic(); draw(dir); };
+  attachPeriodSwipe(content.querySelector('#w-zone'), go);
   content.querySelector('#w-range').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
-    weightRange = +b.dataset.r;
+    weightRange = b.dataset.r;
+    wOffset = 0;
     content.querySelectorAll('#w-range button').forEach((x) => x.classList.toggle('active', x === b));
     draw();
     haptic();
@@ -127,18 +142,12 @@ function openChartModal(rerender) {
 }
 
 // Plage affichée dans la fenêtre Poids (en jours). `0` = tout l'historique.
-let weightRange = 90;
+let weightRange = 'month'; // 'week' | 'month' | '6m' | 'year'
 
-function renderWeightChart(canvas) {
+function renderWeightChart(canvas, R) {
   const all = store.userData.weights;
-  // Plage : soit les N derniers jours, soit tout depuis la première pesée.
-  // Sans pesée, on affiche quand même la plage choisie, axes et titres compris.
-  const first = all.length ? all[0].date : todayISO(-(weightRange || 30) + 1);
-  const start = weightRange ? todayISO(-weightRange + 1) : first;
-  const from = start < first ? first : start;
-  const nDays = Math.max(1, Math.round((new Date(todayISO()) - new Date(from)) / 86400000) + 1);
-  const days = [...Array(nDays)].map((_, i) => todayISO(i - nDays + 1));
-
+  const days = R.days;
+  const nDays = days.length;
   const map = Object.fromEntries(all.map((w) => [w.date, w.value]));
   const values = days.map((d) => map[d] ?? null);
 

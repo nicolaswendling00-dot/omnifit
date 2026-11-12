@@ -98,8 +98,7 @@ assert(protRing && protRing.innerHTML.includes('var(--mac-p)'), 'Nutrition : ann
 
 workout.render(pages.workout);
 assert(document.querySelector('#fab-page-2 .fab'), 'Workout : bouton nouvelle séance');
-assert(pages.workout.querySelector('#volume-host .volume-table'), 'Workout : table volume hebdo');
-assert(pages.workout.querySelector('#vol-goals-btn'), 'Workout : objectifs de volume déplacés ici');
+assert(pages.workout.querySelector('#btn-volume .wk-body svg.body-map') && pages.workout.querySelector('#btn-routines') && pages.workout.querySelector('#btn-exo-browser'), 'Workout : volume, routines et exercices en tuiles');
 assert(pages.workout.querySelector('#calendar-host .cal-grid'), 'Workout : calendrier 2 semaines présent');
 assert(pages.workout.querySelectorAll('#calendar-host .cal-grid .cal-day').length === 14, 'Workout : calendrier = 14 jours (2 lignes)');
 
@@ -220,7 +219,6 @@ console.log('== v7.1 : nutrition animee, historique, graphique vide ==');
   for (const p of [pages.home, pages.activity, pages.workout]) {
     assert(p.querySelector('.date-back'), 'Autre jour : vaut pour tous les onglets');
   }
-  assert(pages.activity.querySelector(`.sb-col.today[data-date="${picked}"]`), 'Activite : la periode se termine sur le jour choisi');
   nh.querySelector('.date-back').click();
   assert(!nh.querySelector('.date-back') && /Aujourd/.test(nh.querySelector('.date-pick').textContent), 'Retour a aujourd\'hui');
   const css = fs.readFileSync(new URL('./style.css', import.meta.url), 'utf8');
@@ -314,7 +312,7 @@ console.log('== v6.9 : segments elastiques, glisser pour supprimer, broyeur ==')
   await tick();
   const seg = pages.activity.querySelector('#view-toggle');
   assert(seg.classList.contains('rs') && seg.querySelector('.rs-thumb'), 'Segment : pastille elastique posee automatiquement');
-  assert(seg.querySelectorAll(':scope > button').length === 2, 'Segment : les boutons de la page sont intacts');
+  assert(seg.querySelectorAll(':scope > button').length === 3, 'Segment : les boutons de la page sont intacts');
 
   // Glisser pour supprimer : clic sur le bouton rouge = repli puis suppression
   const host = document.createElement('div');
@@ -448,15 +446,21 @@ clearOverlays();
 assert(!pages.workout.querySelector('#cal-more') && pages.workout.querySelector('.date-bar .date-pick'), 'Calendrier : historique via le calendrier commun de l\'en-tete');
 
 console.log('== Volume tracking ==');
-const volTable = pages.workout.querySelector('#volume-host .volume-table');
+pages.workout.querySelector('#btn-volume').click();
+const volSheet = [...document.querySelectorAll('.sheet')].pop();
+const volTable = volSheet.querySelector('.volume-table');
+assert(!volSheet.querySelector('canvas'), 'Volume hebdo : plus d histogramme ni de courbe');
 assert(volTable.textContent.includes('Pectoraux'), 'Volume hebdo liste les muscles');
 const chestRow = [...volTable.querySelectorAll('tbody tr.vol-row')].find((r) => r.textContent.includes('Pectoraux'));
 assert(chestRow && chestRow.textContent.includes('1'), 'Pectoraux : 1 set comptabilisé');
+clearOverlays();
 
 console.log('== Routines ==');
 store.saveRoutine({ id: 'r1', name: 'Push A', exercises: ['benchPress', 'overheadPress'] });
 workout.render(pages.workout);
-assert(pages.workout.querySelector('#routine-list h3').textContent === 'Push A', 'Routine affichée');
+pages.workout.querySelector('#btn-routines').click();
+assert([...document.querySelectorAll('.sheet')].pop().querySelector('#routine-list h3').textContent === 'Push A', 'Routine affichée dans le panneau Routines');
+clearOverlays();
 store.deleteRoutine('r1');
 assert(store.userData.routines.length === 0, 'deleteRoutine');
 
@@ -484,28 +488,11 @@ assert(document.body.classList.contains('palette-light'), 'Palette claire appliq
 pages.settings.querySelector('#seg-palette [data-v="dark"]').click();
 assert(!document.body.classList.contains('palette-light'), 'Retour palette sombre');
 
-// Volume hebdo : repli persiste dans les reglages
-workout.render(pages.workout);
-const volToggle = pages.workout.querySelector('#vol-toggle');
-assert(volToggle, 'Volume hebdo : entete repliable presente');
-assert(pages.workout.querySelector('#vol-toggle .collapse-caret'), 'Volume hebdo : chevron present');
-const volCard = volToggle.closest('.card');
-volToggle.click();
-assert(store.userData.settings.volumeSectionOpen === false, 'Volume hebdo : 1er clic replie (false)');
-assert(volCard.classList.contains('collapsed'), 'Volume hebdo : 1er clic -> visuellement replie');
-// 2e clic SANS re-rendu : detecte un etat fige capture au rendu
-volToggle.click();
-assert(store.userData.settings.volumeSectionOpen === true, 'Volume hebdo : 2e clic rouvre (true)');
-assert(!volCard.classList.contains('collapsed'), 'Volume hebdo : 2e clic -> visuellement ouvert');
-volToggle.click();
-assert(store.userData.settings.volumeSectionOpen === false, 'Volume hebdo : 3e clic replie a nouveau');
-assert(volCard.classList.contains('collapsed'), 'Volume hebdo : 3e clic -> visuellement replie');
-// et le repli survit a un re-rendu
-workout.render(pages.workout);
-assert(pages.workout.querySelector('#vol-toggle').closest('.card').classList.contains('collapsed'), 'Volume hebdo : reste replie apres re-rendu');
-const volToggle2 = pages.workout.querySelector('#vol-toggle');
-volToggle2.click();
-assert(store.userData.settings.volumeSectionOpen === true, 'Volume hebdo : re-ouverture persiste (true)');
+// Page Entrainement : ne defile pas
+{
+  const cssW = fs.readFileSync(new URL('./style.css', import.meta.url), 'utf8');
+  assert(/#page-workout \{[^}]*overflow: hidden/.test(cssW), 'Entrainement : page sans defilement');
+}
 
 // Repas : plus de crayon/poubelle inline, structure swipe a la place
 store.addNutritionLog(todayISO(), { name: 'Riz (200 g)', baseName: 'Riz', meal: 'Déjeuner', prot: 5, carbs: 56, fat: 0.6, fiber: 0.8, kcal: 250, per100: { prot: 2.5, carbs: 28, fat: 0.3, fiber: 0.4 }, weight: 200 });
@@ -924,10 +911,23 @@ console.log('== v5.2 : suppression des pesées et relevés de pas ==');
   activity.render(pages.activity);
   const kpis = [...pages.activity.querySelectorAll('.steps-kpi')].map((k) => k.textContent.replace(/\s+/g, ' ').trim());
   assert(kpis.some((k) => /S[ée]rie ?3 j/i.test(k)), `Pas : serie de 3 jours (${kpis.join(' | ')})`);
-  assert(pages.activity.querySelectorAll('.sb-bar.hit').length === 3, 'Pas : barres vertes = objectif atteint');
-  pages.activity.querySelector('#view-toggle button[data-d="30"]').click();
-  assert(pages.activity.querySelectorAll('.sb-plot .sb-col').length === 30, 'Pas : vue 30 jours');
-  pages.activity.querySelector('#view-toggle button[data-d="7"]').click();
+  const uiP = await import('./utils/ui.js');
+  const wk = uiP.periodRange('week', 0);
+  const inWeek = [-1, -2, -3].filter((i) => todayISO(i) >= wk.start).length;
+  assert(pages.activity.querySelectorAll('.sb-bar.hit').length === inWeek, 'Pas : barres vertes = objectif atteint');
+  assert(pages.activity.querySelectorAll('.sb-plot .sb-col').length === 7, 'Pas : semaine de lundi a dimanche');
+  pages.activity.querySelector('#view-toggle button[data-k="month"]').click();
+  assert(pages.activity.querySelectorAll('.sb-plot .sb-col').length === uiP.periodRange('month', 0).days.length, 'Pas : vue du mois');
+  pages.activity.querySelector('#view-toggle button[data-k="year"]').click();
+  assert(pages.activity.querySelectorAll('.sb-plot .sb-col').length === 12, 'Pas : vue annee, une barre par mois');
+  assert(pages.activity.querySelector('.per-next').disabled, 'Pas : pas de periode future');
+  pages.activity.querySelector('.per-prev').click();
+  assert(pages.activity.querySelector('.per-label').textContent === String(new Date().getFullYear() - 1), 'Pas : fleche = annee precedente');
+  pages.activity.querySelector('#view-toggle button[data-k="week"]').click();
+  // Periodes : une semaine fait 7 jours du lundi au dimanche, un mois ses vrais jours
+  const w1 = uiP.periodRange('week', 1);
+  assert(w1.days.length === 7 && new Date(w1.start + 'T12:00:00').getDay() === 1, 'Periodes : semaine precedente, lundi au dimanche');
+  assert(uiP.periodRange('year', 0).days.length >= 365 && uiP.periodRange('6m', 0).days.length > 150, 'Periodes : annee et 6 mois');
 
   // Séance vide en tête du menu de démarrage
   clearOverlays();
@@ -1416,11 +1416,13 @@ console.log('== v6.1 : anatomie detaillee et carte du corps ==');
 
   // Volume hebdo
   workout.render(pages.workout);
-  const vh = pages.workout.querySelector('#volume-host');
+  pages.workout.querySelector('#btn-volume').click();
+  const vh = [...document.querySelectorAll('.sheet')].pop();
   assert(vh.querySelector('.bm-week svg.body-map'), 'Volume hebdo : carte du corps de la semaine');
   const groups = [...vh.querySelectorAll('.vol-group')].map((g) => g.textContent.trim());
   assert(groups.join(',') === 'Pectoraux,Épaules,Dos,Bras,Tronc,Jambes', `Volume hebdo : muscles groupes par zone (${groups.join(',')})`);
   assert(vh.querySelectorAll('.vol-row').length === 19, 'Volume hebdo : une ligne par muscle');
+  clearOverlays();
 }
 
 console.log('== v6.7 : pecs haut / bas, variantes, exercices perso integres ==');
