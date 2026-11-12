@@ -5,7 +5,7 @@ import { store, todayISO } from '../utils/storage.js';
 import { EXERCISES, MUSCLES, muscleLabel, AKA, EQUIPMENT, equipLabel } from '../data/exercises.js';
 import { reorderList, rollingCounter } from '../utils/gestures.js';
 import { formatTime, workoutMuscleVolume, weeklySetsByMuscle, muscleAttenuation } from '../utils/math.js';
-import { el, esc, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, fmtDateFull, celebrateLP, makeChart, normalizeStr, closeAllOverlays, attachSwipeToDelete, slideAway, pageFab, dateBar, setCollapsed } from '../utils/ui.js';
+import { el, esc, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, fmtDateFull, celebrateLP, makeChart, normalizeStr, closeAllOverlays, attachSwipeToDelete, slideAway, pageFab, dateBar, setCollapsed, periodRange, periodHead, attachPeriodSwipe, slideIn } from '../utils/ui.js';
 import { lineChartOptions, lineDataset } from '../utils/charts.js';
 import { bodyMapSVG } from '../utils/bodyMap.js';
 import { computeExerciseLP, computeExerciseLPDetailed, rankFromLP, rankBadge, getStandards } from '../utils/ranks.js';
@@ -1886,42 +1886,128 @@ function impStrip(pts) {
     <div class="imp-strip">${pts.map((p) => `<div class="imp-pill ${cls(p.v)}"><b class="num">${p.v > 0 ? '+' : ''}${p.v} %</b><span>${fmtDateShort(p.date)}</span></div>`).join('')}</div>`;
 }
 
+// Amélioration dans la durée : une barre par séance (semaine, mois), par
+// semaine (6 mois) ou par mois (année), vers le haut en vert si l'on a
+// progressé, vers le bas en rouge sinon. Même navigation que les autres
+// graphiques : flèches ou glisser pour changer de période.
+let impKind = 'month';
+let impOffset = 0;
+function improvementBuckets(kind, offset) {
+  const R = periodRange(kind, offset);
+  const byDate = {};
+  for (const w of store.userData.workouts) {
+    if (w.date < R.start || w.date > R.end) continue;
+    const si = sessionImprovement(w);
+    if (si != null) (byDate[w.date] = byDate[w.date] || []).push(si);
+  }
+  const avg = (a) => (a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : null);
+  const buckets = [];
+  const add = (days, label) => buckets.push({ v: avg(days.flatMap((d) => byDate[d] || [])), label, first: days[0] });
+  if (kind === 'week') R.days.forEach((d) => add([d], 'DLMMJVS'[new Date(d + 'T12:00:00').getDay()]));
+  else if (kind === 'month') R.days.forEach((d) => { const n = +d.slice(8); add([d], n === 1 || n % 7 === 1 ? String(n) : ''); });
+  else if (kind === '6m') {
+    for (let i = 0; i < R.days.length; i += 7) {
+      const wk = R.days.slice(i, i + 7);
+      const m = new Date(wk[0] + 'T12:00:00');
+      add(wk, m.getDate() <= 7 ? m.toLocaleDateString('fr-FR', { month: 'narrow' }) : '');
+    }
+  } else {
+    for (let m = 1; m <= 12; m++) {
+      add(R.days.filter((d) => +d.slice(5, 7) === m), new Date(2000, m - 1, 1).toLocaleDateString('fr-FR', { month: 'narrow' }));
+    }
+  }
+  const all = Object.values(byDate).flat();
+  return { R, buckets, mean: avg(all), up: all.filter((v) => v > 0).length, down: all.filter((v) => v < 0).length, n: all.length };
+}
+function improvementChartHTML() {
+  const { R, buckets, mean, up, down, n } = improvementBuckets(impKind, impOffset);
+  const max = Math.max(10, ...buckets.map((b) => Math.abs(b.v || 0)));
+  return `${periodHead(R, `<span class="per-avg">${mean == null ? 'Aucune séance comparée' : `<b class="num ${mean > 0 ? 'up' : mean < 0 ? 'down' : ''}">${mean > 0 ? '+' : ''}${mean} %</b> en moyenne`}</span>`, impOffset)}
+    <div class="impc-zone">
+      <div class="impc-plot">${buckets.map((b) => `<div class="impc-col" title="${b.v == null ? '' : `${b.v > 0 ? '+' : ''}${b.v} %`}">
+        <span class="impc-up">${b.v > 0 ? `<i style="height:${((b.v / max) * 100).toFixed(1)}%"></i>` : ''}</span>
+        <span class="impc-down">${b.v < 0 ? `<i style="height:${((-b.v / max) * 100).toFixed(1)}%"></i>` : ''}${b.v === 0 ? '<i class="flat"></i>' : ''}</span>
+        <span class="impc-lbl">${b.label}</span>
+      </div>`).join('')}</div>
+    </div>
+    <div class="imp-sum"><b class="up">${up} en hausse</b><b class="down">${down} en baisse</b>${n - up - down ? `<b class="flat">${n - up - down} stable${n - up - down > 1 ? 's' : ''}</b>` : ''}</div>`;
+}
+function mountImprovementChart(box) {
+  const draw = (dir = 0) => {
+    box.innerHTML = improvementChartHTML();
+    box.querySelector('.per-prev').addEventListener('click', () => go(1));
+    box.querySelector('.per-next').addEventListener('click', () => go(-1));
+    box.querySelectorAll('.imp-kind button').forEach((b) => b.classList.toggle('active', b.dataset.k === impKind));
+    attachPeriodSwipe(box.querySelector('.impc-zone'), go);
+    slideIn(box.querySelector('.impc-plot'), dir);
+  };
+  const go = (dir) => { if (impOffset + dir < 0) return; impOffset += dir; haptic(); draw(dir); };
+  box.previousElementSibling.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b || b.dataset.k === impKind) return;
+    impKind = b.dataset.k; impOffset = 0;
+    box.previousElementSibling.querySelectorAll('button').forEach((x) => x.classList.toggle('active', x === b));
+    draw();
+  });
+  draw();
+}
+
+// Volume de la semaine, muscle par muscle : une jauge par muscle jusqu'à son
+// objectif (verte une fois atteint), regroupées par zone avec le total de la
+// zone. Toucher un muscle, sur la liste ou sur la carte du corps, ouvre son détail.
 function openVolumeSheet(rerender) {
   const { rows, progress } = volumeRows();
-  const sorted = [...store.userData.workouts].sort((a, b) => b.date.localeCompare(a.date));
-  const imp = [];
-  for (const w of sorted) {
-    if (w.date < todayISO(-13)) break;
-    const si = sessionImprovement(w);
-    if (si != null) imp.push({ date: w.date, v: Math.round(si) });
+  const reached = rows.filter((r) => r.goal && r.done >= r.goal).length;
+  const withGoal = rows.filter((r) => r.goal).length;
+  const groups = [];
+  for (const r of rows) {
+    let g = groups[groups.length - 1];
+    if (!g || g.name !== r.m.group) groups.push(g = { name: r.m.group, rows: [] });
+    g.rows.push(r);
   }
+  const fmt = (v) => String(Math.round(v * 10) / 10).replace('.', ',');
   const content = el(`<div>
-    <div class="bm-card bm-week">${bodyMapSVG(progress, { size: 190, label: 'Avancement des objectifs de la semaine' })}
+    <div class="bm-card bm-week">${bodyMapSVG(progress, { size: 190, label: 'Avancement des objectifs de la semaine. Toucher un muscle pour son détail' })}
       <div class="bm-legend"><span>0 %</span><i></i><span>Objectif atteint</span></div>
     </div>
-    <table class="volume-table" id="vol-table">
-      <thead><tr><th>Muscle</th><th>Sets</th><th>Obj.</th><th>%</th></tr></thead>
-      <tbody>
-        ${rows.map((r, i) => `${i === 0 || rows[i - 1].m.group !== r.m.group ? `<tr class="vol-group"><td colspan="4">${r.m.group}</td></tr>` : ''}<tr class="vol-row" data-m="${r.m.id}">
-          <td>${r.m.label}</td>
-          <td class="tnum">${r.done}</td>
-          <td class="tnum">${r.goal}</td>
-          <td class="tnum ${r.pct >= 100 ? 'pct-ok' : r.pct >= 50 ? '' : 'pct-warn'}">${r.goal ? r.pct + '%' : ''}</td>
-        </tr>`).join('')}
-      </tbody>
-    </table>
-    <h3 style="margin:16px 0 8px">Amélioration des séances</h3>
-    ${impStrip(imp)}
+    <div class="vol-reached"><b class="num">${reached}</b> / ${withGoal} muscles à l'objectif sur 7 jours</div>
+    <div class="volume-table" id="vol-table">
+      ${groups.map((g) => {
+        const done = g.rows.reduce((a, r) => a + r.done, 0); const goal = g.rows.reduce((a, r) => a + r.goal, 0);
+        return `<div class="vol-block">
+          <div class="vol-group"><span>${g.name}</span><small class="num">${fmt(done)} / ${goal}</small></div>
+          ${g.rows.map((r) => `<button type="button" class="vol-row${r.goal && r.done >= r.goal ? ' ok' : ''}" data-m="${r.m.id}">
+            <span class="vol-name">${r.m.label}</span>
+            <span class="vol-bar"><i style="width:${r.goal ? Math.min(100, r.pct) : 0}%"></i></span>
+            <span class="vol-val num">${fmt(r.done)}<small> / ${r.goal}</small></span>
+          </button>`).join('')}
+        </div>`;
+      }).join('')}
+    </div>
+    <h3 style="margin:20px 0 8px">Amélioration des séances</h3>
+    <div class="segment imp-kind">
+      <button data-k="week">S</button><button data-k="month" class="active">M</button><button data-k="6m">6 M</button><button data-k="year">A</button>
+    </div>
+    <div id="imp-box"></div>
   </div>`);
+  content.querySelectorAll('.imp-kind button').forEach((b) => b.classList.toggle('active', b.dataset.k === impKind));
   const sh = openSheet({
     title: 'Volume hebdo',
     content,
     headerAction: { icon: icons.edit, label: 'Objectifs de volume', onClick: ({ close }) => { close(); openVolumeGoalsModal(rerender); } },
   });
   content.querySelector('#vol-table').addEventListener('click', (e) => {
-    const tr = e.target.closest('.vol-row');
-    if (tr) openMuscleChart(tr.dataset.m);
+    const row = e.target.closest('.vol-row');
+    if (row) openMuscleChart(row.dataset.m);
   });
+  // Carte du corps : chaque muscle est une forme du sprite (#bm-f-lats…)
+  const ids = new Set(MUSCLES.map((m) => m.id));
+  content.querySelector('.bm-week').addEventListener('click', (e) => {
+    const u = e.target.closest('use');
+    const m = u && (u.getAttribute('href') || '').match(/^#bm-[fb]-(\w+)$/);
+    if (m && ids.has(m[1])) openMuscleChart(m[1]);
+  });
+  mountImprovementChart(content.querySelector('#imp-box'));
   return sh;
 }
 
@@ -2126,12 +2212,11 @@ export function render(container) {
         <button type="button" class="card stat-card wk-tile" id="btn-routines">
           <span class="stat-head">Routines</span>
           <b class="num">${routines.length}</b>
-          <small>${routines.length ? routines.slice(0, 3).map((r) => esc(r.name)).join(', ') : 'Aucune routine'}</small>
+          <small>${routines.length ? routines.map((r) => esc(r.name)).join(', ') : 'Aucune routine'}</small>
         </button>
         <button type="button" class="card stat-card wk-tile" id="btn-exo-browser">
           <span class="stat-head">Exercices</span>
           <b class="num">${allExercises().length}</b>
-          <small>et statistiques</small>
         </button>
       </div>
     </div>

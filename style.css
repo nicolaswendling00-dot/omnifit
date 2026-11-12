@@ -1687,7 +1687,7 @@ body:not(.palette-light) .modal-actions { background: transparent; }
    semaine à gauche sur toute la hauteur, routines et exercices à droite. */
 #page-workout { overflow: hidden; display: flex; flex-direction: column; padding-bottom: 12px; }
 .wk-page { flex: 1 1 auto; min-height: 0; width: 100%; display: flex; flex-direction: column; }
-.wk-grid { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 1.15fr 1fr; gap: 8px; }
+.wk-grid { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 8px; }
 .wk-grid .card { margin: 0; border: 0; font: inherit; color: inherit; text-align: left; }
 .wk-volume { display: flex; flex-direction: column; min-height: 0; gap: 8px; }
 .wk-body { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; }
@@ -1731,3 +1731,52 @@ body:not(.palette-light) .modal-actions { background: transparent; }
 /* Le calendrier et l'en-tête gardent leur taille ; seules les tuiles s'adaptent */
 .wk-page > :not(.wk-grid) { flex-shrink: 0; }
 .wk-grid { margin-top: 0; }
+
+/* v10.5 : « Ajouter des pas » en haut à droite, comme sur Entraînement */
+#fab-page-3 { top: calc(var(--safe-t) + 18px); right: var(--space); bottom: auto; }
+#fab-page-3 .fab { width: 44px; height: 44px; border-radius: 50%; }
+#fab-page-3 .fab svg { width: 22px; height: 22px; }
+#page-activity .date-back { margin-right: 52px; }
+#page-activity { padding-bottom: 24px; }
+/* Routines : les noms qui ne tiennent pas se terminent par des points de suspension */
+.wk-tile small { display: block; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; -webkit-line-clamp: unset; }
+
+/* Volume par muscle : une jauge par muscle jusqu'à son objectif */
+.vol-reached { text-align: center; font-size: 0.86rem; font-weight: 600; color: var(--text-2); margin: 4px 0 14px; }
+.vol-reached b { color: var(--text); font-size: 1.2rem; }
+div.volume-table { display: flex; flex-direction: column; gap: 10px; }
+.vol-block { background: rgba(255, 255, 255, 0.04); border-radius: 16px; padding: 10px 12px 6px; }
+.vol-group { display: flex; justify-content: space-between; align-items: baseline; font-size: 0.9rem; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.vol-group small { font-size: 0.8rem; font-weight: 600; color: var(--text-2); }
+.vol-row {
+  display: grid; grid-template-columns: 1fr auto; grid-template-areas: 'name val' 'bar bar'; align-items: baseline; row-gap: 6px; column-gap: 10px;
+  width: 100%; padding: 8px 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.vol-name { grid-area: name; font-size: 0.88rem; font-weight: 600; }
+.vol-val { grid-area: val; }
+.vol-bar { grid-area: bar; }
+.vol-bar { height: 8px; border-radius: 6px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+body.palette-light .vol-bar, body.palette-light .vol-block { background: var(--surface-2); }
+.vol-bar i { display: block; height: 100%; border-radius: 6px; background: var(--accent); transition: width var(--dur-med) var(--ease); }
+.vol-row.ok .vol-bar i { background: var(--success); }
+.vol-val { text-align: right; font-size: 0.9rem; }
+.vol-val small { font-size: 0.75rem; color: var(--text-2); }
+.vol-row:active { opacity: 0.7; }
+.bm-week use { cursor: pointer; }
+
+/* Amélioration dans la durée : barres vertes vers le haut, rouges vers le bas */
+.imp-kind { margin-bottom: 4px; }
+.impc-zone { touch-action: pan-y; }
+.impc-plot { display: flex; align-items: stretch; gap: 2px; height: 150px; position: relative; }
+.impc-plot::before { content: ''; position: absolute; left: 0; right: 0; top: calc((100% - 16px) / 2); border-top: 1px solid var(--line-2); }
+.impc-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
+.impc-up, .impc-down { flex: 1 1 0; display: flex; justify-content: center; }
+.impc-up { align-items: flex-end; }
+.impc-down { align-items: flex-start; }
+.impc-up i, .impc-down i { display: block; width: min(100%, 14px); }
+.impc-up i { background: var(--success); border-radius: 4px 4px 0 0; }
+.impc-down i { background: var(--danger); border-radius: 0 0 4px 4px; }
+.impc-down i.flat { height: 2px; background: var(--text-3); border-radius: 2px; }
+.impc-lbl { height: 16px; line-height: 16px; text-align: center; font-size: 0.66rem; font-weight: 600; color: var(--text-2); }
+.per-avg b.up { color: var(--success); }
+.per-avg b.down { color: var(--danger); }

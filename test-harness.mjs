@@ -451,7 +451,7 @@ const volSheet = [...document.querySelectorAll('.sheet')].pop();
 const volTable = volSheet.querySelector('.volume-table');
 assert(!volSheet.querySelector('canvas'), 'Volume hebdo : plus d histogramme ni de courbe');
 assert(volTable.textContent.includes('Pectoraux'), 'Volume hebdo liste les muscles');
-const chestRow = [...volTable.querySelectorAll('tbody tr.vol-row')].find((r) => r.textContent.includes('Pectoraux'));
+const chestRow = [...volTable.querySelectorAll('.vol-row')].find((r) => r.textContent.includes('Pectoraux'));
 assert(chestRow && chestRow.textContent.includes('1'), 'Pectoraux : 1 set comptabilisé');
 clearOverlays();
 
@@ -1419,9 +1419,18 @@ console.log('== v6.1 : anatomie detaillee et carte du corps ==');
   pages.workout.querySelector('#btn-volume').click();
   const vh = [...document.querySelectorAll('.sheet')].pop();
   assert(vh.querySelector('.bm-week svg.body-map'), 'Volume hebdo : carte du corps de la semaine');
-  const groups = [...vh.querySelectorAll('.vol-group')].map((g) => g.textContent.trim());
+  const groups = [...vh.querySelectorAll('.vol-group > span')].map((g) => g.textContent.trim());
   assert(groups.join(',') === 'Pectoraux,Épaules,Dos,Bras,Tronc,Jambes', `Volume hebdo : muscles groupes par zone (${groups.join(',')})`);
   assert(vh.querySelectorAll('.vol-row').length === 19, 'Volume hebdo : une ligne par muscle');
+  assert(vh.querySelectorAll('.vol-row .vol-bar i').length === 19 && vh.querySelector('.vol-reached'), 'Volume : une jauge par muscle et le nombre de muscles a l objectif');
+  assert(vh.querySelectorAll('.impc-plot .impc-col').length >= 28, 'Amelioration : une barre par jour sur le mois');
+  vh.querySelector('.imp-kind [data-k="year"]').click();
+  assert(vh.querySelectorAll('.impc-plot .impc-col').length === 12, 'Amelioration : vue annee, une barre par mois');
+  vh.querySelector('#imp-box .per-prev').click();
+  assert(!vh.querySelector('#imp-box .per-next').disabled, 'Amelioration : on remonte dans le temps');
+  const useLats = vh.querySelector('.bm-week use[href="#bm-b-lats"]');
+  useLats.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  assert([...document.querySelectorAll('.sheet')].pop() !== vh, 'Carte du corps : toucher un muscle ouvre son detail');
   clearOverlays();
 }
 
