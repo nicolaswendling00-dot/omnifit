@@ -281,6 +281,9 @@ canvas { max-width: 100%; }
 #bottom-nav.rs-nav .nav-btn.active svg { background: transparent; }
 #bottom-nav.rs-nav > .rs-thumb { background: rgba(var(--accent-rgb), 0.14); }
 .nav-btn:active svg { transform: scale3d(0.88, 0.88, 1); }
+/* Icônes : contour au repos, pleines sur l'onglet actif */
+.nav-btn svg .f { fill: transparent; transition: fill var(--dur-med) var(--ease); }
+.nav-btn.active svg .f { fill: currentColor; }
 
 /* ---------- Cartes ---------- */
 .card {

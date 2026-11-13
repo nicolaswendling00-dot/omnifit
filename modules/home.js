@@ -397,6 +397,31 @@ export function render(container) {
   container.querySelector('#home-volume').addEventListener('click', () => goToPage(PAGE_WORKOUT));
 
   // Jours de pesée déjà couverts sur les 5 qui déclenchent le coach.
+// Choix de la phase (sèche, maintenance, prise de masse), ouvert depuis le coach
+function openGoalModal(rerender) {
+  const { goal } = store.userData;
+  const CHOIX = [
+    { v: 'Perte de poids', t: 'Sèche', d: 'Perdre du gras, poids en baisse régulière' },
+    { v: 'Recomposition', t: 'Maintenance', d: 'Poids stable, recomposition corporelle' },
+    { v: 'Prise de muscle', t: 'Prise de masse', d: 'Construire du muscle, poids en hausse' },
+  ];
+  const form = el(`<div class="goal-choices">
+    ${CHOIX.map((c) => `<button class="goal-choice${c.v === goal.type ? ' active' : ''}" data-v="${c.v}">
+      <span class="goal-choice-t">${c.t}</span>
+      <span class="goal-choice-d">${c.d}</span>
+    </button>`).join('')}
+  </div>`);
+  const sh = openSheet({ title: 'Phase', content: form });
+  form.addEventListener('click', (e) => {
+    const b = e.target.closest('.goal-choice');
+    if (!b) return;
+    store.saveUserData({ goal: { type: b.dataset.v } });
+    haptic();
+    sh.close();
+    if (rerender) rerender();
+  });
+}
+
 function coachDays() {
   const ws = [...store.userData.weights].sort((a, b) => a.date.localeCompare(b.date)).filter((w) => w.date > todayISO(-14));
   if (!ws.length) return 0;
