@@ -710,6 +710,8 @@ assert(wDs.cubicInterpolationMode === 'monotone', 'Graphe : courbe lissée sans 
 assert(lastChartCfg.options.scales.y.ticks.maxTicksLimit <= 5, 'Graphe : graduations verticales simplifiées');
 assert(lastChartCfg.options.scales.x.grid.display === false, 'Graphe : pas de grille verticale');
 // Historique bien au-delà d'une semaine
+assert(lastChartCfg.data.labels.length === 7 && lastChartCfg.data.labels[6] === todayISO().slice(8) + '/' + todayISO().slice(5, 7), 'Graphe : s ouvre sur les 7 derniers jours, aujourd hui en dernier');
+chartModal.querySelector('#w-range button[data-r="6m"]').click();
 assert(lastChartCfg.data.labels.length > 14, 'Graphe : historique de poids au-delà de 2 semaines');
 clearOverlays();
 
@@ -926,7 +928,7 @@ console.log('== v5.2 : suppression des pesées et relevés de pas ==');
   pages.activity.querySelector('#view-toggle button[data-k="week"]').click();
   // Periodes : une semaine fait 7 jours du lundi au dimanche, un mois ses vrais jours
   const w1 = uiP.periodRange('week', 1);
-  assert(w1.days.length === 7 && new Date(w1.start + 'T12:00:00').getDay() === 1, 'Periodes : semaine precedente, lundi au dimanche');
+  assert(w1.days.length === 7 && w1.end === todayISO(-7) && uiP.periodRange('week', 0).end === todayISO(), 'Periodes : semaine glissante qui finit aujourd hui');
   assert(uiP.periodRange('year', 0).days.length >= 365 && uiP.periodRange('6m', 0).days.length > 150, 'Periodes : annee et 6 mois');
 
   // Séance vide en tête du menu de démarrage
@@ -1423,7 +1425,7 @@ console.log('== v6.1 : anatomie detaillee et carte du corps ==');
   assert(groups.join(',') === 'Pectoraux,Épaules,Dos,Bras,Tronc,Jambes', `Volume hebdo : muscles groupes par zone (${groups.join(',')})`);
   assert(vh.querySelectorAll('.vol-row').length === 19, 'Volume hebdo : une ligne par muscle');
   assert(vh.querySelectorAll('.vol-row .vol-bar i').length === 19 && vh.querySelector('.vol-reached'), 'Volume : une jauge par muscle et le nombre de muscles a l objectif');
-  assert(vh.querySelectorAll('.impc-plot .impc-col').length >= 28, 'Amelioration : une barre par jour sur le mois');
+  assert(vh.querySelectorAll('.impc-plot .impc-col').length === 7, 'Amelioration : une barre par jour, ouvert sur la semaine');
   vh.querySelector('.imp-kind [data-k="year"]').click();
   assert(vh.querySelectorAll('.impc-plot .impc-col').length === 12, 'Amelioration : vue annee, une barre par mois');
   vh.querySelector('.imp-box .per-prev').click();

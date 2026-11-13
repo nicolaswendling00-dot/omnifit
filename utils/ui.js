@@ -17,7 +17,7 @@ const ICONS_LINE = {
   pause: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>',
   close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
   chevron: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
-  steps: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3c2 0 3 1.7 3 4s-1 4-2.5 4S6 9.3 6 7s.5-4 2-4ZM7 14.5c1.5 0 2.5 1 2.5 2.5S8.5 20 7.5 20 5 19 5 17.5 5.5 14.5 7 14.5ZM16 6c1.5 0 2 1.7 2 4s-1 4-2.5 4-2.5-1.7-2.5-4 1-4 3-4ZM16.5 17.5c1.5 0 2.5 1 2.5 2.5" transform="translate(0,-1)"/></svg>',
+  steps: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3.5c1.8 0 3 2 3 4.6 0 2.2-.8 3.3-.8 4.9H5.8c0-1.6-.8-2.7-.8-4.9C5 5.5 6.2 3.5 8 3.5Z"/><path d="M5.9 15.5h4.2v1.2a2.1 2.1 0 0 1-4.2 0Z"/><path d="M16 7c1.8 0 3 2 3 4.6 0 2.2-.8 3.3-.8 4.9h-4.4c0-1.6-.8-2.7-.8-4.9C13 9 14.2 7 16 7Z"/><path d="M13.9 19h4.2v.2a2.1 2.1 0 0 1-4.2 0Z"/></svg>',
   water: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5S5.5 10 5.5 14.5a6.5 6.5 0 0 0 13 0C18.5 10 12 2.5 12 2.5Z"/></svg>',
   flame: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5Z"/></svg>',
   barcode: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="butt"><path d="M4 5v14" stroke-width="1.4"/><path d="M7 5v14" stroke-width="2.6"/><path d="M10 5v14" stroke-width="1.4"/><path d="M12.5 5v14" stroke-width="1.4"/><path d="M15 5v14" stroke-width="2.6"/><path d="M18 5v14" stroke-width="1.4"/><path d="M20 5v14" stroke-width="1.4"/></svg>',
@@ -611,12 +611,12 @@ const MONTH_FMT = { month: 'short' };
 export function periodRange(kind, offset = 0) {
   const t = new Date(); t.setHours(12, 0, 0, 0);
   let s; let e;
-  if (kind === 'week') {
-    s = new Date(t); s.setDate(t.getDate() - ((t.getDay() + 6) % 7) - 7 * offset);
-    e = new Date(s); e.setDate(s.getDate() + 6);
-  } else if (kind === 'month') {
-    s = new Date(t.getFullYear(), t.getMonth() - offset, 1, 12);
-    e = new Date(t.getFullYear(), t.getMonth() - offset + 1, 0, 12);
+  // Semaine et mois glissants : 7 ou 30 jours qui finissent aujourd'hui
+  // (offset 0), sans caler sur le lundi ni sur le 1er du mois.
+  if (kind === 'week' || kind === 'month') {
+    const n = kind === 'week' ? 7 : 30;
+    e = new Date(t); e.setDate(t.getDate() - n * offset);
+    s = new Date(e); s.setDate(e.getDate() - n + 1);
   } else if (kind === '6m') {
     s = new Date(t.getFullYear(), t.getMonth() - 5 - 6 * offset, 1, 12);
     e = new Date(t.getFullYear(), t.getMonth() - 6 * offset + 1, 0, 12);
@@ -627,10 +627,9 @@ export function periodRange(kind, offset = 0) {
   const days = [];
   for (const d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) days.push(isoLocal(d));
   const y = e.getFullYear();
-  const label = kind === 'week'
+  const label = kind === 'week' || kind === 'month'
     ? `${s.getDate()} ${s.getMonth() !== e.getMonth() ? s.toLocaleDateString('fr-FR', MONTH_FMT) + ' ' : ''}au ${e.getDate()} ${e.toLocaleDateString('fr-FR', MONTH_FMT)} ${y}`
-    : kind === 'month' ? cap(s.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }))
-      : kind === '6m' ? `${cap(s.toLocaleDateString('fr-FR', MONTH_FMT))} à ${e.toLocaleDateString('fr-FR', MONTH_FMT)} ${y}`
+    : kind === '6m' ? `${cap(s.toLocaleDateString('fr-FR', MONTH_FMT))} à ${e.toLocaleDateString('fr-FR', MONTH_FMT)} ${y}`
         : String(y);
   return { start: days[0], end: days[days.length - 1], days, label };
 }

@@ -834,6 +834,74 @@ function openExerciseDetailSheet(exerciseId) {
   return sheet;
 }
 
+const STATS_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19h16"/><path d="m5 15 4.5-4.5 3.5 3L19 7"/></svg>';
+
+// Progression d'un exercice : meilleur 1RM estimé de chaque séance, sur la
+// période choisie. Pas d'unité sur l'axe : on lit la pente, pas la valeur
+// (au poids du corps, le score est un nombre de répétitions).
+const exoStatsState = { kind: 'week', offset: 0 };
+function exerciseScoresByDate(exerciseId) {
+  const by = {};
+  for (const { workout: w, wx } of exoEntries(exerciseId)) {
+    const v = exoScore(wx);
+    if (v > 0) by[w.date] = Math.max(by[w.date] || 0, Math.round(v * 10) / 10);
+  }
+  return by;
+}
+
+function openExerciseStatsSheet(exerciseId) {
+  const by = exerciseScoresByDate(exerciseId);
+  const st = exoStatsState;
+  st.offset = 0;
+  const RANGES = [['week', 'S'], ['month', 'M'], ['6m', '6 M'], ['year', 'A']];
+  const content = el(`<div>
+    <div class="segment" id="xs-range" style="margin-bottom:10px">
+      ${RANGES.map(([v, l]) => `<button data-r="${v}" class="${v === st.kind ? 'active' : ''}">${l}</button>`).join('')}
+    </div>
+    <div id="xs-head"></div>
+    <div class="chart-wrap" id="xs-zone" style="height:240px"><canvas></canvas></div>
+  </div>`);
+  let chart = null;
+  openSheet({
+    title: exerciseLookup(exerciseId).name,
+    content,
+    onClose: () => { if (chart) { try { chart.destroy(); } catch (_) { /* déjà détruit */ } chart = null; } },
+  });
+  const draw = (dir = 0) => {
+    const R = periodRange(st.kind, st.offset);
+    const pts = R.days.filter((d) => by[d] != null);
+    // Variation entre la première et la dernière séance de la période
+    let mid = 'Aucune séance';
+    if (pts.length > 1) {
+      const pct = Math.round(((by[pts[pts.length - 1]] - by[pts[0]]) / by[pts[0]]) * 100);
+      mid = `<b class="num">${pct > 0 ? '+' : ''}${pct} %</b> sur la période`;
+    } else if (pts.length === 1) mid = '1 séance';
+    const head = content.querySelector('#xs-head');
+    head.innerHTML = periodHead(R, `<span class="per-avg">${mid}</span>`, st.offset);
+    head.querySelector('.per-prev').addEventListener('click', () => go(1));
+    head.querySelector('.per-next').addEventListener('click', () => go(-1));
+    const labels = R.days.map((d) => (R.days.length > 120 ? d.slice(5, 7) + '/' + d.slice(2, 4) : d.slice(8) + '/' + d.slice(5, 7)));
+    const data = R.days.map((d) => by[d] ?? null);
+    const options = lineChartOptions({ yTicks: 4, xTicks: 5 });
+    options.scales.y.ticks.callback = (v) => Math.round(v);
+    options.plugins.tooltip.callbacks = { label: (c) => String(Math.round(c.parsed.y)) };
+    // Une seule séance sur la période : un point, sinon la courbe serait invisible
+    const ds = lineDataset('1RM', data, '#00D9FF', { pointRadius: pts.length === 1 ? 4 : 0 });
+    chart = makeChart(content.querySelector('canvas'), { type: 'line', data: { labels, datasets: [ds] }, options }, chart);
+    slideIn(content.querySelector('#xs-zone'), dir);
+  };
+  const go = (dir) => { if (st.offset + dir < 0) return; st.offset += dir; haptic(); draw(dir); };
+  attachPeriodSwipe(content.querySelector('#xs-zone'), go);
+  content.querySelector('#xs-range').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    st.kind = b.dataset.r; st.offset = 0;
+    content.querySelectorAll('#xs-range button').forEach((x) => x.classList.toggle('active', x === b));
+    haptic();
+    draw();
+  });
+  draw();
+}
+
 function buildExerciseDetail(exerciseId) {
   const def = exerciseLookup(exerciseId);
   const entries = exoEntries(exerciseId);
@@ -870,6 +938,7 @@ function buildExerciseDetail(exerciseId) {
       ${def.secondaryMuscles.map((m) => `<span class="badge violet">${muscleLabel(m.m)} ${m.p}%</span>`).join('')}
       ${(def.equip || []).map((q) => `<span class="badge equip-badge">${esc(equipLabel(q))}</span>`).join('')}
     </div>
+    ${entries.length ? `<button type="button" class="btn btn-secondary btn-block" id="ed-stats" style="margin-bottom:14px">${STATS_ICON} Progression</button>` : ''}
     <div class="ed-hist-title">
       <h3 style="margin:0">Historique</h3>
     </div>
@@ -878,6 +947,8 @@ function buildExerciseDetail(exerciseId) {
     : '<div class="empty-state">Jamais réalisé</div>'}</div>
   </div>`);
 
+  const statsBtn = form.querySelector('#ed-stats');
+  if (statsBtn) statsBtn.addEventListener('click', () => openExerciseStatsSheet(exerciseId));
   const rankEl = form.querySelector('#ed-rank');
   rankEl.addEventListener('click', () => openRankCard({
     rank: rk,
@@ -1912,7 +1983,7 @@ function improvementChartHTML(state, byDate) {
     <div class="imp-sum"><b class="up">${up} en hausse</b><b class="down">${down} en baisse</b>${n - up - down ? `<b class="flat">${n - up - down} stable${n - up - down > 1 ? 's' : ''}</b>` : ''}</div>`;
 }
 // Bloc complet : choix de la période (S, M, 6 M, A) et graphique navigable.
-function improvementSection(byDate, state = { kind: 'month', offset: 0 }) {
+function improvementSection(byDate, state = { kind: 'week', offset: 0 }) {
   const sec = el(`<div class="imp-section">
     <div class="segment imp-kind">
       <button data-k="week">S</button><button data-k="month">M</button><button data-k="6m">6 M</button><button data-k="year">A</button>
@@ -1940,7 +2011,7 @@ function improvementSection(byDate, state = { kind: 'month', offset: 0 }) {
   draw();
   return sec;
 }
-const sessionImpState = { kind: 'month', offset: 0 };
+const sessionImpState = { kind: 'week', offset: 0 };
 function sessionImprovementsByDate() {
   const out = {};
   for (const w of store.userData.workouts) {

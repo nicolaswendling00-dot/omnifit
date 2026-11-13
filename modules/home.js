@@ -143,7 +143,7 @@ function openChartModal(rerender) {
 }
 
 // Plage affichée dans la fenêtre Poids (en jours). `0` = tout l'historique.
-let weightRange = 'month'; // 'week' | 'month' | '6m' | 'year'
+let weightRange = 'week'; // 'week' | 'month' | '6m' | 'year'
 
 function renderWeightChart(canvas, R) {
   const all = store.userData.weights;
