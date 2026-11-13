@@ -839,7 +839,7 @@ const STATS_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" 
 // Progression d'un exercice : meilleur 1RM estimé de chaque séance, sur la
 // période choisie. Pas d'unité sur l'axe : on lit la pente, pas la valeur
 // (au poids du corps, le score est un nombre de répétitions).
-const exoStatsState = { kind: 'week', offset: 0 };
+const exoStatsState = { scope: 'last10' };
 function exerciseScoresByDate(exerciseId) {
   const by = {};
   for (const { workout: w, wx } of exoEntries(exerciseId)) {
@@ -849,15 +849,17 @@ function exerciseScoresByDate(exerciseId) {
   return by;
 }
 
+// Une valeur par séance (abscisse = séances, pas le calendrier)
 function openExerciseStatsSheet(exerciseId) {
   const by = exerciseScoresByDate(exerciseId);
+  const dates = Object.keys(by).sort();
   const st = exoStatsState;
-  st.offset = 0;
+  const SCOPES = [['last10', '10 dernières séances'], ['all', 'Toutes les séances']];
   const content = el(`<div>
     <div class="segment" id="xs-range" style="margin-bottom:10px">
-      ${PERIODS.map(([v, l]) => `<button data-r="${v}" class="${v === st.kind ? 'active' : ''}">${l}</button>`).join('')}
+      ${SCOPES.map(([v, l]) => `<button data-r="${v}" class="${v === st.scope ? 'active' : ''}">${l}</button>`).join('')}
     </div>
-    <div id="xs-head"></div>
+    <div class="period-head"><div class="per-mid" id="xs-head"></div></div>
     <div class="chart-wrap" id="xs-zone" style="height:240px"><canvas></canvas></div>
   </div>`);
   let chart = null;
@@ -866,34 +868,25 @@ function openExerciseStatsSheet(exerciseId) {
     content,
     onClose: () => { if (chart) { try { chart.destroy(); } catch (_) { /* déjà détruit */ } chart = null; } },
   });
-  const draw = (dir = 0) => {
-    const R = periodRange(st.kind, st.offset, Object.keys(by).sort()[0]);
-    const pts = R.days.filter((d) => by[d] != null);
-    // Variation entre la première et la dernière séance de la période
+  const draw = () => {
+    const pts = st.scope === 'last10' ? dates.slice(-10) : dates;
     let mid = 'Aucune séance';
     if (pts.length > 1) {
       const pct = Math.round(((by[pts[pts.length - 1]] - by[pts[0]]) / by[pts[0]]) * 100);
-      mid = `<b class="num">${pct > 0 ? '+' : ''}${pct} %</b> sur la période`;
+      mid = `<b class="num ${pct > 0 ? 'up' : pct < 0 ? 'down' : ''}">${pct > 0 ? '+' : ''}${pct} %</b> depuis le ${fmtDateShort(pts[0])}`;
     } else if (pts.length === 1) mid = '1 séance';
-    const head = content.querySelector('#xs-head');
-    head.innerHTML = periodHead(R, `<span class="per-avg">${mid}</span>`, st.offset);
-    head.querySelector('.per-prev').addEventListener('click', () => go(1));
-    head.querySelector('.per-next').addEventListener('click', () => go(-1));
-    const labels = R.days.map((d) => (R.days.length > 120 ? d.slice(5, 7) + '/' + d.slice(2, 4) : d.slice(8) + '/' + d.slice(5, 7)));
-    const data = R.days.map((d) => by[d] ?? null);
+    content.querySelector('#xs-head').innerHTML = `<span class="per-avg">${mid}</span>`;
+    const labels = pts.map((d) => d.slice(8) + '/' + d.slice(5, 7));
     const options = lineChartOptions({ yTicks: 4, xTicks: 5 });
     options.scales.y.ticks.callback = (v) => Math.round(v);
     options.plugins.tooltip.callbacks = { label: (c) => String(Math.round(c.parsed.y)) };
-    // Une seule séance sur la période : un point, sinon la courbe serait invisible
-    const ds = lineDataset('1RM', data, '#00D9FF', { pointRadius: pts.length === 1 ? 4 : 0 });
+    // Une seule séance : un point, sinon la courbe serait invisible
+    const ds = lineDataset('1RM', pts.map((d) => by[d]), '#00D9FF', { pointRadius: pts.length === 1 ? 4 : 0 });
     chart = makeChart(content.querySelector('canvas'), { type: 'line', data: { labels, datasets: [ds] }, options }, chart);
-    slideIn(content.querySelector('#xs-zone'), dir);
   };
-  const go = (dir) => { if (st.kind === 'all' || st.offset + dir < 0) return; st.offset += dir; haptic(); draw(dir); };
-  attachPeriodSwipe(content.querySelector('#xs-zone'), go);
   content.querySelector('#xs-range').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
-    st.kind = b.dataset.r; st.offset = 0;
+    st.scope = b.dataset.r;
     content.querySelectorAll('#xs-range button').forEach((x) => x.classList.toggle('active', x === b));
     haptic();
     draw();
@@ -991,6 +984,27 @@ function buildExerciseDetail(exerciseId) {
     hostH.appendChild(row);
   }
   return form;
+}
+
+// La date du haut de la fiche glisse dans l'en-tête, à côté de « Séance »,
+// au fil du défilement (transform et opacité, liés au scroll).
+function dockDateOnScroll(content, short) {
+  const sheet = content.closest('.sheet');
+  const hero = content.querySelector('.wd-hero');
+  if (!sheet || !hero) return;
+  const body = sheet.querySelector('.sheet-body');
+  const h3 = sheet.querySelector('.sheet-header h3');
+  const tag = el(`<span class="wd-dock" aria-hidden="true">${esc(short)}</span>`);
+  h3.appendChild(tag);
+  const update = () => {
+    const p = Math.max(0, Math.min(1, body.scrollTop / (hero.offsetHeight || 1)));
+    hero.style.opacity = String(1 - p);
+    hero.style.transform = `translate3d(0, ${(p * 14).toFixed(1)}px, 0) scale(${(1 - p * 0.25).toFixed(3)})`;
+    tag.style.opacity = String(p);
+    tag.style.transform = `translate3d(0, ${((1 - p) * 18).toFixed(1)}px, 0)`;
+  };
+  body.addEventListener('scroll', update, { passive: true });
+  update();
 }
 
 // Vue d'une séance complète, en panneau :
@@ -1140,6 +1154,7 @@ function openWorkoutDetail(w, highlightId = null) {
       } },
     ],
   });
+  dockDateOnScroll(content, d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }));
 }
 
 // Crée une routine à partir d'une séance (les séries seront pré-remplies via la colonne PRÉC)

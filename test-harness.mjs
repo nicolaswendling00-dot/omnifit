@@ -1534,7 +1534,7 @@ console.log('== v6.2 : LP totaux, panneaux, detail de seance ==');
   workout.render(pages.workout);
   pages.workout.querySelector(`.cal-day[data-date="${todayISO(-2)}"]`).click();
   const wd = [...document.querySelectorAll('.sheet')].pop();
-  assert(wd.querySelector('.sheet-header h3').textContent === 'Séance', 'Detail : panneau « Séance »');
+  assert(wd.querySelector('.sheet-header h3').firstChild.textContent === 'Séance' && wd.querySelector('.sheet-header .wd-dock'), 'Detail : panneau « Séance », date prete a rejoindre l en-tete');
   assert(wd.querySelector('.wd-day') && wd.querySelector('.wd-date').textContent.length > 4, 'Detail : jour et date mis en avant');
   const tiles = [...wd.querySelectorAll('.wd-stat .eyebrow')].map((e) => e.textContent);
   assert(tiles.join(',') === 'Durée,Progression,Séries', `Detail : tuiles Duree / Progression / Series (${tiles.join(',')})`);
