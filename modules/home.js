@@ -6,6 +6,7 @@ import { openRankCard } from '../utils/rankCard.js';
 import { lineChartOptions, lineDataset } from '../utils/charts.js';
 import { goToPage, PAGE_NUTRITION, PAGE_ACTIVITY, PAGE_WORKOUT, getViewDate, isViewingToday } from '../utils/nav.js';
 import { weeklySetsByMuscle } from '../utils/math.js';
+import { bodyMapSVG } from '../utils/bodyMap.js';
 import { exerciseLookup } from './workout.js';
 import { macroGoals, macroGoalsFor, renderCoachCard } from './nutrition.js';
 import { computeGlobalRank } from '../utils/globalRank.js';
@@ -317,6 +318,8 @@ export function render(container) {
   const wkSets = weeklySetsByMuscle(store.userData.workouts, exerciseLookup, wkStart.toISOString().slice(0, 10), today, settings.secondaryRatio);
   const volDone = Math.round(Object.values(wkSets).reduce((a, b) => a + b, 0));
   const volGoal = Object.values(settings.volumeGoals || {}).reduce((a, b) => a + b, 0) || 1;
+  const volProgress = {};
+  for (const [m, g] of Object.entries(settings.volumeGoals || {})) if (g) volProgress[m] = Math.min(1, (wkSets[m] || 0) / g);
   const left = mg.kcalGoal - totals.kcal;
   const macro = (k, v, g, c) => `<div class="hk-macro"><span>${k} <b class="num">${Math.round(v)}</b>/${g} g</span><i><u style="width:${Math.min(100, Math.round((v / (g || 1)) * 100))}%;background:var(${c})"></u></i></div>`;
   // Poids du jour consulté : la dernière pesée faite ce jour là ou avant.
@@ -343,23 +346,23 @@ export function render(container) {
         </div>
       </div>
 
-      <div class="home-pair">
+      <div class="home-grid">
         <div class="card stat-card home-activity" id="home-activity">
           <div class="tile-top"><span class="stat-head">${icons.steps} Pas</span>${ringSVG({ size: 56, stroke: 8, progress: steps / stepsGoal })}</div>
           <div class="tile-val"><span class="num">${steps.toLocaleString('fr-FR')}</span><small>/ ${stepsGoal.toLocaleString('fr-FR')}</small></div>
         </div>
         <div class="card stat-card home-volume" id="home-volume">
-          <div class="tile-top"><span class="stat-head">Volume</span>${ringSVG({ size: 56, stroke: 8, progress: volDone / volGoal })}</div>
+          <span class="stat-head">Volume</span>
+          <span class="hv-body">${bodyMapSVG(volProgress, { size: 190, label: 'Avancement des objectifs de la semaine' })}</span>
           <div class="tile-val"><span class="num">${volDone}</span><small>/ ${volGoal} séries sur 7 j</small></div>
         </div>
-      </div>
-
-      <div class="card stat-card home-weight" id="home-weight">
-        <div class="hw-content">
-          <div class="stat-head">Poids</div>
-          <div class="num w-now">${currentW}<small>kg</small></div>
+        <div class="card stat-card home-weight" id="home-weight">
+          <div class="hw-curve">${weightSparkline(store.userData.weights)}</div>
+          <div class="hw-content">
+            <div class="stat-head">Poids</div>
+            <div class="num w-now">${currentW}<small>kg</small></div>
+          </div>
         </div>
-        <div class="hw-curve">${weightSparkline(store.userData.weights)}</div>
       </div>
 
       <div class="home-pair">
