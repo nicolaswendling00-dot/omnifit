@@ -1,7 +1,7 @@
 // OmniFit — PAGE 1 : Nutrition (macros couleur, fibres, modes grammes/auto/%, repas typés, recettes)
 import { store, todayISO } from '../utils/storage.js';
 import { calcKcal, fiberGoalFromKcal, metabolicInsight } from '../utils/math.js';
-import { el, esc, icons, openSheet, openModal, toast, ringSVG, confirmModal, fmtDateShort, haptic, celebrateLP, normalizeStr, attachSwipeToDelete, tweenValues, dateBar, dayLabel, periodRange, periodHead, attachPeriodSwipe, slideIn } from '../utils/ui.js';
+import { el, esc, icons, openSheet, openModal, toast, ringSVG, confirmModal, fmtDateShort, haptic, celebrateLP, normalizeStr, attachSwipeToDelete, tweenValues, dateBar, dayLabel, periodRange, monthBuckets, PERIODS, periodHead, attachPeriodSwipe, slideIn } from '../utils/ui.js';
 import { startCameraStream, captureFrame, decodeBarcodeFromFile } from '../utils/barcode.js';
 import { fetchProductByBarcode } from '../utils/openfoodfacts.js';
 import { FOODS, FOOD_CATEGORIES } from '../data/foods.js';
@@ -67,8 +67,8 @@ const MACROS = [
 const statsState = { tab: 'kcal', kind: 'week', offset: 0 };
 
 function nutritionStatsData(kind, offset) {
-  const R = periodRange(kind, offset);
   const byDate = store.userData.nutrition.byDate;
+  const R = periodRange(kind, offset, Object.keys(byDate).filter((d) => (byDate[d].meals || []).length).sort()[0]);
   const dayStats = (d) => {
     const meals = (byDate[d] && byDate[d].meals) || [];
     const perMeal = MEAL_TYPES.map((c) => meals.filter((m) => (MEAL_TYPES.includes(m.meal) ? m.meal : 'Snack') === c).reduce((a, m) => a + (m.kcal || 0), 0));
@@ -79,17 +79,17 @@ function nutritionStatsData(kind, offset) {
   const logged = days.filter((s) => s.n);
   const mean = (f) => (logged.length ? logged.reduce((a, s) => a + f(s), 0) / logged.length : 0);
   let cols;
-  if (kind === 'year') {
-    cols = [...Array(12)].map((_, m) => {
-      const ds = logged.filter((s) => +s.d.slice(5, 7) === m + 1);
+  if (kind === 'year' || (kind === 'all' && R.days.length > 31)) {
+    cols = monthBuckets(R.days).map(({ days: md, label }) => {
+      const ds = logged.filter((s) => md.includes(s.d));
       const avg = (f) => (ds.length ? ds.reduce((a, s) => a + f(s), 0) / ds.length : 0);
-      return { label: new Date(2000, m, 1).toLocaleDateString('fr-FR', { month: 'narrow' }), perMeal: MEAL_TYPES.map((_, i) => avg((s) => s.perMeal[i])), g: MACROS.map((_, i) => avg((s) => s.g[i])) };
+      return { label, perMeal: MEAL_TYPES.map((_, i) => avg((s) => s.perMeal[i])), g: MACROS.map((_, i) => avg((s) => s.g[i])) };
     });
   } else {
     cols = days.map((s) => {
       const dt = new Date(s.d + 'T12:00:00');
       const n = dt.getDate();
-      return { label: kind === 'week' ? 'DLMMJVS'[dt.getDay()] : (n === 1 || n % 7 === 1 ? String(n) : ''), perMeal: s.perMeal, g: s.g };
+      return { label: R.days.length <= 7 ? 'DLMMJVS'[dt.getDay()] : (n === 1 || n % 7 === 1 ? String(n) : ''), perMeal: s.perMeal, g: s.g };
     });
   }
   const goalAvg = Math.round(mean((s) => s.goal.kcalGoal) || macroGoalsFor(todayISO()).kcalGoal);
@@ -163,7 +163,7 @@ function nutritionStatsHTML() {
 function openNutritionStats() {
   const content = el(`<div class="nstats">
     <div class="segment" id="ns-tab"><button data-t="kcal">Calories</button><button data-t="macro">Macros</button></div>
-    <div class="segment" id="ns-kind"><button data-k="week">Semaine</button><button data-k="month">Mois</button><button data-k="year">Année</button></div>
+    <div class="segment" id="ns-kind">${PERIODS.map(([k, l]) => `<button data-k="${k}">${l}</button>`).join('')}</div>
     <div id="ns-body"></div>
   </div>`);
   const body = content.querySelector('#ns-body');
@@ -179,7 +179,7 @@ function openNutritionStats() {
     attachPeriodSwipe(body.querySelector('.ns-zone'), go);
     slideIn(body.querySelector('.ns-plot'), dir);
   };
-  const go = (dir) => { if (statsState.offset + dir < 0) return; statsState.offset += dir; haptic(); draw(dir); };
+  const go = (dir) => { if (statsState.kind === 'all' || statsState.offset + dir < 0) return; statsState.offset += dir; haptic(); draw(dir); };
   content.querySelector('#ns-tab').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { statsState.tab = b.dataset.t; draw(); } });
   content.querySelector('#ns-kind').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { statsState.kind = b.dataset.k; statsState.offset = 0; draw(); } });
   draw();

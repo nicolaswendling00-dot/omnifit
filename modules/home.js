@@ -1,7 +1,7 @@
 // OmniFit — PAGE 0 : Accueil (stats d'abord, poids ensuite, graphique en modal)
 import { store, todayISO } from '../utils/storage.js';
 import { calculateSMA } from '../utils/math.js';
-import { el, icons, openModal, openSheet, toast, ringSVG, haptic, makeChart, fmtDateFull, attachSwipeToDelete, dateBar, periodRange, periodHead, attachPeriodSwipe, slideIn } from '../utils/ui.js';
+import { el, icons, openModal, openSheet, toast, ringSVG, haptic, makeChart, fmtDateFull, attachSwipeToDelete, dateBar, periodRange, PERIODS, periodHead, attachPeriodSwipe, slideIn } from '../utils/ui.js';
 import { openRankCard } from '../utils/rankCard.js';
 import { lineChartOptions, lineDataset } from '../utils/charts.js';
 import { goToPage, PAGE_NUTRITION, PAGE_ACTIVITY, PAGE_WORKOUT, getViewDate, isViewingToday } from '../utils/nav.js';
@@ -44,10 +44,9 @@ function openLogWeightModal(rerender, prefill = null) {
 
 function openChartModal(rerender) {
   const recent = [...store.userData.weights].slice(-8).reverse();
-  const RANGES = [['week', 'S'], ['month', 'M'], ['6m', '6 M'], ['year', 'A']];
   const content = el(`<div>
     <div class="segment" id="w-range" style="margin-bottom:10px">
-      ${RANGES.map(([v, lbl]) => `<button data-r="${v}" class="${v === weightRange ? 'active' : ''}">${lbl}</button>`).join('')}
+      ${PERIODS.map(([v, lbl]) => `<button data-r="${v}" class="${v === weightRange ? 'active' : ''}">${lbl}</button>`).join('')}
     </div>
     <div id="w-head"></div>
     <div class="chart-wrap" id="w-zone" style="height:240px"><canvas id="weight-chart"></canvas></div>
@@ -73,7 +72,7 @@ function openChartModal(rerender) {
   });
   let wOffset = 0;
   const draw = (dir = 0) => {
-    const R = periodRange(weightRange, wOffset);
+    const R = periodRange(weightRange, wOffset, store.userData.weights.reduce((m, w) => (!m || w.date < m ? w.date : m), null));
     const ws = store.userData.weights.filter((w) => w.date >= R.start && w.date <= R.end);
     const avg = ws.length ? (ws.reduce((a, w) => a + w.value, 0) / ws.length).toFixed(1) : null;
     const head = content.querySelector('#w-head');
@@ -83,7 +82,7 @@ function openChartModal(rerender) {
     renderWeightChart(content.querySelector('#weight-chart'), R);
     slideIn(content.querySelector('#w-zone'), dir);
   };
-  const go = (dir) => { if (wOffset + dir < 0) return; wOffset += dir; haptic(); draw(dir); };
+  const go = (dir) => { if (weightRange === 'all' || wOffset + dir < 0) return; wOffset += dir; haptic(); draw(dir); };
   attachPeriodSwipe(content.querySelector('#w-zone'), go);
   content.querySelector('#w-range').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
@@ -143,7 +142,7 @@ function openChartModal(rerender) {
 }
 
 // Plage affichée dans la fenêtre Poids (en jours). `0` = tout l'historique.
-let weightRange = 'week'; // 'week' | 'month' | '6m' | 'year'
+let weightRange = 'week'; // 'week' | 'month' | 'year' | 'all'
 
 function renderWeightChart(canvas, R) {
   const all = store.userData.weights;

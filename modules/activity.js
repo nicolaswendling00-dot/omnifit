@@ -1,6 +1,6 @@
 // OmniFit — PAGE 3 : Activité (pas)
 import { store, todayISO, parseStepsPayload } from '../utils/storage.js';
-import { el, icons, openModal, openSheet, toast, ringSVG, fmtDateShort, haptic, pageFab, dateBar, periodRange, periodHead, attachPeriodSwipe, slideIn } from '../utils/ui.js';
+import { el, icons, openModal, openSheet, toast, ringSVG, fmtDateShort, haptic, pageFab, dateBar, periodRange, monthBuckets, PERIODS, periodHead, attachPeriodSwipe, slideIn } from '../utils/ui.js';
 import { PAGE_ACTIVITY, getViewDate } from '../utils/nav.js';
 
 // Jour décalé de n jours (dates locales AAAA-MM-JJ)
@@ -10,7 +10,7 @@ const shiftISO = (iso, n) => {
   return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
 };
 
-let perKind = 'week'; // 'week' | 'month' | 'year'
+let perKind = 'week'; // 'week' | 'month' | 'year' | 'all'
 let perOffset = 0;
 let perDir = 0; // sens de la dernière navigation, pour l'animation
 const stepGoal = () => store.userData.settings.stepsGoal || 10000;
@@ -132,7 +132,7 @@ export function render(container) {
   const byDate = store.userData.steps.byDate;
   const steps = byDate[today] || 0;
   const goal = stepGoalFor(today);
-  const R = periodRange(perKind, perOffset);
+  const R = periodRange(perKind, perOffset, Object.keys(byDate).sort()[0]);
   const days = R.days;
   const logged = days.filter((d) => byDate[d] != null);
   const avg = logged.length ? Math.round(logged.reduce((acc, d) => acc + byDate[d], 0) / logged.length) : 0;
@@ -140,19 +140,19 @@ export function render(container) {
   const best = Math.max(0, ...days.map((d) => byDate[d] || 0));
   const goalNow = stepGoal();
   let items;
-  if (perKind === 'year') {
+  // Tout : une barre par jour tant que l'historique tient dans un mois
+  if (perKind === 'year' || (perKind === 'all' && days.length > 31)) {
     // Une barre par mois : moyenne des jours renseignés du mois
-    items = [...Array(12)].map((_, m) => {
-      const md = days.filter((d) => +d.slice(5, 7) === m + 1 && byDate[d] != null);
+    items = monthBuckets(days).map(({ days: ds, label }) => {
+      const md = ds.filter((d) => byDate[d] != null);
       const v = md.length ? Math.round(md.reduce((a, d) => a + byDate[d], 0) / md.length) : 0;
-      const name = new Date(2000, m, 1).toLocaleDateString('fr-FR', { month: 'narrow' });
-      return { label: name, v, hit: v >= goalNow, aria: `Moyenne ${v} pas` };
+      return { label, v, hit: v >= goalNow, aria: `Moyenne ${v} pas` };
     });
   } else {
     items = days.map((d, i) => {
       const v = byDate[d] || 0;
       const dt = new Date(d + 'T12:00:00');
-      const label = perKind === 'week' ? DAY_LETTERS[dt.getDay()] : (dt.getDate() === 1 || dt.getDate() % 7 === 1 ? String(dt.getDate()) : '');
+      const label = days.length <= 7 ? DAY_LETTERS[dt.getDay()] : (dt.getDate() === 1 || dt.getDate() % 7 === 1 ? String(dt.getDate()) : '');
       return { date: d, label, v, hit: v >= stepGoalFor(d), aria: `${fmtDateShort(d)} : ${v.toLocaleString('fr-FR')} pas` };
     });
   }
@@ -176,9 +176,7 @@ export function render(container) {
 
       <div class="card steps-bars">
         <div class="segment" id="view-toggle">
-          <button data-k="week" class="${perKind === 'week' ? 'active' : ''}">Semaine</button>
-          <button data-k="month" class="${perKind === 'month' ? 'active' : ''}">Mois</button>
-          <button data-k="year" class="${perKind === 'year' ? 'active' : ''}">Année</button>
+          ${PERIODS.map(([k, l]) => `<button data-k="${k}" class="${perKind === k ? 'active' : ''}">${l}</button>`).join('')}
         </div>
         ${periodHead(R, `<span class="per-avg"><b class="num">${avg.toLocaleString('fr-FR')}</b> pas en moyenne</span>`, perOffset)}
         <div class="sb-zone">${barsHTML(items, goalNow, perKind === 'week')}</div>
@@ -205,7 +203,7 @@ export function render(container) {
     rerender();
   });
   const go = (dir) => {
-    if (perOffset + dir < 0) return;
+    if (perKind === 'all' || perOffset + dir < 0) return;
     perOffset += dir; perDir = dir;
     haptic();
     rerender();

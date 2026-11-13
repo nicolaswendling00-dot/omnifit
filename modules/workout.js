@@ -5,7 +5,7 @@ import { store, todayISO } from '../utils/storage.js';
 import { EXERCISES, MUSCLES, muscleLabel, AKA, EQUIPMENT, equipLabel } from '../data/exercises.js';
 import { reorderList, rollingCounter } from '../utils/gestures.js';
 import { formatTime, workoutMuscleVolume, weeklySetsByMuscle, muscleAttenuation } from '../utils/math.js';
-import { el, esc, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, fmtDateFull, celebrateLP, makeChart, normalizeStr, closeAllOverlays, attachSwipeToDelete, slideAway, pageFab, dateBar, setCollapsed, periodRange, periodHead, attachPeriodSwipe, slideIn } from '../utils/ui.js';
+import { el, esc, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, fmtDateFull, celebrateLP, makeChart, normalizeStr, closeAllOverlays, attachSwipeToDelete, slideAway, pageFab, dateBar, setCollapsed, periodRange, monthBuckets, PERIODS, periodHead, attachPeriodSwipe, slideIn } from '../utils/ui.js';
 import { lineChartOptions, lineDataset } from '../utils/charts.js';
 import { bodyMapSVG } from '../utils/bodyMap.js';
 import { computeExerciseLP, computeExerciseLPDetailed, rankFromLP, rankBadge, getStandards } from '../utils/ranks.js';
@@ -853,10 +853,9 @@ function openExerciseStatsSheet(exerciseId) {
   const by = exerciseScoresByDate(exerciseId);
   const st = exoStatsState;
   st.offset = 0;
-  const RANGES = [['week', 'S'], ['month', 'M'], ['6m', '6 M'], ['year', 'A']];
   const content = el(`<div>
     <div class="segment" id="xs-range" style="margin-bottom:10px">
-      ${RANGES.map(([v, l]) => `<button data-r="${v}" class="${v === st.kind ? 'active' : ''}">${l}</button>`).join('')}
+      ${PERIODS.map(([v, l]) => `<button data-r="${v}" class="${v === st.kind ? 'active' : ''}">${l}</button>`).join('')}
     </div>
     <div id="xs-head"></div>
     <div class="chart-wrap" id="xs-zone" style="height:240px"><canvas></canvas></div>
@@ -868,7 +867,7 @@ function openExerciseStatsSheet(exerciseId) {
     onClose: () => { if (chart) { try { chart.destroy(); } catch (_) { /* déjà détruit */ } chart = null; } },
   });
   const draw = (dir = 0) => {
-    const R = periodRange(st.kind, st.offset);
+    const R = periodRange(st.kind, st.offset, Object.keys(by).sort()[0]);
     const pts = R.days.filter((d) => by[d] != null);
     // Variation entre la première et la dernière séance de la période
     let mid = 'Aucune séance';
@@ -890,7 +889,7 @@ function openExerciseStatsSheet(exerciseId) {
     chart = makeChart(content.querySelector('canvas'), { type: 'line', data: { labels, datasets: [ds] }, options }, chart);
     slideIn(content.querySelector('#xs-zone'), dir);
   };
-  const go = (dir) => { if (st.offset + dir < 0) return; st.offset += dir; haptic(); draw(dir); };
+  const go = (dir) => { if (st.kind === 'all' || st.offset + dir < 0) return; st.offset += dir; haptic(); draw(dir); };
   attachPeriodSwipe(content.querySelector('#xs-zone'), go);
   content.querySelector('#xs-range').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
@@ -1950,13 +1949,13 @@ function volumeRows() {
 // byDate : { 'AAAA-MM-JJ': [variations en %] } ; chaque graphique garde sa
 // propre période (state).
 function improvementBuckets(kind, offset, byDate) {
-  const R = periodRange(kind, offset);
+  const R = periodRange(kind, offset, Object.keys(byDate).sort()[0]);
   const inR = (d) => d >= R.start && d <= R.end;
   const avg = (a) => (a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : null);
   const buckets = [];
   const add = (days, label) => buckets.push({ v: avg(days.flatMap((d) => byDate[d] || [])), label });
-  if (kind === 'week') R.days.forEach((d) => add([d], 'DLMMJVS'[new Date(d + 'T12:00:00').getDay()]));
-  else if (kind === 'month') R.days.forEach((d) => { const n = +d.slice(8); add([d], n === 1 || n % 7 === 1 ? String(n) : ''); });
+  if (R.days.length <= 7) R.days.forEach((d) => add([d], 'DLMMJVS'[new Date(d + 'T12:00:00').getDay()]));
+  else if (kind === 'month' || (kind === 'all' && R.days.length <= 31)) R.days.forEach((d) => { const n = +d.slice(8); add([d], n === 1 || n % 7 === 1 ? String(n) : ''); });
   else if (kind === '6m') {
     for (let i = 0; i < R.days.length; i += 7) {
       const wk = R.days.slice(i, i + 7);
@@ -1964,7 +1963,7 @@ function improvementBuckets(kind, offset, byDate) {
       add(wk, m.getDate() <= 7 ? m.toLocaleDateString('fr-FR', { month: 'narrow' }) : '');
     }
   } else {
-    for (let m = 1; m <= 12; m++) add(R.days.filter((d) => +d.slice(5, 7) === m), new Date(2000, m - 1, 1).toLocaleDateString('fr-FR', { month: 'narrow' }));
+    for (const b of monthBuckets(R.days)) add(b.days, b.label);
   }
   const all = Object.keys(byDate).filter(inR).flatMap((d) => byDate[d]);
   return { R, buckets, mean: avg(all), up: all.filter((v) => v > 0).length, down: all.filter((v) => v < 0).length, n: all.length };
@@ -1982,11 +1981,11 @@ function improvementChartHTML(state, byDate) {
     </div>
     <div class="imp-sum"><b class="up">${up} en hausse</b><b class="down">${down} en baisse</b>${n - up - down ? `<b class="flat">${n - up - down} stable${n - up - down > 1 ? 's' : ''}</b>` : ''}</div>`;
 }
-// Bloc complet : choix de la période (S, M, 6 M, A) et graphique navigable.
+// Bloc complet : choix de la période et graphique navigable.
 function improvementSection(byDate, state = { kind: 'week', offset: 0 }) {
   const sec = el(`<div class="imp-section">
     <div class="segment imp-kind">
-      <button data-k="week">S</button><button data-k="month">M</button><button data-k="6m">6 M</button><button data-k="year">A</button>
+      ${PERIODS.map(([k, l]) => `<button data-k="${k}">${l}</button>`).join('')}
     </div>
     <div class="imp-box"></div>
   </div>`);
@@ -1999,7 +1998,7 @@ function improvementSection(byDate, state = { kind: 'week', offset: 0 }) {
     attachPeriodSwipe(box.querySelector('.impc-zone'), go);
     slideIn(box.querySelector('.impc-plot'), dir);
   };
-  const go = (dir) => { if (state.offset + dir < 0) return; state.offset += dir; haptic(); draw(dir); };
+  const go = (dir) => { if (state.kind === 'all' || state.offset + dir < 0) return; state.offset += dir; haptic(); draw(dir); };
   seg.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b.dataset.k === state.kind));
   seg.addEventListener('click', (e) => {
     const b = e.target.closest('button');

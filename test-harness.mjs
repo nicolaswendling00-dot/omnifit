@@ -312,7 +312,7 @@ console.log('== v6.9 : segments elastiques, glisser pour supprimer, broyeur ==')
   await tick();
   const seg = pages.activity.querySelector('#view-toggle');
   assert(seg.classList.contains('rs') && seg.querySelector('.rs-thumb'), 'Segment : pastille elastique posee automatiquement');
-  assert(seg.querySelectorAll(':scope > button').length === 3, 'Segment : les boutons de la page sont intacts');
+  assert(seg.querySelectorAll(':scope > button').length === 4, 'Segment : les boutons de la page sont intacts');
 
   // Glisser pour supprimer : clic sur le bouton rouge = repli puis suppression
   const host = document.createElement('div');
@@ -711,7 +711,7 @@ assert(lastChartCfg.options.scales.y.ticks.maxTicksLimit <= 5, 'Graphe : graduat
 assert(lastChartCfg.options.scales.x.grid.display === false, 'Graphe : pas de grille verticale');
 // Historique bien au-delà d'une semaine
 assert(lastChartCfg.data.labels.length === 7 && lastChartCfg.data.labels[6] === todayISO().slice(8) + '/' + todayISO().slice(5, 7), 'Graphe : s ouvre sur les 7 derniers jours, aujourd hui en dernier');
-chartModal.querySelector('#w-range button[data-r="6m"]').click();
+chartModal.querySelector('#w-range button[data-r="all"]').click();
 assert(lastChartCfg.data.labels.length > 14, 'Graphe : historique de poids au-delà de 2 semaines');
 clearOverlays();
 

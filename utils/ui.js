@@ -608,7 +608,8 @@ function weekStrip(sel, mark) {
 // kind : 'week' (lundi à dimanche), 'month', '6m', 'year' ; offset 0 = période
 // en cours, 1 = la précédente, etc. Renvoie { start, end, days[], label }.
 const MONTH_FMT = { month: 'short' };
-export function periodRange(kind, offset = 0) {
+// first : premier jour de données du graphique, pour la période « Tout ».
+export function periodRange(kind, offset = 0, first = null) {
   const t = new Date(); t.setHours(12, 0, 0, 0);
   let s; let e;
   // Semaine et mois glissants : 7 ou 30 jours qui finissent aujourd'hui
@@ -617,6 +618,12 @@ export function periodRange(kind, offset = 0) {
     const n = kind === 'week' ? 7 : 30;
     e = new Date(t); e.setDate(t.getDate() - n * offset);
     s = new Date(e); s.setDate(e.getDate() - n + 1);
+  } else if (kind === 'all') {
+    // Tout l'historique, au moins une semaine ; pas de navigation
+    e = new Date(t);
+    s = first ? new Date(first + 'T12:00:00') : new Date(t);
+    const min = new Date(t); min.setDate(t.getDate() - 6);
+    if (s > min) s = min;
   } else if (kind === '6m') {
     s = new Date(t.getFullYear(), t.getMonth() - 5 - 6 * offset, 1, 12);
     e = new Date(t.getFullYear(), t.getMonth() - 6 * offset + 1, 0, 12);
@@ -627,17 +634,31 @@ export function periodRange(kind, offset = 0) {
   const days = [];
   for (const d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) days.push(isoLocal(d));
   const y = e.getFullYear();
-  const label = kind === 'week' || kind === 'month'
+  const label = kind === 'week' || kind === 'month' || kind === 'all'
     ? `${s.getDate()} ${s.getMonth() !== e.getMonth() ? s.toLocaleDateString('fr-FR', MONTH_FMT) + ' ' : ''}au ${e.getDate()} ${e.toLocaleDateString('fr-FR', MONTH_FMT)} ${y}`
     : kind === '6m' ? `${cap(s.toLocaleDateString('fr-FR', MONTH_FMT))} à ${e.toLocaleDateString('fr-FR', MONTH_FMT)} ${y}`
         : String(y);
-  return { start: days[0], end: days[days.length - 1], days, label };
+  return { start: days[0], end: days[days.length - 1], days, label, all: kind === 'all' };
 }
+
+// Jours d'une période regroupés par mois (graphiques en barres, Année et Tout)
+export function monthBuckets(days) {
+  const by = new Map();
+  for (const d of days) {
+    const k = d.slice(0, 7);
+    if (!by.has(k)) by.set(k, []);
+    by.get(k).push(d);
+  }
+  return [...by.entries()].map(([k, ds]) => ({ days: ds, label: new Date(k + '-15T12:00:00').toLocaleDateString('fr-FR', { month: 'narrow' }) }));
+}
+
+// Libellés des périodes, communs à tous les graphiques
+export const PERIODS = [['week', 'Semaine'], ['month', 'Mois'], ['year', 'Année'], ['all', 'Tout']];
 
 // En-tête d'un graphique : flèches, valeur moyenne de la période, dates.
 export function periodHead(range, avgHtml, offset) {
   return `<div class="period-head">
-    <button type="button" class="icon-btn per-prev" aria-label="Période précédente">${ARROW_L}</button>
+    <button type="button" class="icon-btn per-prev" aria-label="Période précédente" ${range.all ? 'disabled' : ''}>${ARROW_L}</button>
     <div class="per-mid">${avgHtml}<span class="per-label">${range.label}</span></div>
     <button type="button" class="icon-btn per-next" aria-label="Période suivante" ${offset > 0 ? '' : 'disabled'}>${icons.chevron}</button>
   </div>`;
