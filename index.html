@@ -88,11 +88,11 @@
     var open = function () {
       if (done) return; done = true;
       s.classList.add('open');
-      setTimeout(function () { s.remove(); }, 650);
+      setTimeout(function () { s.remove(); }, 500);
     };
     var maybe = function () { if (drawn && ready) open(); };
-    var finish = function () { drawn = true; setTimeout(maybe, 60); };
-    var DUR = 1300, t0 = 0;
+    var finish = function () { drawn = true; setTimeout(maybe, 20); };
+    var DUR = 950, t0 = 0;
     var ease = function (x) { return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
     var frame = function (now) {
       if (!t0) t0 = now;
