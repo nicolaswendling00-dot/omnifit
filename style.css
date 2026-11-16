@@ -1953,3 +1953,14 @@ body:not(.palette-light) .card, body.palette-light .card,
    posé dans le coin, et le chiffre garde sa marge sous lui sur les écrans courts. */
 .home-grid .home-activity { position: relative; }
 .home-grid .home-activity .tile-top > svg { position: absolute; width: min(56px, 4.8dvh); top: clamp(10px, 1.8dvh, 16px); right: clamp(10px, 1.8dvh, 16px); }
+
+/* v12.7 : accueil, la date, « Aujourd'hui » et le coach restent sur une ligne.
+   Seul l'espace entre eux se resserre ; la police ne change pas. En dernier
+   recours (date avec l'année), la date se coupe avec des points de suspension. */
+#page-home .date-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; column-gap: 6px; }
+#page-home .date-pick { grid-column: 1; justify-self: start; max-width: 100%; min-width: 0; }
+#page-home .date-pick span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#page-home .date-pick svg { flex: none; }
+#page-home .date-back { grid-column: 2; }
+#page-home .date-bar .coach-mini { grid-column: 3; margin-left: 0; }
+#page-home .week-strip { grid-column: 1 / -1; }
