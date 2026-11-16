@@ -1937,18 +1937,12 @@ body:not(.palette-light) .card, body.palette-light .card,
 .sp-half svg, .sp-top svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .sp-top { position: absolute; inset: 0; }
 #splash.open .sp-top { opacity: 0; }
-/* trou plus long que le tracé : pas de point rond visible avant le départ */
-.sp-line, .sp-loop { stroke-dasharray: 1 1.2; stroke-dashoffset: 1.05; }
-.sp-line { animation: sp-draw .6s cubic-bezier(.65, 0, .35, 1) .1s forwards; }
-.sp-loop { animation: sp-draw .9s cubic-bezier(.45, 0, .2, 1) .55s forwards; }
-.sp-tip { opacity: 0; transform-box: fill-box; transform-origin: 30% 70%; transform: scale(.4); animation: sp-tip .45s cubic-bezier(.34, 1.56, .64, 1) 1.3s forwards; }
-@keyframes sp-draw { to { stroke-dashoffset: 0; } }
-@keyframes sp-tip { to { opacity: 1; transform: scale(1); } }
+/* les moitiés ne montrent le trait complet qu'au moment de s'ouvrir */
+.sp-half svg { opacity: 0; }
+#splash.open .sp-half svg { opacity: 1; }
 #splash.open { pointer-events: none; }
 #splash.open .sp-half { transform: var(--out); opacity: 0; }
 @media (prefers-reduced-motion: reduce) {
-  .sp-line, .sp-loop { animation: none; stroke-dashoffset: 0; }
-  .sp-tip { animation: none; opacity: 1; transform: none; }
   .sp-half { transition: opacity .3s linear; }
   #splash.open .sp-half { transform: none; }
 }

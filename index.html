@@ -28,35 +28,54 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
 </head>
 <body>
-  <!-- Écran de lancement : le logo se trace sur la diagonale, puis l'écran
-       s'ouvre en deux (moitié bleue vers le haut, moitié violette vers le bas). -->
+  <!-- Écran de lancement : une flèche part du coin bas gauche, trace la ligne,
+       fait la boucle de l'infini et ressort en haut à droite. L'écran s'ouvre
+       ensuite en deux le long de ce trait (bleu vers le haut, violet vers le bas). -->
   <div id="splash" aria-hidden="true"></div>
   <script>
   (function () {
     var s = document.getElementById('splash');
     var W = innerWidth, H = innerHeight, k = Math.min(W, H) * 0.6 / 75;
-    var t = (W + H) / k / 37;            // assez long pour sortir de l'écran
+    var ux = 27 / 37.48, uy = -26 / 37.48, nx = -26 / 37.48, ny = -27 / 37.48;
+    // du croisement au bord de l'écran, plus la taille de la flèche (unités du logo)
+    var e = Math.min(W / 2 / ux, H / 2 / -uy) / k + 20;
+    var pt = function (d) { return (50 + ux * d) + ' ' + (55 + uy * d); };
+    // Un seul trait : ligne, boucle de droite, boucle de gauche, ligne
+    var d = 'M' + pt(-e) + ' L50 55'
+      + ' C58 46 64 40 72 40 C81 40 87 47 87 55 C87 63 81 70 72 70 C64 70 58 64 50 55'
+      + ' C42 46 36 40 28 40 C19 40 13 47 13 55 C13 63 19 70 28 70 C36 70 42 63 50 55'
+      + ' L' + pt(e);
     var g = 'translate(' + W / 2 + ' ' + H / 2 + ') scale(' + k + ') translate(-50 -55)';
-    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '"><g transform="' + g + '" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round">'
-      + '<path class="sp-line" pathLength="1" stroke-width="9" d="M' + (50 - 27 * t) + ' ' + (55 + 26 * t) + 'L' + (50 + 27 * t) + ' ' + (55 - 26 * t) + '"/>'
-      + '<path class="sp-loop" pathLength="1" stroke-width="9" d="M50 55 C42 63 36 70 28 70 C19 70 13 63 13 55 C13 47 19 40 28 40 C36 40 42 46 50 55 C58 64 64 70 72 70 C81 70 87 63 87 55 C87 51 85.5 47.5 83 45"/>'
-      + '<path class="sp-tip" fill="#fff" stroke-width="4" d="M88 18 L72.5 21.5 L84.5 33.5 Z"/></g></svg>';
-    // Les deux moitiés, découpées le long de la diagonale du logo
-    var L = 2 * (W + H), nx = -26 / 37.48, ny = -27 / 37.48, ux = 27 / 37.48, uy = -26 / 37.48;
+    var svg = function (tip) {
+      return '<svg viewBox="0 0 ' + W + ' ' + H + '"><g transform="' + g + '" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round">'
+        + '<path class="sp-path" stroke-width="9" d="' + d + '"/>'
+        + (tip ? '<path class="sp-tip" fill="#fff" stroke-width="4" d="M7 0 L-9 -8.5 L-9 8.5 Z"/>' : '') + '</g></svg>';
+    };
+    var L = 2 * (W + H);
     [1, -1].forEach(function (side) {
       var p = function (a, b) { return (W / 2 + ux * a + nx * b * side) + 'px ' + (H / 2 + uy * a + ny * b * side) + 'px'; };
       var h = document.createElement('div');
       h.className = 'sp-half';
       h.style.clipPath = 'polygon(' + [p(-L, 0), p(L, 0), p(L, L), p(-L, L)].join(',') + ')';
       h.style.setProperty('--out', 'translate3d(' + nx * side * H * 0.7 + 'px,' + ny * side * H * 0.7 + 'px,0)');
-      h.innerHTML = svg;
+      h.innerHTML = svg(false);
       s.appendChild(h);
     });
-    // Tant que rien ne bouge, un seul tracé par dessus : sinon la découpe se voit
+    // Le tracé animé, par dessus les deux moitiés (déjà complètes en dessous)
     var top = document.createElement('div');
     top.className = 'sp-top';
-    top.innerHTML = svg;
+    top.innerHTML = svg(true);
     s.appendChild(top);
+    var path = top.querySelector('.sp-path'), tip = top.querySelector('.sp-tip');
+    var len = path.getTotalLength();
+    path.style.strokeDasharray = len + ' ' + (len + 20);
+    var draw = function (p) {
+      var at = p * len, a = path.getPointAtLength(at), b = path.getPointAtLength(Math.min(len, at + 0.5));
+      var c = at + 0.5 > len ? path.getPointAtLength(at - 0.5) : a;
+      var ang = at + 0.5 > len ? Math.atan2(a.y - c.y, a.x - c.x) : Math.atan2(b.y - a.y, b.x - a.x);
+      path.style.strokeDashoffset = String(len - at);
+      tip.setAttribute('transform', 'translate(' + a.x + ' ' + a.y + ') rotate(' + ang * 180 / Math.PI + ')');
+    };
     var drawn = false, ready = false, done = false;
     var open = function () {
       if (done) return; done = true;
@@ -64,10 +83,19 @@
       setTimeout(function () { s.remove(); }, 900);
     };
     var maybe = function () { if (drawn && ready) open(); };
-    var rm = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    setTimeout(function () { drawn = true; maybe(); }, rm ? 300 : 1750);
+    var finish = function () { drawn = true; setTimeout(maybe, 150); };
+    var DUR = 2000, t0 = 0;
+    var ease = function (x) { return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+    var frame = function (now) {
+      if (!t0) t0 = now;
+      var x = Math.min(1, (now - t0) / DUR);
+      draw(ease(x));
+      if (x < 1) requestAnimationFrame(frame); else finish();
+    };
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { draw(1); finish(); }
+    else { draw(0); requestAnimationFrame(frame); }
     window.omnifitReady = function () { ready = true; maybe(); };
-    setTimeout(open, 5000);               // filet : l'appli ne doit jamais rester cachée
+    setTimeout(open, 5500);               // filet : l'appli ne doit jamais rester cachée
     s.addEventListener('click', open);
   })();
   </script>
