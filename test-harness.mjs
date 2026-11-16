@@ -1332,7 +1332,9 @@ console.log('== v6.0 : iPhone, percentile, progression, fluidite ==');
   store.addStepsLog(todayISO(-40), 1);
   assert(store.version === v0 + 1, 'Stockage : chaque ecriture incremente la version');
   const cssF = fs.readFileSync(new URL('./style.css', import.meta.url), 'utf8');
-  assert(!/backdrop-filter/.test(cssF), 'Fluidite : plus aucun flou d\'arriere-plan (couteux sur iPhone)');
+  // Liquid Glass : flou seulement sur les surfaces fixes, jamais sur les cartes qui défilent
+  const blurRules = cssF.split('}').filter((r) => /backdrop-filter/.test(r)).map((r) => r.split('{')[0]);
+  assert(blurRules.length && blurRules.every((sel) => !/\.card\b/.test(sel)), 'Fluidite : pas de flou d\'arriere-plan sur les cartes');
   assert(!/#app-container \{[^}]*will-change: transform/.test(cssF), 'Fluidite : pas de couche GPU permanente de 5 ecrans');
 }
 
