@@ -233,6 +233,7 @@ fetch('./standards.json')
   .finally(() => {
     markAllStale();                    // les rangs dépendent des standards
     rerenderCurrent();
+    if (window.omnifitReady) window.omnifitReady(); // l'écran de lancement peut s'ouvrir
     resumeActiveSession(rerenderCurrent); // reprise séance (standards désormais chargés → rangs corrects)
     refreshActiveSession();            // et si une séance était déjà là, on recalcule ses rangs
     prerenderOthers();
