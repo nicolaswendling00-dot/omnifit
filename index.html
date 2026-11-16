@@ -52,13 +52,21 @@
         + (tip ? '<path class="sp-tip" fill="#fff" stroke-width="4" d="M7 0 L-9 -8.5 L-9 8.5 Z"/>' : '') + '</g></svg>';
     };
     var L = 2 * (W + H);
+    // Ciel étoilé comme sur l'icône, tiré une fois (graine fixe : le même à chaque lancement)
+    var seed = 7, rnd = function () { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    var stars = '';
+    for (var i = 0, n = Math.round(W * H / 2600); i < n; i++) {
+      stars += '<circle cx="' + (rnd() * W).toFixed(1) + '" cy="' + (rnd() * H).toFixed(1) + '" r="' + (0.6 + rnd() * rnd() * 2).toFixed(2) + '" opacity="' + (0.4 + rnd() * 0.6).toFixed(2) + '"/>';
+    }
+    var sky = '<svg class="sp-sky" viewBox="0 0 ' + W + ' ' + H + '" fill="#fff">' + stars + '</svg>';
+    // les moitiés se chevauchent d'1 px : pas de fente visible le long de la coupe
     [1, -1].forEach(function (side) {
       var p = function (a, b) { return (W / 2 + ux * a + nx * b * side) + 'px ' + (H / 2 + uy * a + ny * b * side) + 'px'; };
       var h = document.createElement('div');
       h.className = 'sp-half';
-      h.style.clipPath = 'polygon(' + [p(-L, 0), p(L, 0), p(L, L), p(-L, L)].join(',') + ')';
+      h.style.clipPath = 'polygon(' + [p(-L, -1), p(L, -1), p(L, L), p(-L, L)].join(',') + ')';
       h.style.setProperty('--out', 'translate3d(' + nx * side * H * 0.7 + 'px,' + ny * side * H * 0.7 + 'px,0)');
-      h.innerHTML = svg(false);
+      h.innerHTML = sky + svg(false);
       s.appendChild(h);
     });
     // Le tracé animé, par dessus les deux moitiés (déjà complètes en dessous)
@@ -80,11 +88,11 @@
     var open = function () {
       if (done) return; done = true;
       s.classList.add('open');
-      setTimeout(function () { s.remove(); }, 900);
+      setTimeout(function () { s.remove(); }, 650);
     };
     var maybe = function () { if (drawn && ready) open(); };
-    var finish = function () { drawn = true; setTimeout(maybe, 150); };
-    var DUR = 2000, t0 = 0;
+    var finish = function () { drawn = true; setTimeout(maybe, 60); };
+    var DUR = 1300, t0 = 0;
     var ease = function (x) { return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
     var frame = function (now) {
       if (!t0) t0 = now;
