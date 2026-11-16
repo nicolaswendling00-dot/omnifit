@@ -1948,3 +1948,8 @@ body:not(.palette-light) .card, body.palette-light .card,
   .sp-half { transition: opacity .3s linear; }
   #splash.open .sp-half { transform: none; }
 }
+
+/* v12.5 : tuile Pas. L'anneau ne pousse plus le contenu vers le bas : il est
+   posé dans le coin, et le chiffre garde sa marge sous lui sur les écrans courts. */
+.home-grid .home-activity { position: relative; }
+.home-grid .home-activity .tile-top > svg { position: absolute; width: min(56px, 4.8dvh); top: clamp(10px, 1.8dvh, 16px); right: clamp(10px, 1.8dvh, 16px); }
