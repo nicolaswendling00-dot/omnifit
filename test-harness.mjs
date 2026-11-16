@@ -153,6 +153,14 @@ store.removeMeal(todayISO(), mealId);
 store.addStepsLog(todayISO(), 12500);
 activity.render(pages.activity);
 assert(pages.activity.querySelector('.steps-hero').textContent.includes('12'), 'Pas affichés dans le hero');
+// Toucher n'importe où dans la carte ouvre l'objectif de pas (sauf le bouton d'import)
+pages.activity.querySelector('.steps-kpis').click();
+assert(document.getElementById('sg-value'), 'Pas : la carte entière ouvre la saisie de l objectif');
+clearOverlays();
+{ const cb = navigator.clipboard; Object.defineProperty(navigator, 'clipboard', { value: { readText: () => new Promise(() => {}) }, configurable: true });
+  pages.activity.querySelector('#btn-import-steps').click();
+  assert(!document.getElementById('sg-value'), 'Pas : le bouton d import ne l ouvre pas');
+  Object.defineProperty(navigator, 'clipboard', { value: cb, configurable: true }); clearOverlays(); }
 
 console.log('== Saisie aliments (loupe / FAB 2 boutons) ==');
 // FAB : uniquement scan + loupe

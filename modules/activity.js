@@ -243,7 +243,10 @@ export function render(container) {
   }));
 
   pageFab(PAGE_ACTIVITY, icons.plus, 'Ajouter des pas', () => openLogStepsModal(rerender));
-  container.querySelector('#btn-step-goal').addEventListener('click', () => openStepGoalModal(rerender));
+  // Toute la carte du haut ouvre l'objectif, sauf le bouton d'import
+  container.querySelector('.steps-hero').addEventListener('click', (e) => {
+    if (!e.target.closest('#btn-import-steps')) openStepGoalModal(rerender);
+  });
   container.querySelector('#btn-import-steps').addEventListener('click', () => importStepsFromClipboard(rerender));
   container.querySelector('#view-toggle').addEventListener('click', (e) => {
     const btn = e.target.closest('button');

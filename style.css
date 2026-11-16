@@ -1357,7 +1357,7 @@ button.wd-exo { display: block; width: 100%; text-align: left; border: none; col
    ============================================================ */
 /* Activité (v6.8) : tout tient sur un écran — anneau + 3 chiffres, puis
    l'histogramme des jours. Toucher l'anneau = objectif, une barre = saisie. */
-.steps-hero { position: relative; display: flex; align-items: center; gap: 16px; padding: 16px; }
+.steps-hero { position: relative; display: flex; align-items: center; gap: 16px; padding: 16px; cursor: pointer; }
 .steps-import { position: absolute; top: 6px; right: 6px; }
 .steps-ring { flex: 0 0 auto; background: none; border: 0; padding: 0; cursor: pointer; border-radius: 50%; }
 .steps-hero .ring { display: block; }
@@ -1664,6 +1664,8 @@ body:not(.palette-light) .modal-actions { background: transparent; }
 .tile-val .num { font-size: clamp(1.4rem, min(8.5vw, 4.4dvh), 2.3rem); }
 .hk-big { font-size: clamp(1.4rem, min(8vw, 4.4dvh), 2.2rem); }
 .home-fit .stat-card { padding: clamp(10px, 1.8dvh, 16px); }
+/* l'objectif de pas ne colle pas au bas de la tuile (coins arrondis du Liquid Glass) */
+.home-fit .home-activity { padding-bottom: clamp(16px, 2.6dvh, 22px); }
 
 /* Nutrition : version compacte de l'en-tête, collée en haut en défilant */
 .nut-mini {
