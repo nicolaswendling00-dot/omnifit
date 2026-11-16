@@ -906,6 +906,22 @@ console.log('== v5.2 : suppression des pesées et relevés de pas ==');
   [...stModal.querySelectorAll('.modal-actions .btn')].find((x) => x.textContent.includes('Supprimer')).click();
   assert(store.userData.steps.byDate[todayISO(-1)] === undefined, 'Pas : suppression depuis la saisie');
   clearOverlays();
+  // Coller les pas : lecture du presse-papier puis enregistrement
+  {
+    const prevClip = navigator.clipboard;
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { readText: async () => todayISO(-9) + ':4321' } });
+    activity.render(pages.activity);
+    pages.activity.querySelector('#btn-import-steps').click();
+    await new Promise((r) => setTimeout(r, 0));
+    assert(store.userData.steps.byDate[todayISO(-9)] === 4321, 'Pas : le bouton coller importe le presse-papier');
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { readText: async () => { throw new Error('refus'); } } });
+    pages.activity.querySelector('#btn-import-steps').click();
+    await new Promise((r) => setTimeout(r, 0));
+    const sp = [...document.querySelectorAll('.sheet')].pop();
+    assert(sp && sp.querySelector('#sp-input'), 'Pas : lecture refusee, champ de collage');
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: prevClip });
+    clearOverlays();
+  }
   // Série : 3 jours consecutifs a l'objectif (hier, avant-hier, J-3), aujourd'hui pas encore
   for (const i of [-1, -2, -3]) { store.userData.steps.byDate[todayISO(i)] = 12000; store.userData.steps.goalByDate[todayISO(i)] = 10000; }
   store.userData.steps.byDate[todayISO(-4)] = 2000;

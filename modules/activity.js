@@ -96,6 +96,55 @@ function openLogStepsModal(rerender, prefill = null) {
 // Série en cours : jours consécutifs à l'objectif. Aujourd'hui compte s'il
 // est déjà atteint ; sinon la série court jusqu'à hier (la journée n'est pas
 // finie, on ne la casse pas).
+// Applique une liste d'entrées de pas et notifie.
+function applyStepsEntries(entries, rerender) {
+  for (const { date, count } of entries) store.addStepsLog(date, count);
+  haptic();
+  const todayEntry = entries.find((e) => e.date === todayISO());
+  toast(
+    entries.length === 1
+      ? `${entries[0].count.toLocaleString('fr-FR')} pas importés`
+      : `${entries.length} jours importés${todayEntry ? `, dont ${todayEntry.count.toLocaleString('fr-FR')} pas aujourd'hui` : ''}`,
+    'success',
+  );
+  rerender();
+}
+
+// Lecture directe du presse-papier ; si iOS la refuse (fréquent en PWA), champ
+// de collage manuel.
+async function importStepsFromClipboard(rerender) {
+  let text = '';
+  try { text = await navigator.clipboard.readText(); } catch (_) { text = ''; }
+  const entries = parseStepsPayload(text);
+  if (entries.length) { applyStepsEntries(entries, rerender); return; }
+  openStepsPasteSheet(rerender);
+}
+
+function openStepsPasteSheet(rerender) {
+  const form = el(`<div>
+    <button class="btn btn-secondary btn-block" id="sp-paste" style="margin-bottom:8px">${icons.copy} Coller</button>
+    <textarea id="sp-input" rows="5" placeholder="2026-07-22:8200&#10;2026-07-23:9100" class="field-input-solo no-sheet-drag" style="width:100%;font-size:0.9rem;line-height:1.5;resize:vertical"></textarea>
+    <button class="btn btn-primary btn-block" id="sp-import" style="margin-top:12px">${icons.download} Importer</button>
+  </div>`);
+  const sheet = openSheet({ title: 'Importer les pas', content: form });
+  const input = form.querySelector('#sp-input');
+  // Un tap est un geste direct, ce qu'iOS exige pour lire le presse-papier
+  form.querySelector('#sp-paste').addEventListener('click', async () => {
+    let t = '';
+    try { t = await navigator.clipboard.readText(); } catch (_) { toast('Lecture refusée, colle le texte dans le champ', 'error'); return; }
+    const entries = parseStepsPayload(t);
+    if (!entries.length) { toast('Presse-papier vide ou non reconnu', 'error'); input.value = t || ''; return; }
+    sheet.close();
+    applyStepsEntries(entries, rerender);
+  });
+  form.querySelector('#sp-import').addEventListener('click', () => {
+    const entries = parseStepsPayload(input.value);
+    if (!entries.length) { toast('Rien à importer', 'error'); return; }
+    sheet.close();
+    applyStepsEntries(entries, rerender);
+  });
+}
+
 function goalStreak() {
   const byDate = store.userData.steps.byDate;
   let n = 0;

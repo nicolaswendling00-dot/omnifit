@@ -1819,3 +1819,106 @@ body.palette-light .vol-bar, body.palette-light .vol-block { background: var(--s
 .ns-mrow small { color: var(--text-2); }
 .ns-mrow b { text-align: right; }
 .ns-top-h { margin: 16px 0 8px; font-size: 1rem; }
+
+/* ============================================================
+   v12 : Liquid Glass
+   Matière : voile translucide, arête haute éclairée (reflet spéculaire),
+   arête basse plus sombre, coins très arrondis. Le flou de fond
+   (backdrop-filter) ne vit que sur les surfaces fixes ou flottantes
+   (barre du bas, panneaux, en-têtes collants, bulles) : sur les cartes qui
+   défilent il coûterait cher sur iPhone sans rien montrer de plus, le fond
+   derrière elles étant fixe.
+   ============================================================ */
+:root {
+  --glass: rgba(255, 255, 255, 0.07);
+  --glass-2: rgba(255, 255, 255, 0.11);
+  --glass-hi: rgba(255, 255, 255, 0.28);   /* reflet de l'arête haute */
+  --glass-lo: rgba(255, 255, 255, 0.05);   /* arête basse */
+  --glass-bar: rgba(22, 25, 33, 0.52);     /* matière des surfaces flottantes */
+  --glass-blur: blur(26px) saturate(180%);
+  --glass-rim: inset 0 1px 0 var(--glass-hi), inset 0 -1px 0 var(--glass-lo), inset 1px 0 0 rgba(255, 255, 255, 0.06), inset -1px 0 0 rgba(255, 255, 255, 0.06);
+  --r-card: 26px;
+  --r-btn: 16px;
+  --r-modal: 32px;
+  --header-bg: rgba(10, 12, 18, 0.5);
+  --scrim: rgba(0, 0, 0, 0.38);
+}
+body.palette-light {
+  --glass: rgba(255, 255, 255, 0.55);
+  --glass-2: rgba(255, 255, 255, 0.72);
+  --glass-hi: rgba(255, 255, 255, 0.95);
+  --glass-lo: rgba(16, 19, 28, 0.06);
+  --glass-bar: rgba(255, 255, 255, 0.58);
+  --glass-rim: inset 0 1px 0 var(--glass-hi), inset 0 -1px 0 var(--glass-lo), inset 1px 0 0 rgba(255, 255, 255, 0.6), inset -1px 0 0 rgba(255, 255, 255, 0.6);
+  --header-bg: rgba(243, 245, 249, 0.55);
+  --scrim: rgba(16, 19, 28, 0.22);
+}
+
+/* Fond : trois nappes de couleur fixes, plus franches, que le verre réfracte */
+body::before {
+  background:
+    radial-gradient(70% 45% at 100% 0%, rgba(var(--accent-rgb), 0.34), transparent 70%),
+    radial-gradient(65% 45% at 0% 55%, rgba(79, 140, 255, 0.22), transparent 70%),
+    radial-gradient(80% 50% at 30% 105%, rgba(var(--violet-rgb), 0.34), transparent 70%);
+}
+body.palette-light::before { opacity: 0.8; }
+
+/* Cartes et tuiles */
+body:not(.palette-light) .card, body.palette-light .card,
+.wk-day, .coach-mini {
+  background: linear-gradient(180deg, var(--glass-2), var(--glass));
+  box-shadow: var(--glass-rim);
+}
+.card { border: 0; }
+.wk-day.sel { background: linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 60%), var(--accent); }
+
+/* Boutons */
+.btn-secondary, .segment, .icon-btn:active, .vol-block {
+  background: linear-gradient(180deg, var(--glass-2), var(--glass));
+  box-shadow: var(--glass-rim);
+}
+.btn-primary, .fab, .btn-danger {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0) 55%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+}
+.btn { border-radius: 999px; }
+.btn-sm { border-radius: 999px; }
+.segment { border-radius: 999px; padding: 4px; }
+.segment button { border-radius: 999px; }
+.rs-thumb { border-radius: 999px; background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0) 60%); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5); }
+.fab { border-radius: 50%; }
+
+/* Barre du bas : capsule de verre flottante */
+#bottom-nav, body:not(.palette-light) #bottom-nav {
+  left: 10px; right: 10px;
+  bottom: max(6px, calc(var(--safe-b) - 10px));
+  height: 58px; padding: 5px;
+  border-radius: 999px;
+  background: var(--glass-bar);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-rim), 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+.nav-btn svg { padding: 3px 14px; }
+#bottom-nav.rs-nav > .rs-thumb {
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.06));
+  box-shadow: var(--glass-rim);
+}
+
+/* Panneaux, fenêtres, bulles : verre flouté au-dessus du contenu */
+.sheet, body:not(.palette-light) .sheet {
+  background: var(--glass-bar);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  border: 0; box-shadow: var(--glass-rim);
+  border-radius: var(--r-modal) var(--r-modal) 0 0;
+}
+.toast, #mini-session {
+  background: var(--glass-bar); border: 0;
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-rim), 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+#mini-session { border-radius: 999px; }
+.session-top, .nut-mini {
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  border-bottom: 0;
+}
