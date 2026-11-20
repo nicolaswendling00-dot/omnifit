@@ -122,7 +122,7 @@ function rubberSegment(seg, nav = false) {
   let W = 0; let H = 0;
   const paint = () => {
     thumb.style.width = `${W}px`;
-    thumb.style.clipPath = `inset(${T.x}px ${Math.max(0, W - R.x)}px ${Math.max(0, H - B.x)}px ${Math.max(0, L.x)}px round ${nav ? 999 : 11}px)`;
+    thumb.style.clipPath = `inset(${T.x}px ${Math.max(0, W - R.x)}px ${Math.max(0, H - B.x)}px ${Math.max(0, L.x)}px round 999px)`; // pilule, comme le sélecteur (Liquid Glass)
   };
   const L = channel(paint); const R = channel(paint); const T = channel(paint); const B = channel(paint);
 
