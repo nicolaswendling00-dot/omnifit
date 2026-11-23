@@ -714,6 +714,8 @@ assert(chartModal.querySelectorAll('#w-range button').length === 4, 'Poids : pla
 // Style de courbe : points reliés par des segments droits, graduations sobres
 const wDs = lastChartCfg.data.datasets[0];
 assert(wDs.tension === 0 && wDs.pointRadius > 0, 'Graphe : des points reliés par des segments droits');
+const tipW = lastChartCfg.options.plugins.tooltip.callbacks.label({ parsed: { y: 78.2 }, dataset: { label: 'Poids' } });
+assert(tipW === 'Poids : 78,2 kg', `Graphe : survol du poids avec l'unité (${tipW})`);
 const smaDs = lastChartCfg.data.datasets.find((d) => d.label === 'Tendance');
 assert(!smaDs || (smaDs.cubicInterpolationMode === 'monotone' && smaDs.pointRadius === 0), 'Graphe : la tendance du poids reste une courbe lissée');
 assert(lastChartCfg.options.scales.y.ticks.maxTicksLimit <= 5, 'Graphe : graduations verticales simplifiées');
@@ -1096,6 +1098,12 @@ console.log('== v5.6 : accueil, ruban, series persistantes, coefficient ==');
   assert(xsVals.join(',') === '101,80,800', `Progression : 1RM de la derniere seance, charge max, meilleure serie (${xsVals.join(',')})`);
   xs.querySelector('.xs-metric[data-m="max"]').click();
   assert(lastChartCfg.data.datasets[0].data.join(',') === '80,80,80', 'Progression : la charge max par seance remplace le 1RM sur le graphique');
+  const tipMax = lastChartCfg.options.plugins.tooltip.callbacks.label({ parsed: { y: 80 }, dataIndex: 1 });
+  assert(tipMax === '80 kg × 10', `Progression : survol de la charge max avec les reps (${tipMax})`);
+  xs.querySelector('.xs-metric[data-m="orm"]').click();
+  const tipOrm = lastChartCfg.options.plugins.tooltip.callbacks.label({ parsed: { y: 101.3 }, dataIndex: 2 });
+  assert(tipOrm === '101 kg', `Progression : survol du 1RM avec l unite (${tipOrm})`);
+  xs.querySelector('.xs-metric[data-m="max"]').click();
   assert(lastChartCfg.data.datasets[0].tension === 0 && lastChartCfg.data.datasets[0].pointRadius > 0, 'Progression : points relies par des segments droits');
   document.querySelectorAll('.sheet, .scrim').forEach((s) => s.remove());
 

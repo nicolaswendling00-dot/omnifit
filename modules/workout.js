@@ -867,6 +867,12 @@ function openExerciseStatsSheet(exerciseId) {
   const current = { orm: lastOf(series.orm), max: bestOf(series.max), vol: bestOf(series.vol) };
   // Au poids du corps, le « 1RM » est un nombre de répétitions
   const unit = (k) => (k === 'orm' && !current.max ? 'reps' : 'kg');
+  // Répétitions faites à la charge max de chaque séance (affichées au survol)
+  const repsAtMax = {};
+  for (const { workout: w, wx } of exoEntries(exerciseId)) {
+    const top = series.max[w.date];
+    for (const s of liftSets(wx)) if (s.weight === top) repsAtMax[w.date] = Math.max(repsAtMax[w.date] || 0, s.reps);
+  }
   const SCOPES = [['last10', '10 dernières séances'], ['all', 'Toutes les séances']];
   const content = el(`<div>
     <div class="xs-metrics" id="xs-metric">
@@ -899,7 +905,12 @@ function openExerciseStatsSheet(exerciseId) {
     const labels = pts.map((d) => d.slice(8) + '/' + d.slice(5, 7));
     const options = lineChartOptions({ yTicks: 4, xTicks: 5 });
     options.scales.y.ticks.callback = (v) => Math.round(v);
-    options.plugins.tooltip.callbacks = { label: (c) => String(Math.round(c.parsed.y)) };
+    const kg = (v) => v.toLocaleString('fr-FR', { maximumFractionDigits: 1 });
+    options.plugins.tooltip.callbacks = {
+      label: (c) => (st.metric === 'max'
+        ? `${kg(c.parsed.y)} kg × ${repsAtMax[pts[c.dataIndex]] || 0}`
+        : `${Math.round(c.parsed.y).toLocaleString('fr-FR')} ${unit(st.metric)}`),
+    };
     const ds = lineDataset(EXO_METRICS[st.metric][0], pts.map((d) => by[d]), '#00D9FF');
     chart = makeChart(content.querySelector('canvas'), { type: 'line', data: { labels, datasets: [ds] }, options }, chart);
   };

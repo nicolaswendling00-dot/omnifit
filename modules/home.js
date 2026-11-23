@@ -176,6 +176,10 @@ function renderWeightChart(canvas, R) {
 
   const options = lineChartOptions({ legend: datasets.length > 1, ySuffix: ' kg', yTicks: 4, xTicks: 5 });
   const axisTitle = (text) => ({ display: true, text, color: '#8A9099', font: { size: 11, family: 'Archivo', weight: '600' } });
+  // Survol : la valeur avec son unité (kg pour le poids et la tendance, kcal)
+  options.plugins.tooltip.callbacks = {
+    label: (c) => `${c.dataset.label} : ${c.parsed.y.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} ${c.dataset.label === 'Calories' ? 'kcal' : 'kg'}`,
+  };
   options.scales.x.title = axisTitle('Date');
   options.scales.y.title = axisTitle('Poids (kg)');
   if (!all.length) {
