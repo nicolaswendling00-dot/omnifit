@@ -711,10 +711,11 @@ assert(chartModal && chartModal.querySelector('#weight-chart'), 'Poids : la cart
 assert(chartModal.querySelector('#btn-log-weight'), 'Poids : ajout d\'une pesée dans la fenêtre');
 assert(!chartModal.querySelector('#btn-edit-goal'), 'Poids : plus de bouton objectif');
 assert(chartModal.querySelectorAll('#w-range button').length === 4, 'Poids : plages 1 mois / 3 mois / 1 an / tout');
-// Style de courbe : aucun point, interpolation monotone, graduations sobres
+// Style de courbe : points reliés par des segments droits, graduations sobres
 const wDs = lastChartCfg.data.datasets[0];
-assert(lastChartCfg.options.elements.point.radius === 0, 'Graphe : aucun point de donnée');
-assert(wDs.cubicInterpolationMode === 'monotone', 'Graphe : courbe lissée sans bosse parasite');
+assert(wDs.tension === 0 && wDs.pointRadius > 0, 'Graphe : des points reliés par des segments droits');
+const smaDs = lastChartCfg.data.datasets.find((d) => d.label === 'Tendance');
+assert(!smaDs || (smaDs.cubicInterpolationMode === 'monotone' && smaDs.pointRadius === 0), 'Graphe : la tendance du poids reste une courbe lissée');
 assert(lastChartCfg.options.scales.y.ticks.maxTicksLimit <= 5, 'Graphe : graduations verticales simplifiées');
 assert(lastChartCfg.options.scales.x.grid.display === false, 'Graphe : pas de grille verticale');
 // Historique bien au-delà d'une semaine
@@ -1088,6 +1089,14 @@ console.log('== v5.6 : accueil, ruban, series persistantes, coefficient ==');
   assert(topSets[1] === '80 kg × 10', 'Progression : la meilleure serie est mise en avant');
   const best6 = hist.find((h) => h.classList.contains('ed-hist-best'));
   assert(best6 === hist[1], 'Reference : la seance a la meilleure serie la plus forte (et non au plus gros volume)');
+  // Progression : trois mesures au dessus des seances (1RM actuel, charge max, meilleure serie)
+  edSheet.querySelector('#ed-stats').click();
+  const xs = [...document.querySelectorAll('.sheet')].find((s) => s.querySelector('#xs-metric'));
+  const xsVals = [...xs.querySelectorAll('.xs-metric b')].map((b) => b.firstChild.textContent);
+  assert(xsVals.join(',') === '101,80,800', `Progression : 1RM de la derniere seance, charge max, meilleure serie (${xsVals.join(',')})`);
+  xs.querySelector('.xs-metric[data-m="max"]').click();
+  assert(lastChartCfg.data.datasets[0].data.join(',') === '80,80,80', 'Progression : la charge max par seance remplace le 1RM sur le graphique');
+  assert(lastChartCfg.data.datasets[0].tension === 0 && lastChartCfg.data.datasets[0].pointRadius > 0, 'Progression : points relies par des segments droits');
   document.querySelectorAll('.sheet, .scrim').forEach((s) => s.remove());
 
   // ---- Validation / devalidation des series

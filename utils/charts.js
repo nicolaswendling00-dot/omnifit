@@ -1,9 +1,8 @@
 // OmniFit — Style commun des graphiques
 //
 // Objectif : des courbes lisibles et sobres, pas des tracés bruités.
-//  · aucun point de donnée (la courbe seule suffit, les points saturent l'écran)
-//  · interpolation monotone : la courbe passe par les valeurs SANS créer de
-//    bosses parasites entre deux points (contrairement à `tension` seul)
+//  · des points reliés par des segments droits : chaque mesure se voit
+//  · la tendance (moyenne glissante) reste une courbe lissée : option smooth
 //  · graduations rares et discrètes, grille horizontale uniquement
 //  · dégradé sous la courbe plutôt qu'un aplat translucide
 
@@ -73,20 +72,34 @@ export function lineChartOptions(opts = {}) {
   };
 }
 
-// Jeu de données d'une courbe, avec dégradé et lissage monotone.
+// Points d'autant plus petits que la série est longue (un an de pesées).
+const pointSize = (data) => {
+  const n = data.filter((v) => v != null).length;
+  return n > 90 ? 1.5 : n > 40 ? 2.5 : 3.5;
+};
+
+// Jeu de données d'une courbe : points reliés par des segments droits, dégradé
+// dessous. extra.smooth : courbe lissée sans points (tendance).
 export function lineDataset(label, data, color, extra = {}) {
+  const { smooth, ...rest } = extra;
+  const r = smooth ? 0 : pointSize(data);
   return {
     label,
     data,
     borderColor: color,
     borderWidth: 2.5,
-    cubicInterpolationMode: 'monotone',
-    tension: 0.4,
+    cubicInterpolationMode: smooth ? 'monotone' : 'default',
+    tension: smooth ? 0.4 : 0,
+    pointRadius: r,
+    pointHoverRadius: smooth ? 0 : r + 2,
+    pointHitRadius: smooth ? 0 : 10,
+    pointBackgroundColor: color,
+    pointBorderWidth: 0,
     spanGaps: true,
     fill: extra.fill === false ? false : {
       target: 'origin',
       above: (c) => areaGradient(c.chart.ctx, c.chart.chartArea, color, extra.alpha ?? 0.28),
     },
-    ...extra,
+    ...rest,
   };
 }

@@ -1962,3 +1962,18 @@ body:not(.palette-light) .card, body.palette-light .card,
 #page-home .date-back { grid-column: 2; }
 #page-home .date-bar .coach-mini { grid-column: 3; margin-left: 0; }
 #page-home .week-strip { grid-column: 1 / -1; }
+
+/* v13.0 : progression d'un exercice, trois mesures au dessus des séances */
+.xs-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+.xs-metric {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-height: 64px; padding: 12px;
+  border: 0; border-radius: 20px; cursor: pointer; text-align: left; color: var(--text-2); font: inherit; font-size: 0.72rem; font-weight: 600;
+  background: linear-gradient(180deg, var(--glass-2), var(--glass)); box-shadow: var(--glass-rim);
+  transition: background-color var(--dur-fast) var(--ease-std), color var(--dur-fast) var(--ease-std), transform var(--dur-fast) var(--spring);
+}
+.xs-metric:active { transform: scale3d(0.96, 0.96, 1); }
+.xs-metric b { font-size: 1.25rem; color: var(--text); white-space: nowrap; }
+.xs-metric small { font-size: 0.7rem; font-weight: 600; color: var(--text-2); }
+.xs-metric.active { background: linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 60%), var(--accent); color: var(--on-accent); }
+.xs-metric.active b, .xs-metric.active small { color: var(--on-accent); }
+.xs-metric:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

@@ -165,7 +165,7 @@ function renderWeightChart(canvas, R) {
 
   const datasets = [lineDataset('Poids', values, '#00D9FF', { yAxisID: 'y' })];
   if (smaVisible) {
-    datasets.push(lineDataset('Tendance', smaValues, '#7C3AED', { fill: false, borderWidth: 2, borderDash: [5, 4], yAxisID: 'y' }));
+    datasets.push(lineDataset('Tendance', smaValues, '#7C3AED', { smooth: true, fill: false, borderWidth: 2, borderDash: [5, 4], yAxisID: 'y' }));
   }
   if (caloriesVisible) {
     datasets.push(lineDataset('Calories', calValues, '#8D95A3', { fill: false, borderWidth: 2, yAxisID: 'y1' }));

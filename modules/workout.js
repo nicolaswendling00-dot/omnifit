@@ -839,11 +839,19 @@ const STATS_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" 
 // Progression d'un exercice : meilleur 1RM estimé de chaque séance, sur la
 // période choisie. Pas d'unité sur l'axe : on lit la pente, pas la valeur
 // (au poids du corps, le score est un nombre de répétitions).
-const exoStatsState = { scope: 'last10' };
-function exerciseScoresByDate(exerciseId) {
+const exoStatsState = { scope: 'last10', metric: 'orm' };
+// Les trois mesures d'une séance, sur les séries de travail
+const liftSets = (wx) => workSets(wx).filter((s) => s.reps > 0);
+const EXO_METRICS = {
+  orm: ['1RM', exoScore],
+  max: ['Charge max', (wx) => Math.max(0, ...liftSets(wx).map((s) => s.weight))],
+  vol: ['Meilleure série', (wx) => Math.max(0, ...liftSets(wx).map((s) => s.weight * s.reps))],
+};
+function exerciseScoresByDate(exerciseId, metric = 'orm') {
+  const fn = EXO_METRICS[metric][1];
   const by = {};
   for (const { workout: w, wx } of exoEntries(exerciseId)) {
-    const v = exoScore(wx);
+    const v = fn(wx);
     if (v > 0) by[w.date] = Math.max(by[w.date] || 0, Math.round(v * 10) / 10);
   }
   return by;
@@ -851,11 +859,21 @@ function exerciseScoresByDate(exerciseId) {
 
 // Une valeur par séance (abscisse = séances, pas le calendrier)
 function openExerciseStatsSheet(exerciseId) {
-  const by = exerciseScoresByDate(exerciseId);
-  const dates = Object.keys(by).sort();
   const st = exoStatsState;
+  const series = Object.fromEntries(Object.keys(EXO_METRICS).map((k) => [k, exerciseScoresByDate(exerciseId, k)]));
+  // 1RM actuel = celui de la dernière séance ; charge et série : les records
+  const lastOf = (by) => { const d = Object.keys(by).sort(); return d.length ? by[d[d.length - 1]] : 0; };
+  const bestOf = (by) => Math.max(0, ...Object.values(by));
+  const current = { orm: lastOf(series.orm), max: bestOf(series.max), vol: bestOf(series.vol) };
+  // Au poids du corps, le « 1RM » est un nombre de répétitions
+  const unit = (k) => (k === 'orm' && !current.max ? 'reps' : 'kg');
   const SCOPES = [['last10', '10 dernières séances'], ['all', 'Toutes les séances']];
   const content = el(`<div>
+    <div class="xs-metrics" id="xs-metric">
+      ${Object.entries(EXO_METRICS).map(([k, [l]]) => `<button type="button" data-m="${k}" class="xs-metric${k === st.metric ? ' active' : ''}" aria-pressed="${k === st.metric}">
+        <span>${l}</span><b class="num">${Math.round(current[k]).toLocaleString('fr-FR')}<small> ${unit(k)}</small></b>
+      </button>`).join('')}
+    </div>
     <div class="segment" id="xs-range" style="margin-bottom:10px">
       ${SCOPES.map(([v, l]) => `<button data-r="${v}" class="${v === st.scope ? 'active' : ''}">${l}</button>`).join('')}
     </div>
@@ -869,6 +887,8 @@ function openExerciseStatsSheet(exerciseId) {
     onClose: () => { if (chart) { try { chart.destroy(); } catch (_) { /* déjà détruit */ } chart = null; } },
   });
   const draw = () => {
+    const by = series[st.metric];
+    const dates = Object.keys(by).sort();
     const pts = st.scope === 'last10' ? dates.slice(-10) : dates;
     let mid = 'Aucune séance';
     if (pts.length > 1) {
@@ -880,10 +900,16 @@ function openExerciseStatsSheet(exerciseId) {
     const options = lineChartOptions({ yTicks: 4, xTicks: 5 });
     options.scales.y.ticks.callback = (v) => Math.round(v);
     options.plugins.tooltip.callbacks = { label: (c) => String(Math.round(c.parsed.y)) };
-    // Une seule séance : un point, sinon la courbe serait invisible
-    const ds = lineDataset('1RM', pts.map((d) => by[d]), '#00D9FF', { pointRadius: pts.length === 1 ? 4 : 0 });
+    const ds = lineDataset(EXO_METRICS[st.metric][0], pts.map((d) => by[d]), '#00D9FF');
     chart = makeChart(content.querySelector('canvas'), { type: 'line', data: { labels, datasets: [ds] }, options }, chart);
   };
+  content.querySelector('#xs-metric').addEventListener('click', (e) => {
+    const b = e.target.closest('.xs-metric'); if (!b || b.dataset.m === st.metric) return;
+    st.metric = b.dataset.m;
+    content.querySelectorAll('.xs-metric').forEach((x) => { x.classList.toggle('active', x === b); x.setAttribute('aria-pressed', String(x === b)); });
+    haptic();
+    draw();
+  });
   content.querySelector('#xs-range').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
     st.scope = b.dataset.r;
