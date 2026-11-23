@@ -28,82 +28,25 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
 </head>
 <body>
-  <!-- Écran de lancement : une flèche part du coin bas gauche, trace la ligne,
-       fait la boucle de l'infini et ressort en haut à droite. L'écran s'ouvre
-       ensuite en deux le long de ce trait (bleu vers le haut, violet vers le bas). -->
-  <div id="splash" aria-hidden="true"></div>
+  <!-- Écran de lancement : le logo et le nom sur le dégradé de l'icône, puis
+       l'écran se lève dès que l'accueil est prêt. -->
+  <div id="splash" aria-hidden="true">
+    <svg class="sp-logo" viewBox="6 12 90 66"><path d="M77 29 L50 55 C42 63 36 70 28 70 C19 70 13 63 13 55 C13 47 19 40 28 40 C36 40 42 46 50 55 C58 64 64 70 72 70 C81 70 87 63 87 55 C87 51 85.5 47.5 83 45" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/><path d="M88 18 L72.5 21.5 L84.5 33.5 Z" fill="#fff" stroke="#fff" stroke-width="4" stroke-linejoin="round"/></svg>
+    <div class="sp-name">OmniFit</div>
+  </div>
   <script>
   (function () {
     var s = document.getElementById('splash');
-    var W = innerWidth, H = innerHeight, k = Math.min(W, H) * 0.6 / 75;
-    var ux = 27 / 37.48, uy = -26 / 37.48, nx = -26 / 37.48, ny = -27 / 37.48;
-    // du croisement au bord de l'écran, plus la taille de la flèche (unités du logo)
-    var e = Math.min(W / 2 / ux, H / 2 / -uy) / k + 20;
-    var pt = function (d) { return (50 + ux * d) + ' ' + (55 + uy * d); };
-    // Un seul trait : ligne, boucle de droite, boucle de gauche, ligne
-    var d = 'M' + pt(-e) + ' L50 55'
-      + ' C58 46 64 40 72 40 C81 40 87 47 87 55 C87 63 81 70 72 70 C64 70 58 64 50 55'
-      + ' C42 46 36 40 28 40 C19 40 13 47 13 55 C13 63 19 70 28 70 C36 70 42 63 50 55'
-      + ' L' + pt(e);
-    var g = 'translate(' + W / 2 + ' ' + H / 2 + ') scale(' + k + ') translate(-50 -55)';
-    var svg = function (tip) {
-      return '<svg viewBox="0 0 ' + W + ' ' + H + '"><g transform="' + g + '" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round">'
-        + '<path class="sp-path" stroke-width="9" d="' + d + '"/>'
-        + (tip ? '<path class="sp-tip" fill="#fff" stroke-width="4" d="M7 0 L-9 -8.5 L-9 8.5 Z"/>' : '') + '</g></svg>';
-    };
-    var L = 2 * (W + H);
-    // Ciel étoilé comme sur l'icône, tiré une fois (graine fixe : le même à chaque lancement)
-    var seed = 7, rnd = function () { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
-    var stars = '';
-    for (var i = 0, n = Math.round(W * H / 2600); i < n; i++) {
-      stars += '<circle cx="' + (rnd() * W).toFixed(1) + '" cy="' + (rnd() * H).toFixed(1) + '" r="' + (0.6 + rnd() * rnd() * 2).toFixed(2) + '" opacity="' + (0.4 + rnd() * 0.6).toFixed(2) + '"/>';
-    }
-    var sky = '<svg class="sp-sky" viewBox="0 0 ' + W + ' ' + H + '" fill="#fff">' + stars + '</svg>';
-    // les moitiés se chevauchent d'1 px : pas de fente visible le long de la coupe
-    [1, -1].forEach(function (side) {
-      var p = function (a, b) { return (W / 2 + ux * a + nx * b * side) + 'px ' + (H / 2 + uy * a + ny * b * side) + 'px'; };
-      var h = document.createElement('div');
-      h.className = 'sp-half';
-      h.style.clipPath = 'polygon(' + [p(-L, -1), p(L, -1), p(L, L), p(-L, L)].join(',') + ')';
-      h.style.setProperty('--out', 'translate3d(' + nx * side * H * 0.7 + 'px,' + ny * side * H * 0.7 + 'px,0)');
-      h.innerHTML = sky + svg(false);
-      s.appendChild(h);
-    });
-    // Le tracé animé, par dessus les deux moitiés (déjà complètes en dessous)
-    var top = document.createElement('div');
-    top.className = 'sp-top';
-    top.innerHTML = svg(true);
-    s.appendChild(top);
-    var path = top.querySelector('.sp-path'), tip = top.querySelector('.sp-tip');
-    var len = path.getTotalLength();
-    path.style.strokeDasharray = len + ' ' + (len + 20);
-    var draw = function (p) {
-      var at = p * len, a = path.getPointAtLength(at), b = path.getPointAtLength(Math.min(len, at + 0.5));
-      var c = at + 0.5 > len ? path.getPointAtLength(at - 0.5) : a;
-      var ang = at + 0.5 > len ? Math.atan2(a.y - c.y, a.x - c.x) : Math.atan2(b.y - a.y, b.x - a.x);
-      path.style.strokeDashoffset = String(len - at);
-      tip.setAttribute('transform', 'translate(' + a.x + ' ' + a.y + ') rotate(' + ang * 180 / Math.PI + ')');
-    };
-    var drawn = false, ready = false, done = false;
+    var shown = false, ready = false, done = false;
     var open = function () {
       if (done) return; done = true;
       s.classList.add('open');
-      setTimeout(function () { s.remove(); }, 500);
+      setTimeout(function () { s.remove(); }, 700);
     };
-    var maybe = function () { if (drawn && ready) open(); };
-    var finish = function () { drawn = true; setTimeout(maybe, 20); };
-    var DUR = 950, t0 = 0;
-    var ease = function (x) { return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
-    var frame = function (now) {
-      if (!t0) t0 = now;
-      var x = Math.min(1, (now - t0) / DUR);
-      draw(ease(x));
-      if (x < 1) requestAnimationFrame(frame); else finish();
-    };
-    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { draw(1); finish(); }
-    else { draw(0); requestAnimationFrame(frame); }
+    var maybe = function () { if (shown && ready) open(); };
+    setTimeout(function () { shown = true; maybe(); }, 650);  // le temps de lire le logo
     window.omnifitReady = function () { ready = true; maybe(); };
-    setTimeout(open, 5500);               // filet : l'appli ne doit jamais rester cachée
+    setTimeout(open, 4000);               // filet : l'appli ne doit jamais rester cachée
     s.addEventListener('click', open);
   })();
   </script>
