@@ -74,7 +74,7 @@ export function lineChartOptions(opts = {}) {
 
 // Points d'autant plus petits que la série est longue (un an de pesées).
 const pointSize = (data) => {
-  const n = data.filter((v) => v != null).length;
+  const n = data.filter((v) => v != null && (typeof v !== 'object' || v.y != null)).length;
   return n > 90 ? 1.5 : n > 40 ? 2.5 : 3.5;
 };
 

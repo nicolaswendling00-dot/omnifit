@@ -13,7 +13,8 @@ global.window = window;
 global.document = window.document;
 global.localStorage = window.localStorage;
 Object.defineProperty(global, 'navigator', { value: window.navigator, configurable: true });
-global.requestAnimationFrame = (cb) => setTimeout(cb, 0);
+global.requestAnimationFrame = (cb) => setTimeout(() => cb(performance.now()), 0);
+global.cancelAnimationFrame = (id) => clearTimeout(id);
 global.Blob = window.Blob;
 global.URL = window.URL;
 global.FileReader = window.FileReader;
@@ -30,6 +31,14 @@ const assert = (cond, msg) => {
   else { fail++; console.log('  FAIL ' + msg); }
 };
 const fire = (elm, type) => elm.dispatchEvent(new window.Event(type, { bubbles: true }));
+const pg = (view) => (view && view.dataset.pg ? view.dataset.pg.split(',').map(Number) : [0, 0, 0]);
+const visBars = (view) => pg(view)[2];
+// Glissement horizontal simulé (pointeur), puis attente de la fin du calage
+const dragX = async (zone, dx) => {
+  const ev = (type, x) => { const e = new window.MouseEvent(type, { bubbles: true, clientX: x, clientY: 100, button: 0 }); zone.dispatchEvent(e); };
+  ev('pointerdown', 100); ev('pointermove', 100 + dx / 2); ev('pointermove', 100 + dx); ev('pointerup', 100 + dx);
+  await new Promise((r) => setTimeout(r, 450));
+};
 const clearOverlays = () => {
   document.querySelectorAll('.scrim').forEach((s) => s.remove());
   document.body.classList.remove('overlay-open');
@@ -104,12 +113,15 @@ assert(pages.workout.querySelectorAll('#calendar-host .cal-grid .cal-day').lengt
 
 activity.render(pages.activity);
 assert(pages.activity.querySelector('.steps-hero') && pages.activity.querySelector('.sb-plot'), 'Activité : hero + histogramme');
-assert(pages.activity.querySelectorAll('.sb-plot .sb-col').length === 7, 'Activité : 7 jours par défaut');
+assert(visBars(pages.activity.querySelector('.sb-plot')) === 7, 'Activité : 7 jours par défaut');
+assert(pages.activity.querySelectorAll('.sb-plot .sb-col').length === 14, 'Activité : la semaine précédente est déjà dessinée, prête à défiler');
+assert(!pages.activity.querySelector('.per-prev') && !pages.activity.querySelector('.per-next'), 'Graphiques : plus de flèches de période');
 assert(!pages.activity.querySelector('#steps-list') && !pages.activity.querySelector('.grid-2'), 'Activité : plus de liste 14 jours ni de grille de stats (v6.8)');
 assert(pages.activity.querySelector('#btn-import-steps'), 'Activité : bouton Importer les pas (Santé)');
 assert(!pages.activity.querySelector('.mono'), 'Activité : plus de .mono');
 
 settings.render(pages.settings);
+assert(!/Tous les exercices|quipement disponible/.test(pages.settings.textContent) && !pages.settings.querySelector('#equip-filter'), 'Réglages : plus de filtre « Tous les exercices » ni d équipement');
 // Profil, Entraînement, Activité, Interface, Données, À propos
 // (l'objectif d'eau se règle depuis la carte Eau de l'accueil)
 assert(pages.settings.querySelectorAll('.settings-section').length === 6, 'Réglages : 6 sections');
@@ -721,9 +733,11 @@ assert(!smaDs || (smaDs.cubicInterpolationMode === 'monotone' && smaDs.pointRadi
 assert(lastChartCfg.options.scales.y.ticks.maxTicksLimit <= 5, 'Graphe : graduations verticales simplifiées');
 assert(lastChartCfg.options.scales.x.grid.display === false, 'Graphe : pas de grille verticale');
 // Historique bien au-delà d'une semaine
-assert(lastChartCfg.data.labels.length === 7 && lastChartCfg.data.labels[6] === todayISO().slice(8) + '/' + todayISO().slice(5, 7), 'Graphe : s ouvre sur les 7 derniers jours, aujourd hui en dernier');
+const wx = lastChartCfg.options.scales.x;
+assert(wx.max - wx.min === 6 && wx.ticks.callback(wx.max) === todayISO().slice(8) + '/' + todayISO().slice(5, 7), 'Graphe : s ouvre sur les 7 derniers jours, aujourd hui en dernier');
+assert(lastChartCfg.data.datasets[0].data.length === 14, 'Graphe : la semaine precedente est deja tracee, prete a defiler');
 chartModal.querySelector('#w-range button[data-r="all"]').click();
-assert(lastChartCfg.data.labels.length > 14, 'Graphe : historique de poids au-delà de 2 semaines');
+assert(lastChartCfg.data.datasets[0].data.length > 14, 'Graphe : historique de poids au-delà de 2 semaines');
 clearOverlays();
 
 console.log('== v3.40 : loupe, base aliments, animation LP, macro centre ==');
@@ -944,19 +958,29 @@ console.log('== v5.2 : suppression des pesées et relevés de pas ==');
   const wk = uiP.periodRange('week', 0);
   const inWeek = [-1, -2, -3].filter((i) => todayISO(i) >= wk.start).length;
   assert(pages.activity.querySelectorAll('.sb-bar.hit').length === inWeek, 'Pas : barres vertes = objectif atteint');
-  assert(pages.activity.querySelectorAll('.sb-plot .sb-col').length === 7, 'Pas : semaine de lundi a dimanche');
+  assert(visBars(pages.activity.querySelector('.sb-plot')) === 7, 'Pas : semaine glissante de 7 jours');
+  assert(pg(pages.activity.querySelector('.sb-plot'))[1] === 0, 'Pas : rien a droite d aujourd hui (pas de futur)');
+  // Glisser vers la droite : on remonte d'un jour, la semaine finit hier
+  const sbLabel = () => pages.activity.querySelector('.per-label').textContent;
+  const lab0 = sbLabel();
+  await dragX(pages.activity.querySelector('.sb-plot'), 40);
+  assert(sbLabel() !== lab0 && sbLabel() === uiP.periodRange('week', 7).label, 'Pas : glisser fait defiler la periode (calee sur les jours)');
+  assert(pg(pages.activity.querySelector('.sb-plot'))[1] === 7, 'Pas : apres un retour en arriere, les jours suivants sont dessines a droite');
+  await dragX(pages.activity.querySelector('.sb-plot'), -40);
+  assert(sbLabel() === lab0, 'Pas : glisser vers la gauche revient vers aujourd hui');
+  await dragX(pages.activity.querySelector('.sb-plot'), -40);
+  assert(sbLabel() === lab0, 'Pas : impossible de depasser aujourd hui');
   pages.activity.querySelector('#view-toggle button[data-k="month"]').click();
-  assert(pages.activity.querySelectorAll('.sb-plot .sb-col').length === uiP.periodRange('month', 0).days.length, 'Pas : vue du mois');
+  assert(visBars(pages.activity.querySelector('.sb-plot')) === uiP.periodRange('month', 0).days.length, 'Pas : vue du mois');
   pages.activity.querySelector('#view-toggle button[data-k="year"]').click();
-  assert(pages.activity.querySelectorAll('.sb-plot .sb-col').length === 12, 'Pas : vue annee, une barre par mois');
-  assert(pages.activity.querySelector('.per-next').disabled, 'Pas : pas de periode future');
-  pages.activity.querySelector('.per-prev').click();
-  assert(pages.activity.querySelector('.per-label').textContent === String(new Date().getFullYear() - 1), 'Pas : fleche = annee precedente');
+  assert(visBars(pages.activity.querySelector('.sb-plot')) === 12, 'Pas : vue annee, une barre par mois');
   pages.activity.querySelector('#view-toggle button[data-k="week"]').click();
   // Periodes : une semaine fait 7 jours du lundi au dimanche, un mois ses vrais jours
-  const w1 = uiP.periodRange('week', 1);
+  const w1 = uiP.periodRange('week', 7);
   assert(w1.days.length === 7 && w1.end === todayISO(-7) && uiP.periodRange('week', 0).end === todayISO(), 'Periodes : semaine glissante qui finit aujourd hui');
-  assert(uiP.periodRange('year', 0).days.length >= 365 && uiP.periodRange('6m', 0).days.length > 150, 'Periodes : annee et 6 mois');
+  const y0 = uiP.periodRange('year', 0); const y1 = uiP.periodRange('year', 1);
+  assert(y0.end === todayISO() && y0.start.slice(8) === '01' && y0.days.length > 300, 'Periodes : annee glissante de 12 mois qui finit aujourd hui');
+  assert(y1.end < y0.end && y1.ext.after === 1 && y0.ext.before === 12, 'Periodes : en vue annee on avance mois par mois');
 
   // Séance vide en tête du menu de démarrage
   clearOverlays();
@@ -1468,11 +1492,11 @@ console.log('== v6.1 : anatomie detaillee et carte du corps ==');
   assert(groups.join(',') === 'Pectoraux,Épaules,Dos,Bras,Tronc,Jambes', `Volume hebdo : muscles groupes par zone (${groups.join(',')})`);
   assert(vh.querySelectorAll('.vol-row').length === 19, 'Volume hebdo : une ligne par muscle');
   assert(vh.querySelectorAll('.vol-row .vol-bar i').length === 19 && vh.querySelector('.vol-reached'), 'Volume : une jauge par muscle et le nombre de muscles a l objectif');
-  assert(vh.querySelectorAll('.impc-plot .impc-col').length === 7, 'Amelioration : une barre par jour, ouvert sur la semaine');
+  assert(visBars(vh.querySelector('.impc-plot')) === 7, 'Amelioration : une barre par jour, ouvert sur la semaine');
   vh.querySelector('.imp-kind [data-k="year"]').click();
-  assert(vh.querySelectorAll('.impc-plot .impc-col').length === 12, 'Amelioration : vue annee, une barre par mois');
-  vh.querySelector('.imp-box .per-prev').click();
-  assert(!vh.querySelector('.imp-box .per-next').disabled, 'Amelioration : on remonte dans le temps');
+  assert(visBars(vh.querySelector('.impc-plot')) === 12, 'Amelioration : vue annee, une barre par mois');
+  await dragX(vh.querySelector('.impc-plot'), 40);
+  assert(pg(vh.querySelector('.impc-plot'))[1] === 12, 'Amelioration : glisser remonte dans le temps');
   const useLats = vh.querySelector('.bm-week use[href="#bm-b-lats"]');
   useLats.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   assert([...document.querySelectorAll('.sheet')].pop() !== vh, 'Carte du corps : toucher un muscle ouvre son detail');
@@ -1488,7 +1512,7 @@ console.log('== v6.1 : anatomie detaillee et carte du corps ==');
     ns.querySelector('#ns-tab [data-t="macro"]').click();
     assert(ns.querySelectorAll('.ns-mrow').length === 4 && /Poulet/.test(ns.textContent), 'Stats nutrition : macros moyennes, objectif et aliments les plus riches');
     ns.querySelector('#ns-kind [data-k="year"]').click();
-    assert(ns.querySelectorAll('.ns-plot .ns-col').length === 13, 'Stats nutrition : vue annee (12 mois + moyenne)');
+    assert(visBars(ns.querySelector('.ns-view')) === 12 && ns.querySelector('.ns-plot > .ns-col.avg'), 'Stats nutrition : vue annee (12 mois + moyenne fixe)');
     clearOverlays();
   }
   clearOverlays();

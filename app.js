@@ -50,33 +50,49 @@ const markAllStale = () => renderedAt.fill(-1);
 // En mouvement (doigt ou animation), translate3d : le carrousel a sa propre
 // couche GPU et se déplace sans être redessiné. Au repos, on repasse en
 // translate 2D pour libérer cette couche, qui fait cinq écrans de large.
-const SLIDE_EASE = 'transform 360ms cubic-bezier(0.22, 1, 0.36, 1)';
+// Au lâcher, la durée dépend de l'élan : la page repart à la vitesse du doigt.
+const slideEase = (ms) => `transform ${ms}ms cubic-bezier(0.25, 0.8, 0.25, 1)`;
 const restTransform = (index) => `translateX(${-index * 20}%)`;
 let restTimer = null;
 const settle = () => {
-  clearTimeout(restTimer);
+  clearTimeout(restTimer); restTimer = null;
   if (drag && drag.dir === 'h') return; // un nouveau geste a commencé
   appContainer.style.transition = 'none';
   appContainer.style.transform = restTransform(currentPage);
 };
-function place(index, dragPx = 0, animate = true) {
+function place(index, dragPx = 0, animate = true, ms = 360) {
   clearTimeout(restTimer);
-  appContainer.style.transition = animate ? SLIDE_EASE : 'none';
+  appContainer.style.transition = animate ? slideEase(ms) : 'none';
   if (!animate && !dragPx) { appContainer.style.transform = restTransform(index); return; }
   appContainer.style.transform = `translate3d(calc(${-index * 20}% + ${dragPx}px), 0, 0)`;
   // `transitionend` ne vient pas toujours (app en arrière-plan, transition
   // interrompue) : une minuterie garantit le retour au repos.
-  if (animate) restTimer = setTimeout(settle, 420);
+  if (animate) restTimer = setTimeout(settle, ms + 60);
 }
 appContainer.addEventListener('transitionend', (e) => { if (e.target === appContainer) settle(); });
 
-function goTo(index) {
+function goTo(index, ms = 360) {
   index = Math.max(0, Math.min(PAGES.length - 1, index));
   currentPage = index;
   document.body.dataset.page = index;
   document.querySelectorAll('.nav-btn').forEach((b, i) => b.classList.toggle('active', i === index));
   if (isStale(index)) renderPage(index);
-  place(index);
+  place(index, 0, true, ms);
+  scheduleNeighbors(ms + 80);
+}
+
+// Les onglets voisins sont redessinés AVANT le prochain glissement, au calme
+// (après l'animation, ou après un toucher qui a pu changer les données) :
+// les redessiner au premier pixel du geste faisait sauter le carrousel.
+let neighborTimer = null;
+function scheduleNeighbors(ms = 250) {
+  clearTimeout(neighborTimer);
+  neighborTimer = setTimeout(() => {
+    if (drag && drag.dir === 'h') return;
+    for (const n of [currentPage - 1, currentPage + 1]) {
+      if (n >= 0 && n < PAGES.length && isStale(n)) renderPage(n);
+    }
+  }, ms);
 }
 
 // Les pages peuvent demander un changement d'onglet (ex. la carte Calories de
@@ -140,6 +156,11 @@ appContainer.addEventListener('touchstart', (e) => {
   if (swipeLocked || document.body.classList.contains('overlay-open')) { drag = null; return; }
   const t = e.touches[0];
   drag = { x0: t.clientX, y0: t.clientY, dx: 0, dir: null, lastX: t.clientX, lastT: e.timeStamp, v: 0 };
+  clearTimeout(neighborTimer);
+  // Couche GPU préparée dès le contact, pendant les premiers pixels du geste,
+  // et non au moment où le carrousel doit déjà suivre le doigt.
+  drag.promoted = !restTimer;
+  if (drag.promoted) { appContainer.style.transition = 'none'; appContainer.style.transform = `translate3d(${-currentPage * 20}%, 0, 0)`; }
 }, { passive: true });
 
 appContainer.addEventListener('touchmove', (e) => {
@@ -150,6 +171,7 @@ appContainer.addEventListener('touchmove', (e) => {
   if (!drag.dir) {
     if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
     drag.dir = Math.abs(dx) > Math.abs(dy) * 1.2 ? 'h' : 'v';
+    if (drag.dir === 'v' && drag.promoted) settle(); // défilement vertical : on libère la couche
     if (drag.dir === 'h') {
       // La page voisine va apparaître : on la remet à jour AVANT qu'on la voie.
       for (const n of [currentPage - 1, currentPage + 1]) {
@@ -173,14 +195,19 @@ appContainer.addEventListener('touchmove', (e) => {
 const endDrag = () => {
   if (!drag) return;
   const d = drag; drag = null;
-  if (d.dir !== 'h') return;
+  if (d.dir !== 'h') { if (!d.dir && d.promoted) settle(); scheduleNeighbors(); return; }
   const w = window.innerWidth;
   const fast = Math.abs(d.v) > 0.45 && Math.abs(d.dx) > 24;
   let next = currentPage;
   if (d.dx < 0 && (d.dx < -w / 4 || (fast && d.v < 0))) next = currentPage + 1;
   if (d.dx > 0 && (d.dx > w / 4 || (fast && d.v > 0))) next = currentPage - 1;
-  if (next !== currentPage && next >= 0 && next < PAGES.length) goTo(next);
-  else place(currentPage); // retour en place
+  const changing = next !== currentPage && next >= 0 && next < PAGES.length;
+  // Distance restante ÷ vitesse du doigt (la courbe démarre ~3x plus vite que
+  // sa moyenne) : un geste vif finit vite, un geste lent se pose doucement.
+  const rest = changing ? w - Math.abs(d.dx) : Math.abs(d.dx);
+  const ms = Math.round(Math.max(200, Math.min(380, (3 * rest) / Math.max(Math.abs(d.v), 0.6))));
+  if (changing) goTo(next, ms);
+  else place(currentPage, 0, true, ms); // retour en place
 };
 appContainer.addEventListener('touchend', endDrag, { passive: true });
 appContainer.addEventListener('touchcancel', endDrag, { passive: true });

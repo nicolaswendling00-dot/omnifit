@@ -1,6 +1,6 @@
 // OmniFit — PAGE 3 : Activité (pas)
 import { store, todayISO, parseStepsPayload } from '../utils/storage.js';
-import { el, icons, openModal, openSheet, toast, ringSVG, fmtDateShort, haptic, pageFab, dateBar, periodRange, monthBuckets, PERIODS, periodHead, attachPeriodSwipe, slideIn } from '../utils/ui.js';
+import { el, icons, openModal, openSheet, toast, ringSVG, fmtDateShort, haptic, pageFab, dateBar, periodRange, monthBuckets, PERIODS, periodHead, pagerAttrs, pageBars } from '../utils/ui.js';
 import { PAGE_ACTIVITY, getViewDate } from '../utils/nav.js';
 
 // Jour décalé de n jours (dates locales AAAA-MM-JJ)
@@ -12,7 +12,6 @@ const shiftISO = (iso, n) => {
 
 let perKind = 'week'; // 'week' | 'month' | 'year' | 'all'
 let perOffset = 0;
-let perDir = 0; // sens de la dernière navigation, pour l'animation
 const stepGoal = () => store.userData.settings.stepsGoal || 10000;
 
 // Objectif de pas figé par jour : augmenter l'objectif aujourd'hui ne dévalide pas
@@ -163,15 +162,16 @@ const kSteps = (v) => (v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1).rep
 // pointillée à l'objectif, barre verte quand l'objectif est atteint.
 // Toucher une barre ouvre la saisie de ce jour.
 // items : [{ date?, label, v, hit, val }] ; une barre par jour, ou par mois en vue année
-function barsHTML(items, goal, showVals) {
+function barsHTML(items, goal, showVals, R) {
   const max = Math.max(goal * 1.2, ...items.map((x) => x.v)) || 1;
-  return `<div class="sb-plot${showVals ? ' sb-week' : ''}" style="--goal:${(goal / max).toFixed(3)}">
-    <div class="sb-goal"></div>
-    ${items.map((x) => `<button type="button" class="sb-col${x.date && x.date === getViewDate() ? ' today' : ''}" ${x.date ? `data-date="${x.date}"` : ''} aria-label="${x.aria}">
+  const V = items.length - R.ext.before - R.ext.after;
+  return `<div class="sb-plot pg-view${showVals ? ' sb-week' : ''}" ${pagerAttrs(R.ext.before, items.length, V, 4)}>
+    <div class="sb-goal" style="--goal:${(goal / max).toFixed(3)}"></div>
+    <div class="pg-track">${items.map((x) => `<button type="button" class="sb-col${x.date && x.date === getViewDate() ? ' today' : ''}" ${x.date ? `data-date="${x.date}"` : ''} aria-label="${x.aria}">
         ${showVals ? `<span class="sb-val">${x.v ? kSteps(x.v) : ''}</span>` : ''}
         <span class="sb-track"><span class="sb-bar${x.hit ? ' hit' : ''}" style="height:${x.v ? Math.max(3, (x.v / max) * 100).toFixed(1) : 0}%"></span></span>
         <span class="sb-day">${x.label}</span>
-      </button>`).join('')}
+      </button>`).join('')}</div>
   </div>`;
 }
 
@@ -190,15 +190,16 @@ export function render(container) {
   const goalNow = stepGoal();
   let items;
   // Tout : une barre par jour tant que l'historique tient dans un mois
+  // Les barres couvrent la période élargie (R.ext) : elles défilent sous le doigt
   if (perKind === 'year' || (perKind === 'all' && days.length > 31)) {
     // Une barre par mois : moyenne des jours renseignés du mois
-    items = monthBuckets(days).map(({ days: ds, label }) => {
+    items = monthBuckets(R.ext.days).map(({ days: ds, label }) => {
       const md = ds.filter((d) => byDate[d] != null);
       const v = md.length ? Math.round(md.reduce((a, d) => a + byDate[d], 0) / md.length) : 0;
       return { label, v, hit: v >= goalNow, aria: `Moyenne ${v} pas` };
     });
   } else {
-    items = days.map((d, i) => {
+    items = R.ext.days.map((d) => {
       const v = byDate[d] || 0;
       const dt = new Date(d + 'T12:00:00');
       const label = days.length <= 7 ? DAY_LETTERS[dt.getDay()] : (dt.getDate() === 1 || dt.getDate() % 7 === 1 ? String(dt.getDate()) : '');
@@ -228,7 +229,7 @@ export function render(container) {
           ${PERIODS.map(([k, l]) => `<button data-k="${k}" class="${perKind === k ? 'active' : ''}">${l}</button>`).join('')}
         </div>
         ${periodHead(R, `<span class="per-avg"><b class="num">${avg.toLocaleString('fr-FR')}</b> pas en moyenne</span>`, perOffset)}
-        <div class="sb-zone">${barsHTML(items, goalNow, perKind === 'week')}</div>
+        <div class="sb-zone">${barsHTML(items, goalNow, perKind === 'week', R)}</div>
         <div class="sb-foot">
           <span><b class="num">${hits}</b> jours à l'objectif</span>
           <span>Record <b class="num">${best.toLocaleString('fr-FR')}</b></span>
@@ -251,19 +252,10 @@ export function render(container) {
   container.querySelector('#view-toggle').addEventListener('click', (e) => {
     const btn = e.target.closest('button');
     if (!btn || btn.dataset.k === perKind) return;
-    perKind = btn.dataset.k; perOffset = 0; perDir = 0;
+    perKind = btn.dataset.k; perOffset = 0;
     rerender();
   });
-  const go = (dir) => {
-    if (perKind === 'all' || perOffset + dir < 0) return;
-    perOffset += dir; perDir = dir;
-    haptic();
-    rerender();
-  };
-  container.querySelector('.per-prev').addEventListener('click', () => go(1));
-  container.querySelector('.per-next').addEventListener('click', () => go(-1));
-  attachPeriodSwipe(container.querySelector('.sb-zone'), go);
-  if (perDir) { slideIn(container.querySelector('.sb-plot'), perDir); perDir = 0; }
+  pageBars(container.querySelector('.sb-plot'), (n) => { perOffset += n; rerender(); });
   container.querySelector('.sb-plot').addEventListener('click', (e) => {
     const col = e.target.closest('.sb-col');
     if (!col) return;

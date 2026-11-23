@@ -1,7 +1,7 @@
 // OmniFit — PAGE 0 : Accueil (stats d'abord, poids ensuite, graphique en modal)
 import { store, todayISO } from '../utils/storage.js';
 import { calculateSMA } from '../utils/math.js';
-import { el, icons, openModal, openSheet, toast, ringSVG, haptic, makeChart, fmtDateFull, attachSwipeToDelete, dateBar, periodRange, PERIODS, periodHead, attachPeriodSwipe, slideIn } from '../utils/ui.js';
+import { el, icons, openModal, openSheet, toast, ringSVG, haptic, makeChart, fmtDateFull, attachSwipeToDelete, dateBar, periodRange, PERIODS, periodHead, attachPeriodPager } from '../utils/ui.js';
 import { openRankCard } from '../utils/rankCard.js';
 import { lineChartOptions, lineDataset } from '../utils/charts.js';
 import { goToPage, PAGE_NUTRITION, PAGE_ACTIVITY, PAGE_WORKOUT, getViewDate, isViewingToday } from '../utils/nav.js';
@@ -71,19 +71,29 @@ function openChartModal(rerender) {
     },
   });
   let wOffset = 0;
-  const draw = (dir = 0) => {
-    const R = periodRange(weightRange, wOffset, store.userData.weights.reduce((m, w) => (!m || w.date < m ? w.date : m), null));
+  let R = null;
+  const draw = (still = false) => {
+    R = periodRange(weightRange, wOffset, store.userData.weights.reduce((m, w) => (!m || w.date < m ? w.date : m), null));
     const ws = store.userData.weights.filter((w) => w.date >= R.start && w.date <= R.end);
     const avg = ws.length ? (ws.reduce((a, w) => a + w.value, 0) / ws.length).toFixed(1) : null;
-    const head = content.querySelector('#w-head');
-    head.innerHTML = periodHead(R, `<span class="per-avg">${avg ? `<b class="num">${avg}</b> kg en moyenne` : 'Aucune pesée'}</span>`, wOffset);
-    head.querySelector('.per-prev').addEventListener('click', () => go(1));
-    head.querySelector('.per-next').addEventListener('click', () => go(-1));
-    renderWeightChart(content.querySelector('#weight-chart'), R);
-    slideIn(content.querySelector('#w-zone'), dir);
+    content.querySelector('#w-head').innerHTML = periodHead(R, `<span class="per-avg">${avg ? `<b class="num">${avg}</b> kg en moyenne` : 'Aucune pesée'}</span>`);
+    renderWeightChart(content.querySelector('#weight-chart'), R, still);
   };
-  const go = (dir) => { if (weightRange === 'all' || wOffset + dir < 0) return; wOffset += dir; haptic(); draw(dir); };
-  attachPeriodSwipe(content.querySelector('#w-zone'), go);
+  // Glisser la courbe : l'axe des dates suit le doigt (jour par jour, ou mois
+  // par mois en vue Année), la courbe des jours voisins est déjà dessinée.
+  const perDay = () => { const a = weightChart && weightChart.chartArea; return a ? a.width / Math.max(1, R.days.length - 1) : 1; };
+  attachPeriodPager(content.querySelector('#w-zone'), {
+    pitch: () => (weightRange === 'year' ? perDay() * R.days.length / 12 : perDay()),
+    before: () => R.ext.before,
+    after: () => R.ext.after,
+    move: (px) => {
+      if (!weightChart || !weightChart.options) return;
+      const x = weightChart.options.scales.x; const i0 = R.ext.days.indexOf(R.start);
+      x.min = i0 - px / perDay(); x.max = x.min + R.days.length - 1;
+      weightChart.update('none');
+    },
+    commit: (n) => { wOffset += n; draw(true); },
+  });
   content.querySelector('#w-range').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
     weightRange = b.dataset.r;
@@ -144,24 +154,27 @@ function openChartModal(rerender) {
 // Plage affichée dans la fenêtre Poids (en jours). `0` = tout l'historique.
 let weightRange = 'week'; // 'week' | 'month' | 'year' | 'all'
 
-function renderWeightChart(canvas, R) {
+// La courbe couvre la période élargie (R.ext) ; l'axe n'en montre que la
+// période visible, ce qui permet de la faire glisser sans bord vide.
+function renderWeightChart(canvas, R, still = false) {
   const all = store.userData.weights;
-  const days = R.days;
-  const nDays = days.length;
+  const days = R.ext.days;
+  const nDays = R.days.length;
   const map = Object.fromEntries(all.map((w) => [w.date, w.value]));
-  const values = days.map((d) => map[d] ?? null);
+  const pts = (arr) => arr.map((y, x) => ({ x, y }));
+  const values = pts(days.map((d) => map[d] ?? null));
 
   // Tendance lissée : moyenne mobile sur les pesées connues, reprojetée sur les
   // jours. C'est elle qui montre la vraie direction, sans le bruit quotidien.
   const sma = calculateSMA(all.map((w) => w.value), 5);
   const smaMap = {};
   all.forEach((w, i) => { smaMap[w.date] = sma[i]; });
-  const smaValues = days.map((d) => (smaMap[d] != null ? Math.round(smaMap[d] * 10) / 10 : null));
+  const smaValues = pts(days.map((d) => (smaMap[d] != null ? Math.round(smaMap[d] * 10) / 10 : null)));
 
-  const calValues = days.map((d) => {
+  const calValues = pts(days.map((d) => {
     const t = store.dayTotals(d);
     return t.kcal ? Math.round(t.kcal) : null;
-  });
+  }));
 
   const datasets = [lineDataset('Poids', values, '#00D9FF', { yAxisID: 'y' })];
   if (smaVisible) {
@@ -172,7 +185,7 @@ function renderWeightChart(canvas, R) {
   }
 
   // Étiquettes : jour/mois sur les courtes plages, mois seul au-delà.
-  const labels = days.map((d) => (nDays > 120 ? d.slice(5, 7) + '/' + d.slice(2, 4) : d.slice(8) + '/' + d.slice(5, 7)));
+  const fmtDay = (d) => (nDays > 120 ? d.slice(5, 7) + '/' + d.slice(2, 4) : d.slice(8) + '/' + d.slice(5, 7));
 
   const options = lineChartOptions({ legend: datasets.length > 1, ySuffix: ' kg', yTicks: 4, xTicks: 5 });
   const axisTitle = (text) => ({ display: true, text, color: '#8A9099', font: { size: 11, family: 'Archivo', weight: '600' } });
@@ -181,13 +194,19 @@ function renderWeightChart(canvas, R) {
     label: (c) => `${c.dataset.label} : ${c.parsed.y.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} ${c.dataset.label === 'Calories' ? 'kcal' : 'kg'}`,
   };
   options.scales.x.title = axisTitle('Date');
+  const i0 = days.indexOf(R.start);
+  Object.assign(options.scales.x, { type: 'linear', min: i0, max: i0 + nDays - 1 });
+  options.scales.x.ticks.callback = (v) => (Number.isInteger(v) && days[v] ? fmtDay(days[v]) : '');
+  options.plugins.tooltip.callbacks.title = (items) => (items.length && days[items[0].parsed.x] ? fmtDateFull(days[items[0].parsed.x]) : '');
+  if (still) options.animation = false;
   options.scales.y.title = axisTitle('Poids (kg)');
-  if (!all.length) {
-    // Échelle autour du poids du profil : la grille reste lisible à vide.
-    const bw = Math.round(store.userData.profile.weight || 75);
-    options.scales.y.suggestedMin = bw - 3;
-    options.scales.y.suggestedMax = bw + 3;
-  }
+  // Échelle calée sur toute la courbe tracée (période visible et voisines) :
+  // elle ne saute pas pendant le glissement, ni sur une semaine sans pesée.
+  // Sans aucune pesée, autour du poids du profil.
+  const ys = [...values, ...smaValues].map((p) => p.y).filter((v) => v != null);
+  const bw = Math.round(store.userData.profile.weight || 75);
+  options.scales.y.min = ys.length ? Math.floor(Math.min(...ys) - 0.5) : bw - 3;
+  options.scales.y.max = ys.length ? Math.ceil(Math.max(...ys) + 0.5) : bw + 3;
   if (caloriesVisible) {
     options.scales.y1 = {
       position: 'left',
@@ -197,7 +216,7 @@ function renderWeightChart(canvas, R) {
     };
   }
 
-  weightChart = makeChart(canvas, { type: 'line', data: { labels, datasets }, options }, weightChart);
+  weightChart = makeChart(canvas, { type: 'line', data: { datasets }, options }, weightChart);
 }
 
 // Rang global : la carte commune (utils/rankCard.js), avec au verso le détail.

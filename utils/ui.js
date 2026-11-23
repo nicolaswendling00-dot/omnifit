@@ -605,40 +605,51 @@ function weekStrip(sel, mark) {
 }
 
 // ---------- Périodes des graphiques (comme l'app Santé) ----------
-// kind : 'week' (lundi à dimanche), 'month', '6m', 'year' ; offset 0 = période
-// en cours, 1 = la précédente, etc. Renvoie { start, end, days[], label }.
+// Semaine et mois : 7 ou 30 jours glissants qui finissent aujourd'hui, offset
+// en JOURS. Année : 12 mois glissants, offset en MOIS. Tout : depuis la
+// première donnée (first), sans navigation.
+// ext : la période élargie d'une période de chaque côté (jamais au delà
+// d'aujourd'hui), pour que le graphique défile sous le doigt sans bord vide.
+// ext.before / ext.after : unités disponibles avant / après la période visible.
 const MONTH_FMT = { month: 'short' };
-// first : premier jour de données du graphique, pour la période « Tout ».
+const daySpan = (s, e) => {
+  const out = [];
+  for (const d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) out.push(isoLocal(d));
+  return out;
+};
 export function periodRange(kind, offset = 0, first = null) {
   const t = new Date(); t.setHours(12, 0, 0, 0);
-  let s; let e;
-  // Semaine et mois glissants : 7 ou 30 jours qui finissent aujourd'hui
-  // (offset 0), sans caler sur le lundi ni sur le 1er du mois.
+  let s; let e; let ext = null;
   if (kind === 'week' || kind === 'month') {
     const n = kind === 'week' ? 7 : 30;
-    e = new Date(t); e.setDate(t.getDate() - n * offset);
+    e = new Date(t); e.setDate(t.getDate() - offset);
     s = new Date(e); s.setDate(e.getDate() - n + 1);
-  } else if (kind === 'all') {
-    // Tout l'historique, au moins une semaine ; pas de navigation
+    const after = Math.min(n, offset);
+    const xs = new Date(s); xs.setDate(s.getDate() - n);
+    const xe = new Date(e); xe.setDate(e.getDate() + after);
+    ext = { days: daySpan(xs, xe), before: n, after };
+  } else if (kind === 'year') {
+    s = new Date(t.getFullYear(), t.getMonth() - 11 - offset, 1, 12);
+    e = new Date(t.getFullYear(), t.getMonth() - offset + 1, 0, 12);
+    if (e > t) e = new Date(t);
+    const after = Math.min(12, offset);
+    const xs = new Date(s.getFullYear(), s.getMonth() - 12, 1, 12);
+    let xe = new Date(t.getFullYear(), t.getMonth() - offset + after + 1, 0, 12);
+    if (xe > t) xe = new Date(t);
+    ext = { days: daySpan(xs, xe), before: 12, after };
+  } else {
     e = new Date(t);
     s = first ? new Date(first + 'T12:00:00') : new Date(t);
     const min = new Date(t); min.setDate(t.getDate() - 6);
     if (s > min) s = min;
-  } else if (kind === '6m') {
-    s = new Date(t.getFullYear(), t.getMonth() - 5 - 6 * offset, 1, 12);
-    e = new Date(t.getFullYear(), t.getMonth() - 6 * offset + 1, 0, 12);
-  } else {
-    s = new Date(t.getFullYear() - offset, 0, 1, 12);
-    e = new Date(t.getFullYear() - offset, 11, 31, 12);
   }
-  const days = [];
-  for (const d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) days.push(isoLocal(d));
+  const days = daySpan(s, e);
+  if (!ext) ext = { days, before: 0, after: 0 };
   const y = e.getFullYear();
-  const label = kind === 'week' || kind === 'month' || kind === 'all'
-    ? `${s.getDate()} ${s.getMonth() !== e.getMonth() ? s.toLocaleDateString('fr-FR', MONTH_FMT) + ' ' : ''}au ${e.getDate()} ${e.toLocaleDateString('fr-FR', MONTH_FMT)} ${y}`
-    : kind === '6m' ? `${cap(s.toLocaleDateString('fr-FR', MONTH_FMT))} à ${e.toLocaleDateString('fr-FR', MONTH_FMT)} ${y}`
-        : String(y);
-  return { start: days[0], end: days[days.length - 1], days, label, all: kind === 'all' };
+  const label = kind === 'year'
+    ? `${cap(s.toLocaleDateString('fr-FR', MONTH_FMT))} ${s.getFullYear() !== y ? s.getFullYear() + ' ' : ''}à ${e.toLocaleDateString('fr-FR', MONTH_FMT)} ${y}`
+    : `${s.getDate()} ${s.getMonth() !== e.getMonth() ? s.toLocaleDateString('fr-FR', MONTH_FMT) + ' ' : ''}au ${e.getDate()} ${e.toLocaleDateString('fr-FR', MONTH_FMT)} ${y}`;
+  return { start: days[0], end: days[days.length - 1], days, label, all: kind === 'all', ext };
 }
 
 // Jours d'une période regroupés par mois (graphiques en barres, Année et Tout)
@@ -655,35 +666,97 @@ export function monthBuckets(days) {
 // Libellés des périodes, communs à tous les graphiques
 export const PERIODS = [['week', 'Semaine'], ['month', 'Mois'], ['year', 'Année'], ['all', 'Tout']];
 
-// En-tête d'un graphique : flèches, valeur moyenne de la période, dates.
-export function periodHead(range, avgHtml, offset) {
-  return `<div class="period-head">
-    <button type="button" class="icon-btn per-prev" aria-label="Période précédente" ${range.all ? 'disabled' : ''}>${ARROW_L}</button>
-    <div class="per-mid">${avgHtml}<span class="per-label">${range.label}</span></div>
-    <button type="button" class="icon-btn per-next" aria-label="Période suivante" ${offset > 0 ? '' : 'disabled'}>${icons.chevron}</button>
-  </div>`;
+// En-tête d'un graphique : valeur moyenne de la période et ses dates.
+export function periodHead(range, avgHtml) {
+  return `<div class="period-head"><div class="per-mid">${avgHtml}<span class="per-label">${range.label}</span></div></div>`;
 }
 
-// Glisser horizontalement sur un graphique change de période (vers la droite =
-// période précédente), comme dans l'app Santé. step(+1) = plus ancienne.
-export function attachPeriodSwipe(zone, step) {
+// Barres d'un graphique défilant : B barres avant la période visible, T au
+// total, V visibles. Le rail (.pg-track) déborde de la vue (.pg-view) des deux
+// côtés ; data-pg garde B, A (barres après) et V pour pageBars.
+export function pagerAttrs(B, T, V, gap) {
+  return `data-pg="${B},${T - B - V},${V}" style="--pg-b:${B};--pg-t:${T};--pg-v:${V};--pg-gap:${gap}px"`;
+}
+
+// Glisser un graphique remonte le temps unité par unité (un jour, ou un mois
+// en vue Année), comme dans l'app Santé : le tracé suit le doigt, garde son
+// élan au lâcher, puis se cale sur l'unité la plus proche.
+//   pitch() : pixels par unité ; before() / after() : unités disponibles à
+//   gauche (passé) et à droite (jamais au delà d'aujourd'hui) ;
+//   move(px) : décale le tracé ; commit(n) : n unités vers le passé (n < 0 :
+//   vers aujourd'hui), le graphique se redessine à la nouvelle place.
+const fnOf = (x) => (typeof x === 'function' ? x : () => x);
+export function attachPeriodPager(zone, { pitch, before, after, move, commit }) {
+  const bef = fnOf(before); const aft = fnOf(after);
   zone.classList.add('no-swipe');
-  let x0 = null; let y0 = 0;
-  zone.addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; }, { passive: true });
-  zone.addEventListener('touchend', (e) => {
-    if (x0 == null) return;
-    const p = e.changedTouches[0];
-    const dx = p.clientX - x0; const dy = p.clientY - y0;
-    x0 = null;
-    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5) step(dx > 0 ? 1 : -1);
-  }, { passive: true });
+  let st = null; let anim = 0; let draggedAt = 0;
+  // Après un glissement, le clic qui suit n'ouvre pas la barre touchée
+  zone.addEventListener('click', (e) => { if (Date.now() - draggedAt < 400) { e.stopPropagation(); e.preventDefault(); } }, true);
+  const limit = (px) => {
+    const p = pitch(); const hi = bef() * p; const lo = -aft() * p;
+    return px > hi ? hi + (px - hi) * 0.3 : px < lo ? lo + (px - lo) * 0.3 : px;
+  };
+  zone.addEventListener('pointerdown', (e) => {
+    if ((e.pointerType === 'mouse' && e.button !== 0) || (!bef() && !aft())) return;
+    cancelAnimationFrame(anim);
+    st = { id: e.pointerId, x: e.clientX, y: e.clientY, dir: null, px: 0, v: 0, lx: e.clientX, lt: e.timeStamp };
+  });
+  zone.addEventListener('pointermove', (e) => {
+    if (!st || e.pointerId !== st.id) return;
+    const dx = e.clientX - st.x; const dy = e.clientY - st.y;
+    if (!st.dir) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      st.dir = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
+      if (st.dir === 'h' && zone.setPointerCapture) { try { zone.setPointerCapture(e.pointerId); } catch (_) { /* déjà relâché */ } }
+    }
+    if (st.dir !== 'h') return;
+    const dt = e.timeStamp - st.lt;
+    if (dt > 0) { st.v = st.v * 0.5 + ((e.clientX - st.lx) / dt) * 0.5; st.lx = e.clientX; st.lt = e.timeStamp; }
+    st.px = limit(dx);
+    move(st.px);
+  });
+  const end = (e) => {
+    if (!st || e.pointerId !== st.id) return;
+    const s = st; st = null;
+    if (s.dir !== 'h') return;
+    draggedAt = Date.now();
+    const p = pitch();
+    // L'élan prolonge le geste d'environ 150 ms, puis on se cale sur une unité
+    const n = Math.max(-aft(), Math.min(bef(), Math.round((s.px + s.v * 150) / p)));
+    const from = s.px; const to = n * p;
+    const dur = reducedMotion() ? 0 : Math.min(320, Math.max(160, Math.abs(to - from) * 1.5));
+    const t0 = performance.now();
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true; cancelAnimationFrame(anim);
+      if (n) { haptic(); commit(n); } else move(0);
+    };
+    const step = (now) => {
+      const k = dur ? Math.min(1, (now - t0) / dur) : 1;
+      move(from + (to - from) * (1 - Math.pow(1 - k, 3)));
+      if (k < 1) anim = requestAnimationFrame(step); else finish();
+    };
+    anim = requestAnimationFrame(step);
+    setTimeout(finish, dur + 120); // l'appli passée en arrière-plan n'anime plus : on conclut quand même
+  };
+  zone.addEventListener('pointerup', end);
+  zone.addEventListener('pointercancel', end);
 }
 
-// Arrivée de la nouvelle période du côté d'où elle vient.
-export function slideIn(node, dir) {
-  if (!node || !node.animate || reducedMotion() || !dir) return;
-  node.animate([{ transform: `translateX(${-dir * 40}px)`, opacity: 0 }, { transform: 'none', opacity: 1 }],
-    { duration: 280, easing: 'cubic-bezier(.22,1,.36,1)' });
+// Raccourci pour les graphiques en barres HTML (vue .pg-view et son rail).
+export function pageBars(view, commit) {
+  if (!view || !view.dataset.pg) return;
+  const [B, A, V] = view.dataset.pg.split(',').map(Number);
+  const track = view.querySelector('.pg-track');
+  const gap = parseFloat(view.style.getPropertyValue('--pg-gap')) || 0;
+  attachPeriodPager(view, {
+    pitch: () => (view.clientWidth + gap) / V,
+    before: B,
+    after: A,
+    move: (px) => { track.style.transform = px ? `translate3d(${px}px, 0, 0)` : ''; },
+    commit,
+  });
 }
 
 export function dateBar({ title, mark = null, onChange }) {

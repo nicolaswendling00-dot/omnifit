@@ -120,8 +120,6 @@ function defaultUserData() {
       exerciseRefs: {},         // { exoId: { refExercise, refCoef } } — classement redéfini
       showCExo: true,
       secondaryRatio: 0.5,
-      exerciseDbFull: true,
-      equipmentFilter: [],
       customExercises: [],
       volumeGoals: { ...DEFAULT_VOLUME_GOALS },
       theme: 'amoled',

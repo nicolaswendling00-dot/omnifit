@@ -1,19 +1,12 @@
 // OmniFit — PAGE 4 : Réglages (macros déplacées dans Nutrition)
 import { store, parseStepsPayload } from '../utils/storage.js';
 import { harrisBenedict } from '../utils/math.js';
-import { EQUIPMENT_TYPES } from '../data/exercises.js';
 import { el, esc, icons, openModal, toast, confirmModal } from '../utils/ui.js';
 import { RANK_ORDER, RANK_META, DIV_LP, ONYX_LP, rankBadge, liftPercentile, LEVEL_PERCENTILE, getStandards } from '../utils/ranks.js';
 import { openExercisePicker, customRefMap, exerciseLookup } from './workout.js';
 import { backfillNutritionGoals, freezePastGoals } from './nutrition.js';
 
-const VERSION = '13.1';
-
-// Familles de matériel (filtre de la base d'exercices), en français.
-const EQUIP_FAMILY_FR = {
-  Band: 'Élastique', Barbell: 'Barre', Bodyweight: 'Poids du corps', Cable: 'Poulie',
-  Dumbbells: 'Haltères', Kettlebell: 'Kettlebell', Machine: 'Machine', Other: 'Autre', Plate: 'Disque',
-};
+const VERSION = '13.2';
 
 function toggleRow(label, key, sub = '') {
   const s = store.userData.settings;
@@ -101,11 +94,6 @@ export function render(container) {
         <div class="card-row"><span class="row-label">Repos par défaut</span><span class="num" id="rest-val" style="color:var(--accent)">${s.restTimerDefault}s</span></div>
         <input id="set-rest" type="range" min="60" max="300" step="15" value="${s.restTimerDefault}">
       </div>
-      <div id="row-db-full"></div>
-      <div class="settings-row" style="flex-direction:column;align-items:stretch">
-        <div class="row-label" style="margin-bottom:6px">Équipement disponible</div>
-        <div id="equip-filter" class="equip-grid"></div>
-      </div>
       <button class="btn btn-secondary btn-block" id="btn-rank-ladder" style="margin-top:10px">${icons.book} Rangs & Top %</button>
     </div>
 
@@ -162,23 +150,8 @@ export function render(container) {
   </div>`);
   container.appendChild(root);
 
-  root.querySelector('#row-db-full').replaceWith(toggleRow('Tous les exercices', 'exerciseDbFull'));
   const rowsInt = root.querySelector('#rows-interface');
   rowsInt.appendChild(toggleRow('Notifications', 'notificationsEnabled'));
-
-  const eqHost = root.querySelector('#equip-filter');
-  for (const eq of EQUIPMENT_TYPES) {
-    const active = s.equipmentFilter.includes(eq);
-    const chip = el(`<button class="equip-chip${active ? ' on' : ''}">${EQUIP_FAMILY_FR[eq] || eq}</button>`);
-    chip.addEventListener('click', () => {
-      const cur = new Set(store.userData.settings.equipmentFilter);
-      if (cur.has(eq)) cur.delete(eq); else cur.add(eq);
-      store.userData.settings.equipmentFilter = [...cur];
-      store.persist();
-      rerender();
-    });
-    eqHost.appendChild(chip);
-  }
 
   root.querySelector('#btn-edit-profile').addEventListener('click', () => openProfileModal(rerender));
   root.querySelector('#btn-health-sync').addEventListener('click', () => openHealthSyncModal());

@@ -5,7 +5,7 @@ import { store, todayISO } from '../utils/storage.js';
 import { EXERCISES, MUSCLES, muscleLabel, AKA, EQUIPMENT, equipLabel } from '../data/exercises.js';
 import { reorderList, rollingCounter } from '../utils/gestures.js';
 import { formatTime, workoutMuscleVolume, weeklySetsByMuscle, muscleAttenuation } from '../utils/math.js';
-import { el, esc, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, fmtDateFull, celebrateLP, makeChart, normalizeStr, closeAllOverlays, attachSwipeToDelete, slideAway, pageFab, dateBar, setCollapsed, periodRange, monthBuckets, PERIODS, periodHead, attachPeriodSwipe, slideIn } from '../utils/ui.js';
+import { el, esc, icons, openModal, openSheet, toast, confirmModal, beep, haptic, fmtDateShort, fmtDateLong, fmtDateFull, celebrateLP, makeChart, normalizeStr, closeAllOverlays, attachSwipeToDelete, slideAway, pageFab, dateBar, setCollapsed, periodRange, monthBuckets, PERIODS, periodHead, pagerAttrs, pageBars } from '../utils/ui.js';
 import { lineChartOptions, lineDataset } from '../utils/charts.js';
 import { bodyMapSVG } from '../utils/bodyMap.js';
 import { computeExerciseLP, computeExerciseLPDetailed, rankFromLP, rankBadge, getStandards } from '../utils/ranks.js';
@@ -121,14 +121,6 @@ function exoKeywords(e) {
 }
 function exoMatches(e, nq) {
   return !nq || exoKeywords(e).includes(nq);
-}
-function filteredExercises() {  const s = store.userData.settings;
-  let list = allExercises();
-  if (!s.exerciseDbFull) list = list.filter((e) => e.difficulty === 'Beginner' || e.isCustom);
-  if (s.equipmentFilter && s.equipmentFilter.length) {
-    list = list.filter((e) => s.equipmentFilter.includes(e.equipment) || e.isCustom);
-  }
-  return list;
 }
 
 function exoRestDuration(exerciseId) {
@@ -380,7 +372,7 @@ export function openExercisePicker(onPick, title = 'Ajouter un exercice') {
   const list = overlay.querySelector('#exo-list');
   const renderList = (q = '') => {
     const nq = normalizeStr(q);
-    const items = filteredExercises().filter((e) => exoMatches(e, nq));
+    const items = allExercises().filter((e) => exoMatches(e, nq));
     list.innerHTML = items.length ? '' : '<div class="empty-state">Aucun résultat</div>';
     const lpMap = lpMapAll();
     for (const e of items.slice(0, 80)) {
@@ -2006,30 +1998,24 @@ function improvementBuckets(kind, offset, byDate) {
   const avg = (a) => (a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : null);
   const buckets = [];
   const add = (days, label) => buckets.push({ v: avg(days.flatMap((d) => byDate[d] || [])), label });
-  if (R.days.length <= 7) R.days.forEach((d) => add([d], 'DLMMJVS'[new Date(d + 'T12:00:00').getDay()]));
-  else if (kind === 'month' || (kind === 'all' && R.days.length <= 31)) R.days.forEach((d) => { const n = +d.slice(8); add([d], n === 1 || n % 7 === 1 ? String(n) : ''); });
-  else if (kind === '6m') {
-    for (let i = 0; i < R.days.length; i += 7) {
-      const wk = R.days.slice(i, i + 7);
-      const m = new Date(wk[0] + 'T12:00:00');
-      add(wk, m.getDate() <= 7 ? m.toLocaleDateString('fr-FR', { month: 'narrow' }) : '');
-    }
-  } else {
-    for (const b of monthBuckets(R.days)) add(b.days, b.label);
-  }
+  // Barres sur la période élargie (défilement), moyenne sur la période visible
+  const ext = R.ext.days;
+  if (R.days.length <= 7) ext.forEach((d) => add([d], 'DLMMJVS'[new Date(d + 'T12:00:00').getDay()]));
+  else if (kind === 'month' || (kind === 'all' && R.days.length <= 31)) ext.forEach((d) => { const n = +d.slice(8); add([d], n === 1 || n % 7 === 1 ? String(n) : ''); });
+  else for (const b of monthBuckets(ext)) add(b.days, b.label);
   const all = Object.keys(byDate).filter(inR).flatMap((d) => byDate[d]);
   return { R, buckets, mean: avg(all), up: all.filter((v) => v > 0).length, down: all.filter((v) => v < 0).length, n: all.length };
 }
 function improvementChartHTML(state, byDate) {
   const { R, buckets, mean, up, down, n } = improvementBuckets(state.kind, state.offset, byDate);
   const max = Math.max(10, ...buckets.map((b) => Math.abs(b.v || 0)));
-  return `${periodHead(R, `<span class="per-avg">${mean == null ? 'Aucune séance comparée' : `<b class="num ${mean > 0 ? 'up' : mean < 0 ? 'down' : ''}">${mean > 0 ? '+' : ''}${mean} %</b> en moyenne`}</span>`, state.offset)}
+  return `${periodHead(R, `<span class="per-avg">${mean == null ? 'Aucune séance comparée' : `<b class="num ${mean > 0 ? 'up' : mean < 0 ? 'down' : ''}">${mean > 0 ? '+' : ''}${mean} %</b> en moyenne`}</span>`)}
     <div class="impc-zone">
-      <div class="impc-plot">${buckets.map((b) => `<div class="impc-col" title="${b.v == null ? '' : `${b.v > 0 ? '+' : ''}${b.v} %`}">
+      <div class="impc-plot pg-view" ${pagerAttrs(R.ext.before, buckets.length, buckets.length - R.ext.before - R.ext.after, 2)}><div class="pg-track">${buckets.map((b) => `<div class="impc-col" title="${b.v == null ? '' : `${b.v > 0 ? '+' : ''}${b.v} %`}">
         <span class="impc-up">${b.v > 0 ? `<i style="height:${((b.v / max) * 100).toFixed(1)}%"></i>` : ''}</span>
         <span class="impc-down">${b.v < 0 ? `<i style="height:${((-b.v / max) * 100).toFixed(1)}%"></i>` : ''}${b.v === 0 ? '<i class="flat"></i>' : ''}</span>
         <span class="impc-lbl">${b.label}</span>
-      </div>`).join('')}</div>
+      </div>`).join('')}</div></div>
     </div>
     <div class="imp-sum"><b class="up">${up} en hausse</b><b class="down">${down} en baisse</b>${n - up - down ? `<b class="flat">${n - up - down} stable${n - up - down > 1 ? 's' : ''}</b>` : ''}</div>`;
 }
@@ -2043,14 +2029,10 @@ function improvementSection(byDate, state = { kind: 'week', offset: 0 }) {
   </div>`);
   const box = sec.querySelector('.imp-box');
   const seg = sec.querySelector('.imp-kind');
-  const draw = (dir = 0) => {
+  const draw = () => {
     box.innerHTML = improvementChartHTML(state, byDate);
-    box.querySelector('.per-prev').addEventListener('click', () => go(1));
-    box.querySelector('.per-next').addEventListener('click', () => go(-1));
-    attachPeriodSwipe(box.querySelector('.impc-zone'), go);
-    slideIn(box.querySelector('.impc-plot'), dir);
+    pageBars(box.querySelector('.impc-plot'), (n) => { state.offset += n; draw(); });
   };
-  const go = (dir) => { if (state.kind === 'all' || state.offset + dir < 0) return; state.offset += dir; haptic(); draw(dir); };
   seg.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b.dataset.k === state.kind));
   seg.addEventListener('click', (e) => {
     const b = e.target.closest('button');

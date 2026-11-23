@@ -1,7 +1,7 @@
 // OmniFit — PAGE 1 : Nutrition (macros couleur, fibres, modes grammes/auto/%, repas typés, recettes)
 import { store, todayISO } from '../utils/storage.js';
 import { calcKcal, fiberGoalFromKcal, metabolicInsight } from '../utils/math.js';
-import { el, esc, icons, openSheet, openModal, toast, ringSVG, confirmModal, fmtDateShort, haptic, celebrateLP, normalizeStr, attachSwipeToDelete, tweenValues, dateBar, dayLabel, periodRange, monthBuckets, PERIODS, periodHead, attachPeriodSwipe, slideIn } from '../utils/ui.js';
+import { el, esc, icons, openSheet, openModal, toast, ringSVG, confirmModal, fmtDateShort, haptic, celebrateLP, normalizeStr, attachSwipeToDelete, tweenValues, dateBar, dayLabel, periodRange, monthBuckets, PERIODS, periodHead, pagerAttrs, pageBars } from '../utils/ui.js';
 import { startCameraStream, captureFrame, decodeBarcodeFromFile } from '../utils/barcode.js';
 import { fetchProductByBarcode } from '../utils/openfoodfacts.js';
 import { FOODS, FOOD_CATEGORIES } from '../data/foods.js';
@@ -75,18 +75,21 @@ function nutritionStatsData(kind, offset) {
     const g = MACROS.map((x) => meals.reduce((a, m) => a + (m[x.k] || 0), 0));
     return { d, n: meals.length, perMeal, total: perMeal.reduce((a, b) => a + b, 0), g, goal: macroGoalsFor(d) };
   };
-  const days = R.days.map(dayStats);
+  // Colonnes sur la période élargie (défilement), moyennes sur la période visible
+  const extStats = R.ext.days.map(dayStats);
+  const days = extStats.filter((s) => s.d >= R.start && s.d <= R.end);
   const logged = days.filter((s) => s.n);
+  const loggedExt = extStats.filter((s) => s.n);
   const mean = (f) => (logged.length ? logged.reduce((a, s) => a + f(s), 0) / logged.length : 0);
   let cols;
   if (kind === 'year' || (kind === 'all' && R.days.length > 31)) {
-    cols = monthBuckets(R.days).map(({ days: md, label }) => {
-      const ds = logged.filter((s) => md.includes(s.d));
+    cols = monthBuckets(R.ext.days).map(({ days: md, label }) => {
+      const ds = loggedExt.filter((s) => md.includes(s.d));
       const avg = (f) => (ds.length ? ds.reduce((a, s) => a + f(s), 0) / ds.length : 0);
       return { label, perMeal: MEAL_TYPES.map((_, i) => avg((s) => s.perMeal[i])), g: MACROS.map((_, i) => avg((s) => s.g[i])) };
     });
   } else {
-    cols = days.map((s) => {
+    cols = extStats.map((s) => {
       const dt = new Date(s.d + 'T12:00:00');
       const n = dt.getDate();
       return { label: R.days.length <= 7 ? 'DLMMJVS'[dt.getDay()] : (n === 1 || n % 7 === 1 ? String(n) : ''), perMeal: s.perMeal, g: s.g };
@@ -105,16 +108,17 @@ function nutritionStatsData(kind, offset) {
   };
 }
 
-function statsBars(cols, avgSegs, colors, goal) {
+function statsBars(cols, avgSegs, colors, goal, R) {
   const all = [...cols.map((c) => c.segs), avgSegs];
   const max = Math.max(goal * 1.15, ...all.map((s) => s.reduce((a, b) => a + b, 0))) || 1;
   const col = (segs, label, extra = '') => `<div class="ns-col${extra}">
     <span class="ns-stack">${segs.map((v, i) => (v > 0 ? `<i style="height:${((v / max) * 100).toFixed(2)}%;background:${colors[i]}"></i>` : '')).join('')}</span>
     <span class="ns-lbl">${label}</span>
   </div>`;
-  return `<div class="ns-plot${cols.length > 12 ? ' dense' : ''}" style="--goal:${(goal / max).toFixed(3)}">
+  const V = cols.length - R.ext.before - R.ext.after;
+  return `<div class="ns-plot${V > 12 ? ' dense' : ''}" style="--goal:${(goal / max).toFixed(3)}">
     <div class="ns-goal"></div>
-    ${cols.map((c) => col(c.segs, c.label)).join('')}
+    <div class="ns-view pg-view" ${pagerAttrs(R.ext.before, cols.length, V, V > 12 ? 2 : 6)}><div class="pg-track">${cols.map((c) => col(c.segs, c.label)).join('')}</div></div>
     ${col(avgSegs, 'Moy.', ' avg')}
   </div>`;
 }
@@ -123,11 +127,11 @@ function nutritionStatsHTML() {
   const s = statsState;
   const D = nutritionStatsData(s.kind, s.offset);
   const fmt = (v) => Math.round(v).toLocaleString('fr-FR');
-  const head = periodHead(D.R, `<span class="per-avg"><b class="num">${fmt(D.avgTotal)}</b> kcal par jour</span>`, s.offset);
+  const head = periodHead(D.R, `<span class="per-avg"><b class="num">${fmt(D.avgTotal)}</b> kcal par jour</span>`);
   let body;
   if (s.tab === 'kcal') {
     const tot = D.avgPerMeal.reduce((a, b) => a + b, 0) || 1;
-    body = `${statsBars(D.cols.map((c) => ({ ...c, segs: c.perMeal })), D.avgPerMeal, MEAL_COLORS, D.goal)}
+    body = `${statsBars(D.cols.map((c) => ({ ...c, segs: c.perMeal })), D.avgPerMeal, MEAL_COLORS, D.goal, D.R)}
       <div class="ns-legend">${MEAL_TYPES.map((m, i) => `<div class="ns-leg"><i style="background:${MEAL_COLORS[i]}"></i><span>${m}<small>${Math.round((D.avgPerMeal[i] / tot) * 100)} %, ${fmt(D.avgPerMeal[i])} kcal</small></span></div>`).join('')}</div>
       <div class="ns-rows">
         <div class="ns-row"><span>${D.gap >= 0 ? 'Calories sous l\'objectif' : 'Calories au-dessus de l\'objectif'}</span><b class="num">${fmt(Math.abs(D.gap))}</b></div>
@@ -149,7 +153,7 @@ function nutritionStatsHTML() {
       }
       return Object.entries(acc).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 5);
     });
-    body = `${statsBars(D.cols.map((c) => ({ ...c, segs: c.g.map((g, i) => g * MACROS[i].kcal) })), kc, MACROS.map((x) => x.color), D.goal)}
+    body = `${statsBars(D.cols.map((c) => ({ ...c, segs: c.g.map((g, i) => g * MACROS[i].kcal) })), kc, MACROS.map((x) => x.color), D.goal, D.R)}
       <div class="ns-mtable">
         <div class="ns-mrow head"><span></span><span>Moy.</span><span>Objectif</span></div>
         ${MACROS.map((x, i) => `<div class="ns-mrow"><span><i style="background:${x.color}"></i>${x.name} <small>(${fmt(D.avgG[i])} g)</small></span><b class="num">${Math.round((kc[i] / tot) * 100)} %</b><b class="num accent">${Math.round(D.goalPct[i] * 100)} %</b></div>`).join('')}
@@ -171,15 +175,11 @@ function openNutritionStats() {
     content.querySelectorAll('#ns-tab button').forEach((b) => b.classList.toggle('active', b.dataset.t === statsState.tab));
     content.querySelectorAll('#ns-kind button').forEach((b) => b.classList.toggle('active', b.dataset.k === statsState.kind));
   };
-  const draw = (dir = 0) => {
+  const draw = () => {
     sync();
     body.innerHTML = nutritionStatsHTML();
-    body.querySelector('.per-prev').addEventListener('click', () => go(1));
-    body.querySelector('.per-next').addEventListener('click', () => go(-1));
-    attachPeriodSwipe(body.querySelector('.ns-zone'), go);
-    slideIn(body.querySelector('.ns-plot'), dir);
+    pageBars(body.querySelector('.ns-view'), (n) => { statsState.offset += n; draw(); });
   };
-  const go = (dir) => { if (statsState.kind === 'all' || statsState.offset + dir < 0) return; statsState.offset += dir; haptic(); draw(dir); };
   content.querySelector('#ns-tab').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { statsState.tab = b.dataset.t; draw(); } });
   content.querySelector('#ns-kind').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { statsState.kind = b.dataset.k; statsState.offset = 0; draw(); } });
   draw();
